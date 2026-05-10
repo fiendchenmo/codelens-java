@@ -136,7 +136,7 @@ public class CodeLens {
             + "【源码】\n" + code;
 
         String result = LLMClient.analyze(apiKey, systemPrompt, userPrompt);
-        System.out.println(formatJson(result));
+        System.out.println(prettyPrintJson(result));
     }
 
     /**
@@ -174,63 +174,17 @@ public class CodeLens {
     }
 
     /**
-     * 简易 JSON 格式化（不依赖外部库）
+     * JSON 格式化输出（使用 Jackson）
      */
-    private static String formatJson(String json) {
-        StringBuilder sb = new StringBuilder();
-        int indent = 0;
-        boolean inString = false;
-        char prev = 0;
-
-        for (int i = 0; i < json.length(); i++) {
-            char c = json.charAt(i);
-
-            // 跳过转义字符
-            if (prev == '\\') {
-                sb.append(c);
-                prev = c;
-                continue;
-            }
-
-            // 追踪字符串边界
-            if (c == '"') {
-                inString = !inString;
-                sb.append(c);
-                prev = c;
-                continue;
-            }
-
-            if (inString) {
-                sb.append(c);
-                prev = c;
-                continue;
-            }
-
-            // 格式化逻辑（仅处理非字符串内的字符）
-            if (c == '{' || c == '[') {
-                sb.append(c).append('\n');
-                indent++;
-                sb.append(spaces(indent));
-            } else if (c == '}' || c == ']') {
-                sb.append('\n');
-                indent--;
-                sb.append(spaces(indent)).append(c);
-            } else if (c == ',') {
-                sb.append(c).append('\n').append(spaces(indent));
-            } else if (c == ':') {
-                sb.append(c).append(' ');
-            } else if (!Character.isWhitespace(c)) {
-                sb.append(c);
-            }
-            prev = c;
+    private static String prettyPrintJson(String json) {
+        try {
+            com.fasterxml.jackson.databind.ObjectMapper mapper = new com.fasterxml.jackson.databind.ObjectMapper();
+            Object obj = mapper.readValue(json, Object.class);
+            return mapper.writerWithDefaultPrettyPrinter().writeValueAsString(obj);
+        } catch (Exception e) {
+            // 如果解析失败，返回原文
+            return json;
         }
-        return sb.toString();
-    }
-
-    private static String spaces(int n) {
-        StringBuilder sb = new StringBuilder();
-        for (int i = 0; i < n * 2; i++) sb.append(' ');
-        return sb.toString();
     }
 
     /**
