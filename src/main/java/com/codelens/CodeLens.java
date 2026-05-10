@@ -14,7 +14,7 @@ import java.util.ArrayList;
 import java.util.List;
 
 /**
- * Day 2：结构化输出 + 行号引用 + 方法调用过滤
+ * Day 2：结构化输出 + 行号引用 + 方法调用过滤 + JSON格式化
  */
 public class CodeLens {
 
@@ -62,11 +62,11 @@ public class CodeLens {
                 info.methods.add(mi);
             }
 
-            // 方法调用 + 行号，过滤 getter/setter
+            // 方法调用 + 行号，过滤 getter/setter 和框架通用调用
             for (MethodCallExpr call : cls.findAll(MethodCallExpr.class)) {
                 String methodName = call.getNameAsString();
 
-                // 过滤规则：跳过 getter/setter/is/toString/hashCode/equals
+                // 过滤琐碎调用
                 if (isTrivialCall(methodName)) continue;
 
                 CallInfo ci = new CallInfo();
@@ -96,7 +96,7 @@ public class CodeLens {
                 }
             }
             if (!ci.calls.isEmpty()) {
-                System.out.println("  业务调用（已过滤getter/setter）:");
+                System.out.println("  业务调用（已过滤getter/setter/框架调用）:");
                 for (CallInfo c : ci.calls) {
                     String prefix = c.caller != null ? c.caller + "." : "";
                     System.out.println("    L" + c.line + " | → " + prefix + c.methodName + "()");
@@ -136,28 +136,101 @@ public class CodeLens {
             + "【源码】\n" + code;
 
         String result = LLMClient.analyze(apiKey, systemPrompt, userPrompt);
-        System.out.println(result);
+        System.out.println(formatJson(result));
     }
 
     /**
-     * 判断是否为琐碎调用（getter/setter/is/toString等），需要过滤
+     * 判断是否为琐碎调用，需要过滤
      */
     private static boolean isTrivialCall(String methodName) {
+        // getter/setter/is
         if (methodName.startsWith("get") && methodName.length() > 3
                 && Character.isUpperCase(methodName.charAt(3))) return true;
         if (methodName.startsWith("set") && methodName.length() > 3
                 && Character.isUpperCase(methodName.charAt(3))) return true;
         if (methodName.startsWith("is") && methodName.length() > 2
                 && Character.isUpperCase(methodName.charAt(2))) return true;
+        // Object 基础方法
         if (methodName.equals("toString")) return true;
         if (methodName.equals("hashCode")) return true;
         if (methodName.equals("equals")) return true;
         if (methodName.equals("getClass")) return true;
         if (methodName.equals("valueOf")) return true;
-        // 过滤常见集合操作
+        // 常见集合操作
         if (methodName.equals("add") || methodName.equals("size")
-                || methodName.equals("contains") || methodName.equals("remove")) return true;
+                || methodName.equals("contains") || methodName.equals("remove")
+                || methodName.equals("iterator") || methodName.equals("toArray")) return true;
+        // RuoYi/Spring 框架通用方法
+        if (methodName.equals("startPage")) return true;
+        if (methodName.equals("getDataTable")) return true;
+        if (methodName.equals("toAjax")) return true;
+        if (methodName.equals("error")) return true;
+        if (methodName.equals("success")) return true;
+        if (methodName.equals("put")) return true;
+        // SLF4J/Log4j 日志方法（只过滤纯日志方法，不影响业务 log() 调用）
+        // 注意：auditLogger.log() 这种是业务方法，不过滤
+        // 只在 caller 是 logger/log 时才过滤，这里无法判断 caller，暂不过滤
         return false;
+    }
+
+    /**
+     * 简易 JSON 格式化（不依赖外部库）
+     */
+    private static String formatJson(String json) {
+        StringBuilder sb = new StringBuilder();
+        int indent = 0;
+        boolean inString = false;
+        char prev = 0;
+
+        for (int i = 0; i < json.length(); i++) {
+            char c = json.charAt(i);
+
+            // 跳过转义字符
+            if (prev == '\\') {
+                sb.append(c);
+                prev = c;
+                continue;
+            }
+
+            // 追踪字符串边界
+            if (c == '"') {
+                inString = !inString;
+                sb.append(c);
+                prev = c;
+                continue;
+            }
+
+            if (inString) {
+                sb.append(c);
+                prev = c;
+                continue;
+            }
+
+            // 格式化逻辑（仅处理非字符串内的字符）
+            if (c == '{' || c == '[') {
+                sb.append(c).append('\n');
+                indent++;
+                sb.append(spaces(indent));
+            } else if (c == '}' || c == ']') {
+                sb.append('\n');
+                indent--;
+                sb.append(spaces(indent)).append(c);
+            } else if (c == ',') {
+                sb.append(c).append('\n').append(spaces(indent));
+            } else if (c == ':') {
+                sb.append(c).append(' ');
+            } else if (!Character.isWhitespace(c)) {
+                sb.append(c);
+            }
+            prev = c;
+        }
+        return sb.toString();
+    }
+
+    private static String spaces(int n) {
+        StringBuilder sb = new StringBuilder();
+        for (int i = 0; i < n * 2; i++) sb.append(' ');
+        return sb.toString();
     }
 
     /**

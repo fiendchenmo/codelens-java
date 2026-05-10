@@ -1,4 +1,6 @@
 com/codelens/LLMClient.class
+com/codelens/CodeLens$CallInfo.class
+com/codelens/CodeLens$FieldInfo.class
 com/codelens/CodeLens.class
 com/codelens/CodeLens$ClassInfo.class
 com/codelens/CodeLens$MethodInfo.class
