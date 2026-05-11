@@ -129,11 +129,14 @@ public class CodeLens {
             + "}\n"
             + "要求：\n"
             + "1. 每条risks和dependencies必须指向具体代码行号（line字段）\n"
-            + "2. dependencies列出所有外部依赖（包括JSON/JSONObject等工具类），不要遗漏，不要列getter/setter\n"
+            + "2. dependencies只列出外部依赖（如JSON/JSONObject/Velocity等第三方和框架类），不要列项目内部类（如ServiceException/Constants/GenConstants等本项目定义的类），不要列getter/setter\n"
             + "3. risks必须基于代码事实，不要猜测，不要写\"需确认\"类模糊描述——要么是问题标对应severity，要么不是就不写\n"
-            + "4. architecture_issues只写整体性问题，不带行号\n"
-            + "5. class_analysis只写数据流路径，不要重复其他字段内容\n"
-            + "6. 只输出JSON，不要markdown代码块包裹";
+            + "4. 必须检查安全风险：路径遍历（文件路径拼接）、SQL注入（表名/列名拼接）、空指针链（链式调用未判空），安全类风险不得遗漏\n"
+            + "5. 检查异常处理对事务的影响：catch块吞异常会导致Spring事务不回滚，这是事务方法的严重问题\n"
+            + "6. 检查if-else逻辑时注意分支是否真的能执行到，不要把\"跳过校验\"误判为\"错误地要求校验\"\n"
+            + "7. architecture_issues只写整体性问题，不带行号\n"
+            + "8. class_analysis只写数据流路径，不要重复其他字段内容\n"
+            + "9. 只输出JSON，不要markdown代码块包裹";
 
         String userPrompt = "分析以下Java文件：\n\n"
             + "【结构化解析结果】\n" + structContext + "\n\n"
