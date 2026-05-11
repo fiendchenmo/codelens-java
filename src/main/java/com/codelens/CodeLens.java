@@ -121,15 +121,19 @@ public class CodeLens {
             + "{\n"
             + "  \"summary\": \"一句话功能摘要\",\n"
             + "  \"design_intent\": \"设计意图分析\",\n"
-            + "  \"dependencies\": [{\"name\": \"依赖对象\", \"type\": \"依赖类型\", \"line\": 行号, \"reason\": \"依赖原因\"}],\n"
-            + "  \"risks\": [{\"description\": \"风险描述\", \"line\": 行号, \"severity\": \"高/中/低\", \"suggestion\": \"建议\"}],\n"
-            + "  \"key_methods\": [{\"name\": \"方法名\", \"line\": 行号, \"purpose\": \"作用\", \"calls\": [\"调用的方法\"]}]\n"
+            + "  \"class_analysis\": \"数据流描述：从输入到输出的关键数据流转路径，只写数据流，不要重复summary和design_intent\",\n"
+            + "  \"dependencies\": [{\"name\": \"依赖对象\", \"type\": \"依赖类型(字段注入/静态方法调用)\", \"line\": 行号, \"reason\": \"依赖原因\"}],\n"
+            + "  \"risks\": [{\"description\": \"风险描述，必须基于代码事实\", \"line\": 行号, \"severity\": \"高/中/低\", \"suggestion\": \"修复建议\"}],\n"
+            + "  \"key_methods\": [{\"name\": \"方法名\", \"line\": 行号, \"purpose\": \"作用\", \"calls\": [\"调用的方法\"], \"notes\": \"该方法的特殊情况或注意事项\"}],\n"
+            + "  \"architecture_issues\": [\"架构级问题描述，不标行号\"]\n"
             + "}\n"
             + "要求：\n"
-            + "1. 每条结论必须指向具体代码行号（line字段）\n"
-            + "2. dependencies只列出外部依赖（非JDK类），不要列getter/setter\n"
-            + "3. risks必须基于代码事实，不要猜测\n"
-            + "4. 只输出JSON，不要markdown代码块包裹";
+            + "1. 每条risks和dependencies必须指向具体代码行号（line字段）\n"
+            + "2. dependencies列出所有外部依赖（包括JSON/JSONObject等工具类），不要遗漏，不要列getter/setter\n"
+            + "3. risks必须基于代码事实，不要猜测，不要写\"需确认\"类模糊描述——要么是问题标对应severity，要么不是就不写\n"
+            + "4. architecture_issues只写整体性问题，不带行号\n"
+            + "5. class_analysis只写数据流路径，不要重复其他字段内容\n"
+            + "6. 只输出JSON，不要markdown代码块包裹";
 
         String userPrompt = "分析以下Java文件：\n\n"
             + "【结构化解析结果】\n" + structContext + "\n\n"
@@ -166,7 +170,7 @@ public class CodeLens {
         if (methodName.equals("toAjax")) return true;
         if (methodName.equals("error")) return true;
         if (methodName.equals("success")) return true;
-        if (methodName.equals("put")) return true;
+        
         // SLF4J/Log4j 日志方法（只过滤纯日志方法，不影响业务 log() 调用）
         // 注意：auditLogger.log() 这种是业务方法，不过滤
         // 只在 caller 是 logger/log 时才过滤，这里无法判断 caller，暂不过滤
