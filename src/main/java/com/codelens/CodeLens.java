@@ -129,13 +129,13 @@ public class CodeLens {
             + "}\n"
             + "要求：\n"
             + "1. 每条risks和dependencies必须指向具体代码行号（line字段）\n"
-            + "2. dependencies只列出第三方和框架类（如JSON/JSONObject/Velocity/IOUtils/FileUtils/SecurityUtils/GenUtils等），不要列项目内部类（ServiceException/Constants/GenConstants/Collectors等本项目或同包内定义的类），不要列getter/setter\n"
+            + "2. dependencies只列出第三方和框架类（如JSON/JSONObject/Velocity/IOUtils/FileUtils/SecurityUtils/GenUtils等），不要列项目内部类（ServiceException/Constants/GenConstants/Collectors等），不要列日志类（Logger/Log等框架内置），不要列getter/setter\n"
             + "3. risks必须基于代码事实，不要猜测，不要写\"需确认\"类模糊描述——要么是问题标对应severity，要么不是就不写；未捕获的异常导致程序崩溃应标为高severity\n"
             + "4. 必须检查安全风险：路径遍历（文件路径拼接）、SQL注入（表名/列名拼接传入Mapper时若无法确认使用#{}参数化查询应标为风险）、空指针链（链式调用未判空）、JSON解析异常（parseObject/parse传入空或非法字符串），安全类风险不得遗漏\n"
             + "5. 检查异常处理对事务的影响：catch块吞异常会导致Spring事务不回滚，这是事务方法的严重问题；不要对已确认继承RuntimeException的异常重复标风险\n"
             + "6. 检查if-else逻辑时注意分支是否真的能执行到，不要把\"跳过校验\"误判为\"错误地要求校验\"\n"
-            + "7. risks应覆盖以下维度且每类至少检查是否有问题：安全（路径遍历/SQL注入/JSON解析异常）、逻辑缺陷（不可达分支/条件错误）、事务边界（catch吞异常）、空指针/越界、重复代码（多个方法重复相同流程）、方法设计（重载混淆/参数类型不同逻辑不一致）\n"
-            + "8. 同一问题不要重复列出多条risk，合并为一条\n"
+            + "7. risks应覆盖以下维度且每类至少检查是否有问题：安全（路径遍历/SQL注入/JSON解析异常）、逻辑缺陷（不可达分支/条件错误）、事务边界（catch吞异常）、空指针/越界、重复代码（多个方法重复相同流程）、方法设计（同名重载方法参数类型不同但逻辑不一致，如两个downloadCode或两个generatorCode行为差异）\n"
+            + "8. 同类问题（如多处SQL注入）合并为一条risk，只标入口方法行号，不要拆成多条\n"
             + "9. architecture_issues只写整体性问题，不带行号\n"
             + "10. class_analysis只写数据流路径，不要重复其他字段内容\n"
             + "11. 只输出JSON，不要markdown代码块包裹";
@@ -214,6 +214,8 @@ public class CodeLens {
         for (ClassInfo ci : classInfos) {
             sb.append(ci.isInterface ? "接口" : "类").append(": ").append(ci.name).append("\n");
             for (FieldInfo f : ci.fields) {
+                // 跳过日志字段，不算业务依赖
+                if (f.type.equals("Logger") || f.type.equals("Log")) continue;
                 sb.append("  字段 L").append(f.line).append(" | ").append(f.name).append(": ").append(f.type).append("\n");
             }
             for (MethodInfo m : ci.methods) {
