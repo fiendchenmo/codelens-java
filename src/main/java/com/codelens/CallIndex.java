@@ -80,8 +80,8 @@ public class CallIndex {
             
             // PRAGMA 必须在 autoCommit=true 时执行
             try (Statement pragmaStmt = conn.createStatement()) {
-                pragmaStmt.execute("PRAGMA journal_mode=WAL");
-                pragmaStmt.execute("PRAGMA synchronous=NORMAL");
+                // WAL mode removed for Windows compatibility
+                pragmaStmt.execute("PRAGMA synchronous=FULL");
             }
             
             conn.setAutoCommit(false);
@@ -92,7 +92,7 @@ public class CallIndex {
             try (Statement stmt = conn.createStatement()) {
                 
                 stmt.execute("CREATE VIRTUAL TABLE IF NOT EXISTS code_index USING fts5(" +
-                    "term, term_type, file_path, line_number, content='', tokenize='unicode61')");
+                    "term, term_type, file_path, line_number, tokenize='unicode61')");
                 
                 stmt.execute("CREATE TABLE IF NOT EXISTS index_meta (" +
                     "file_path TEXT PRIMARY KEY, " +
