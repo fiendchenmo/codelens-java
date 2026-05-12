@@ -22,8 +22,11 @@ import java.util.logging.Logger;
  * 支持的命令:
  * - analyze <Java文件路径> [API_KEY] : 分析 Java 文件
  * - index <目录路径>                    : 建立代码索引
- * - callers <类名>                      : 查询反向依赖
- * - full <Java文件路径> [API_KEY]      : 一键完成 index + callers + analyze
+ * - callers <类名>                       : 查询反向依赖
+ * - full <Java文件路径> [API_KEY]       : 一键完成 index + callers + analyze
+ * 
+ * 环境变量:
+ * - CODELENS_API_KEY: API Key（可选，优先级低于命令行参数）
  */
 public class CodeLens {
     
@@ -55,7 +58,6 @@ public class CodeLens {
                 printUsage();
                 break;
             default:
-                // 兼容旧用法：无命令时视为 analyze
                 handleAnalyze(args);
                 break;
         }
@@ -68,7 +70,7 @@ public class CodeLens {
         System.out.println("  java -jar codelens.jar analyze <Java文件路径> [API_KEY]");
         System.out.println("                              - 分析 Java 文件（使用 LLM）");
         System.out.println("  java -jar codelens.jar index <目录路径>");
-        System.out.println("                              - 建立代码索引（FTS5）");
+        System.out.println("                              - 建立代码索引");
         System.out.println("  java -jar codelens.jar callers <类名>");
         System.out.println("                              - 查询反向依赖关系");
         System.out.println("  java -jar codelens.jar full <Java文件路径> [API_KEY]");
@@ -76,8 +78,12 @@ public class CodeLens {
         System.out.println("  java -jar codelens.jar --help");
         System.out.println("                              - 显示帮助信息");
         System.out.println("");
+        System.out.println("环境变量:");
+        System.out.println("  CODELENS_API_KEY - API Key（优先级低于命令行参数）");
+        System.out.println("");
         System.out.println("示例:");
         System.out.println("  java -jar codelens.jar analyze src/main/java/MyService.java");
+        System.out.println("  CODELENS_API_KEY=xxx java -jar codelens.jar analyze src/main/java/MyService.java");
         System.out.println("  java -jar codelens.jar analyze src/main/java/MyService.java YOUR_API_KEY");
         System.out.println("  java -jar codelens.jar index src/main/java");
         System.out.println("  java -jar codelens.jar callers UserService");
@@ -94,7 +100,8 @@ public class CodeLens {
         }
 
         String filePath = args[1];
-        String apiKey = args.length >= 3 ? args[2] : "";
+        String apiKey = args.length >= 3 ? args[2] : System.getenv("CODELENS_API_KEY");
+        if (apiKey == null) apiKey = "";
 
         // ========== Step 1：JavaParser 解析（含行号） ==========
         System.out.println("━━━ Step 1：JavaParser 结构化解析 ━━━\n");
@@ -112,7 +119,6 @@ public class CodeLens {
             info.name = cls.getNameAsString();
             info.isInterface = cls.isInterface();
 
-            // 字段 + 行号
             for (FieldDeclaration field : cls.getFields()) {
                 FieldInfo fi = new FieldInfo();
                 fi.name = field.getVariable(0).getNameAsString();
@@ -121,7 +127,6 @@ public class CodeLens {
                 info.fields.add(fi);
             }
 
-            // 方法 + 行号
             for (MethodDeclaration method : cls.getMethods()) {
                 MethodInfo mi = new MethodInfo();
                 mi.name = method.getNameAsString();
@@ -131,11 +136,9 @@ public class CodeLens {
                 info.methods.add(mi);
             }
 
-            // 方法调用 + 行号，过滤 getter/setter 和框架通用调用
             for (MethodCallExpr call : cls.findAll(MethodCallExpr.class)) {
                 String methodName = call.getNameAsString();
 
-                // 过滤琐碎调用
                 if (isTrivialCall(methodName)) continue;
 
                 CallInfo ci = new CallInfo();
@@ -148,7 +151,6 @@ public class CodeLens {
             classInfos.add(info);
         }
 
-        // 打印结构化解析结果
         System.out.println("📦 包名: " + packageName);
         for (ClassInfo ci : classInfos) {
             System.out.println("\n🏷️ " + (ci.isInterface ? "接口" : "类") + ": " + ci.name);
@@ -183,7 +185,6 @@ public class CodeLens {
 
         String code = Files.readString(Paths.get(filePath));
 
-        // 构建结构化 Prompt
         String structContext = buildStructContext(packageName, classInfos);
         String systemPrompt = buildSystemPrompt();
         String userPrompt = "分析以下Java文件：\n\n"
@@ -206,32 +207,29 @@ public class CodeLens {
         String dirPath = args[1];
         java.nio.file.Path dir = Paths.get(dirPath);
         
-        if (!Files.exists(dir)) {
-            System.out.println("错误: 目录不存在: " + dirPath);
+        if (!Files.exists(dir) || !Files.isDirectory(dir)) {
+            System.out.println("错误: 目录不存在或不是有效目录: " + dirPath);
             return;
         }
-        
-        if (!Files.isDirectory(dir)) {
-            System.out.println("错误: 路径不是目录: " + dirPath);
-            return;
-        }
-        
-        System.out.println("━━━ 建立代码索引 ━━━");
-        System.out.println("目录: " + dirPath);
-        System.out.println("索引存储: " + dir.resolve(".codelens"));
-        System.out.println("");
         
         try {
-            CallIndex callIndex = new CallIndex(dir);
-            int count = callIndex.indexDirectory(dir);
-            callIndex.close();
-            System.out.println("\n✅ 索引建立完成! 共索引 " + count + " 个文件");
+            java.nio.file.Path projectRoot = findProjectRoot(dir);
+            if (projectRoot == null) {
+                projectRoot = dir;
+            }
+            
+            System.out.println("项目根目录: " + projectRoot);
+            System.out.println("索引目录: " + dir);
+            
+            CallIndex indexer = new CallIndex(projectRoot);
+            int count = indexer.indexDirectory(dir);
+            indexer.close();
+            
+            System.out.println("\n✅ 索引完成，共索引 " + count + " 个文件");
+            System.out.println("索引数据库: " + projectRoot.resolve(".codelens").resolve("code_index.db"));
         } catch (SQLException e) {
-            LOGGER.log(Level.SEVERE, "索引建立失败", e);
-            System.out.println("\n❌ 索引建立失败: " + e.getMessage());
-        } catch (Exception e) {
-            LOGGER.log(Level.SEVERE, "索引建立失败", e);
-            System.out.println("\n❌ 索引建立失败: " + e.getMessage());
+            System.out.println("⚠️ 索引失败: " + e.getMessage());
+            LOGGER.log(Level.SEVERE, "索引失败", e);
         }
     }
     
@@ -240,182 +238,131 @@ public class CodeLens {
     private static void handleCallers(String[] args) {
         if (args.length < 2) {
             System.out.println("错误: callers 命令需要指定类名");
-            System.out.println("用法: java -jar codelens.jar callers <类名> [项目目录]");
+            System.out.println("用法: java -jar codelens.jar callers <类名>");
             return;
         }
         
         String className = args[1];
-        java.nio.file.Path projectRoot = null;
-        
-        // 支持第二个参数指定项目路径
-        if (args.length >= 3) {
-            java.nio.file.Path specifiedPath = Paths.get(args[2]).toAbsolutePath().normalize();
-            if (Files.exists(specifiedPath.resolve(".codelens"))) {
-                projectRoot = specifiedPath;
-            } else {
-                // 即使没有 .codelens 也尝试用指定路径
-                projectRoot = specifiedPath;
-            }
-        }
-        
-        // 如果没有指定路径，从当前目录向上查找
-        if (projectRoot == null) {
-            java.nio.file.Path current = Paths.get(".").toAbsolutePath().normalize();
-            projectRoot = findProjectRoot(current);
-        }
+        java.nio.file.Path currentDir = Paths.get("").toAbsolutePath();
+        java.nio.file.Path projectRoot = findProjectRoot(currentDir);
         
         if (projectRoot == null) {
-            System.out.println("错误: 未找到索引目录 .codelens");
-            System.out.println("请先运行: java -jar codelens.jar index <项目目录>");
+            System.out.println("错误: 未找到 .codelens 索引目录，请先运行 index 命令");
             return;
         }
         
-        System.out.println("━━━ 反向依赖查询 ━━━");
-        System.out.println("类名: " + className);
-        System.out.println("项目: " + projectRoot);
-        System.out.println("");
-        
         try {
-            CallIndex callIndex = new CallIndex(projectRoot);
-            CallerFinder finder = new CallerFinder(callIndex, projectRoot);
+            CallIndex indexer = new CallIndex(projectRoot);
+            CallerFinder callerFinder = new CallerFinder(indexer, projectRoot);
             
-            List<CallerFinder.CallerInfo> callers = finder.findCallersWithInterfacePenetration(className);
-            finder.printReport(className, callers);
+            // 先查询类所在的文件
+            List<CallIndex.IndexResult> classResults = indexer.findByClass(className);
             
-            callIndex.close();
+            if (classResults.isEmpty()) {
+                System.out.println("未找到类: " + className);
+                indexer.close();
+                return;
+            }
+            
+            System.out.println("找到类 " + className + " 在以下位置:");
+            for (CallIndex.IndexResult r : classResults) {
+                System.out.println("  " + r);
+            }
+            System.out.println();
+            
+            // 查询被谁调用
+            List<CallerFinder.CallerInfo> callers = callerFinder.findCallers(className);
+            
+            if (callers.isEmpty()) {
+                System.out.println("没有找到调用 " + className + " 的代码");
+            } else {
+                System.out.println("找到 " + callers.size() + " 处调用 " + className + " 的代码:");
+                for (CallerFinder.CallerInfo caller : callers) {
+                    System.out.println("  " + caller);
+                }
+            }
+            
+            indexer.close();
         } catch (SQLException e) {
+            System.out.println("⚠️ 查询失败: " + e.getMessage());
             LOGGER.log(Level.SEVERE, "查询失败", e);
-            System.out.println("❌ 查询失败: " + e.getMessage());
-        } catch (Exception e) {
-            LOGGER.log(Level.SEVERE, "查询失败", e);
-            System.out.println("❌ 查询失败: " + e.getMessage());
         }
     }
     
     // ========== full 命令 ==========
     
-    private static void handleFull(String[] args) throws Exception {
+    private static void handleFull(String[] args) {
         if (args.length < 2) {
             System.out.println("错误: full 命令需要指定 Java 文件路径");
             System.out.println("用法: java -jar codelens.jar full <Java文件路径> [API_KEY]");
             return;
         }
-
+        
         String filePath = args[1];
-        String apiKey = args.length >= 3 ? args[2] : "";
-
-        // 验证文件存在
-        File javaFile = new File(filePath);
-        if (!javaFile.exists()) {
-            System.out.println("错误: 文件不存在: " + filePath);
-            return;
-        }
-
-        // ========== Step 1: 查找项目根目录并建索引 ==========
-        System.out.println("\n━━━ Step 1: 查找项目根目录并建立索引 ━━━\n");
+        String apiKey = args.length >= 3 ? args[2] : System.getenv("CODELENS_API_KEY");
+        if (apiKey == null) apiKey = "";
         
-        java.nio.file.Path projectRoot = null;
-        try {
-            projectRoot = findProjectRootForFull(javaFile.toPath());
-        } catch (Exception e) {
-            System.out.println("⚠️  查找项目根目录失败: " + e.getMessage());
-        }
-        
-        boolean indexBuilt = false;
-        if (projectRoot != null) {
-            try {
-                System.out.println("项目根目录: " + projectRoot);
-                CallIndex callIndex = new CallIndex(projectRoot);
-                int count = callIndex.indexDirectory(projectRoot);
-                callIndex.close();
-                System.out.println("\n✅ 索引建立完成! 共索引 " + count + " 个文件");
-                indexBuilt = true;
-            } catch (Exception e) {
-                System.out.println("⚠️  索引建立失败: " + e.getMessage());
-                System.out.println("继续执行后续步骤...");
-            }
-        } else {
-            System.out.println("⚠️  未找到项目根目录（向上未找到 .git 或 pom.xml），跳过索引建立");
-            System.out.println("继续执行后续步骤...");
-        }
-
-        // ========== Step 2: 从文件解析类名并查询反向依赖 ==========
-        System.out.println("\n━━━ Step 2: 查询反向依赖 ━━━\n");
-        
-        String className = null;
-        List<CallerFinder.CallerInfo> callers = new ArrayList<>();
-        boolean callersQueried = false;
+        System.out.println("━━━ full 命令：一键分析 ━━━\n");
         
         try {
-            // 解析文件获取类名
-            CompilationUnit cu = StaticJavaParser.parse(javaFile);
-            String packageName = cu.getPackageDeclaration()
-                    .map(pd -> pd.getNameAsString())
-                    .orElse("");
+            File file = new File(filePath);
+            java.nio.file.Path fileAbsolutePath = file.toPath().toAbsolutePath().normalize();
             
-            // 获取主类/接口名（public 的）
-            for (ClassOrInterfaceDeclaration cls : cu.findAll(ClassOrInterfaceDeclaration.class)) {
-                if (cls.isPublic()) {
-                    className = cls.getNameAsString();
-                    break;
-                }
+            // Step 1: 索引
+            System.out.println("━━━ Step 1: 索引项目 ━━━\n");
+            
+            java.nio.file.Path projectRoot = findProjectRootForFull(fileAbsolutePath.getParent());
+            if (projectRoot == null) {
+                projectRoot = fileAbsolutePath.getParent();
             }
             
-            // 如果没找到 public 类，取第一个
-            if (className == null) {
-                List<ClassOrInterfaceDeclaration> classes = cu.findAll(ClassOrInterfaceDeclaration.class);
-                if (!classes.isEmpty()) {
-                    className = classes.get(0).getNameAsString();
-                }
-            }
+            System.out.println("项目根目录: " + projectRoot);
             
-            if (className == null) {
-                System.out.println("⚠️  未能在文件中解析出类名，跳过反向依赖查询");
+            CallIndex indexer = new CallIndex(projectRoot);
+            
+            // 找 Java 文件所属的源码目录
+            java.nio.file.Path srcRoot = findSrcRoot(fileAbsolutePath);
+            System.out.println("索引目录: " + srcRoot);
+            
+            int indexedCount = indexer.indexDirectory(srcRoot);
+            System.out.println("索引了 " + indexedCount + " 个文件\n");
+            
+            // Step 2: 找类名
+            System.out.println("━━━ Step 2: 定位类 ━━━\n");
+            
+            String className = extractClassName(file);
+            System.out.println("目标类: " + className + "\n");
+            
+            // Step 3: 找 callers
+            System.out.println("━━━ Step 3: 反向依赖查询 ━━━\n");
+            
+            CallerFinder callerFinder = new CallerFinder(indexer, projectRoot);
+            List<CallerFinder.CallerInfo> callers = callerFinder.findCallers(className);
+            
+            if (callers.isEmpty()) {
+                System.out.println("没有找到调用 " + className + " 的代码");
             } else {
-                System.out.println("解析到类名: " + className);
-                
-                if (projectRoot != null && indexBuilt) {
-                    CallIndex callIndex = new CallIndex(projectRoot);
-                    
-                    // 诊断：先查一下索引里有没有这个类
-                    java.util.List<CallIndex.IndexResult> classCheck = callIndex.findByClass(className);
-                    if (classCheck.isEmpty()) {
-                        System.out.println("⚠️  索引中未找到类 " + className + " 的任何记录");
-                        System.out.println("   这可能是因为索引范围不包含该类或其调用方所在模块");
-                        System.out.println("   项目根目录: " + projectRoot);
-                    } else {
-                        System.out.println("索引中找到 " + classCheck.size() + " 条相关记录");
-                    }
-                    
-                    CallerFinder finder = new CallerFinder(callIndex, projectRoot);
-                    callers = finder.findCallersWithInterfacePenetration(className);
-                    finder.printReport(className, callers);
-                    callIndex.close();
-                    callersQueried = true;
-                } else {
-                    System.out.println("⚠️  索引未建立，无法查询反向依赖");
+                System.out.println("找到 " + callers.size() + " 处调用:");
+                for (CallerFinder.CallerInfo caller : callers) {
+                    System.out.println("  " + caller);
                 }
             }
-        } catch (Exception e) {
-            System.out.println("⚠️  解析文件或查询反向依赖失败: " + e.getMessage());
-            System.out.println("继续执行后续步骤...");
-        }
-
-        // ========== Step 3: JavaParser 结构化解析 + LLM 分析 ==========
-        System.out.println("\n━━━ Step 3: JavaParser 结构化解析 ━━━\n");
-
-        try {
-            CompilationUnit cu = StaticJavaParser.parse(javaFile);
+            System.out.println();
+            
+            // Step 4: JavaParser + LLM
+            System.out.println("━━━ Step 4: 结构化解析 ━━━\n");
+            
+            CompilationUnit cu = StaticJavaParser.parse(file);
             String packageName = cu.getPackageDeclaration()
                     .map(pd -> pd.getNameAsString())
                     .orElse("(默认包)");
-
+            
             List<ClassInfo> classInfos = new ArrayList<>();
             for (ClassOrInterfaceDeclaration cls : cu.findAll(ClassOrInterfaceDeclaration.class)) {
                 ClassInfo info = new ClassInfo();
                 info.name = cls.getNameAsString();
                 info.isInterface = cls.isInterface();
-
+                
                 for (FieldDeclaration field : cls.getFields()) {
                     FieldInfo fi = new FieldInfo();
                     fi.name = field.getVariable(0).getNameAsString();
@@ -423,7 +370,7 @@ public class CodeLens {
                     fi.line = field.getRange().map(r -> r.begin.line).orElse(-1);
                     info.fields.add(fi);
                 }
-
+                
                 for (MethodDeclaration method : cls.getMethods()) {
                     MethodInfo mi = new MethodInfo();
                     mi.name = method.getNameAsString();
@@ -432,21 +379,21 @@ public class CodeLens {
                     mi.line = method.getRange().map(r -> r.begin.line).orElse(-1);
                     info.methods.add(mi);
                 }
-
+                
                 for (MethodCallExpr call : cls.findAll(MethodCallExpr.class)) {
                     String methodName = call.getNameAsString();
                     if (isTrivialCall(methodName)) continue;
+                    
                     CallInfo ci = new CallInfo();
                     ci.methodName = methodName;
                     ci.line = call.getRange().map(r -> r.begin.line).orElse(-1);
                     call.getScope().ifPresent(scope -> ci.caller = scope.toString());
                     info.calls.add(ci);
                 }
-
+                
                 classInfos.add(info);
             }
-
-            // 打印结构化解析结果
+            
             System.out.println("📦 包名: " + packageName);
             for (ClassInfo ci : classInfos) {
                 System.out.println("\n🏷️ " + (ci.isInterface ? "接口" : "类") + ": " + ci.name);
@@ -470,13 +417,13 @@ public class CodeLens {
                     }
                 }
             }
-
+            
             // LLM 分析
             if (apiKey.isEmpty()) {
                 System.out.println("\n━━━ 未提供 API Key，跳过 LLM 分析 ━━━");
             } else {
-                System.out.println("\n━━━ Step 4: LLM 结构化分析 ━━━\n");
-
+                System.out.println("\n━━━ Step 5: LLM 结构化分析 ━━━\n");
+                
                 String code = Files.readString(Paths.get(filePath));
                 String structContext = buildStructContext(packageName, classInfos);
                 
@@ -484,29 +431,24 @@ public class CodeLens {
                 String userPrompt = "分析以下Java文件：\n\n"
                     + "【结构化解析结果】\n" + structContext + "\n\n"
                     + "【源码】\n" + code;
-
+                
                 String result = LLMClient.analyze(apiKey, systemPrompt, userPrompt);
                 
-                // 将 callers 结果合并到 JSON
                 String mergedResult = mergeCallersToJson(result, callers);
                 System.out.println(prettyPrintJson(mergedResult));
             }
+            
+            indexer.close();
         } catch (Exception e) {
-            System.out.println("⚠️  JavaParser 解析或 LLM 分析失败: " + e.getMessage());
+            System.out.println("⚠️ JavaParser 解析或 LLM 分析失败: " + e.getMessage());
             LOGGER.log(Level.SEVERE, "分析失败", e);
         }
         
         System.out.println("\n━━━ full 命令执行完成 ━━━");
     }
     
-    /**
-     * 向上查找项目根目录（用于 full 命令）
-     * 查找 .git 或 pom.xml
-     */
     private static java.nio.file.Path findProjectRootForFull(java.nio.file.Path start) {
         java.nio.file.Path current = start.toAbsolutePath().normalize();
-        // 优先找 .git 目录（代表项目根），找到后继续往上检查是否有更高级的 .git
-        // 这样多模块项目会索引整个项目而非单个模块
         java.nio.file.Path gitRoot = null;
         java.nio.file.Path temp = current;
         while (temp != null) {
@@ -519,8 +461,6 @@ public class CodeLens {
             return gitRoot;
         }
         
-        // 没有 .git 时退而找 pom.xml，但需要找最高层的 pom.xml
-        // 多模块项目有多个 pom.xml（如父 pom 和子模块 pom），要找到最顶层的那个
         java.nio.file.Path topmostPom = null;
         current = start.toAbsolutePath().normalize();
         while (current != null) {
@@ -532,16 +472,51 @@ public class CodeLens {
         return topmostPom;
     }
     
-    /**
-     * 将 callers 结果合并到 LLM 输出的 JSON 中
-     */
+    private static java.nio.file.Path findSrcRoot(java.nio.file.Path filePath) {
+        // 尝试找到 src/main/java 或 src/test/java
+        java.nio.file.Path current = filePath.getParent();
+        while (current != null) {
+            if (current.endsWith("src" + java.nio.file.FileSystems.getDefault().getSeparator() + "main" + java.nio.file.FileSystems.getDefault().getSeparator() + "java") ||
+                current.endsWith("src" + java.nio.file.FileSystems.getDefault().getSeparator() + "test" + java.nio.file.FileSystems.getDefault().getSeparator() + "java")) {
+                return current;
+            }
+            // 继续往上找 src
+            if (current.endsWith("src")) {
+                return current;
+            }
+            current = current.getParent();
+        }
+        // 找不到则返回文件父目录
+        return filePath.getParent();
+    }
+    
+    private static String extractClassName(File file) {
+        try {
+            CompilationUnit cu = StaticJavaParser.parse(file);
+            String packageName = cu.getPackageDeclaration()
+                    .map(pd -> pd.getNameAsString())
+                    .orElse("");
+            
+            for (ClassOrInterfaceDeclaration cls : cu.findAll(ClassOrInterfaceDeclaration.class)) {
+                if (!cls.getNameAsString().isEmpty()) {
+                    if (packageName.isEmpty()) {
+                        return cls.getNameAsString();
+                    }
+                    return packageName + "." + cls.getNameAsString();
+                }
+            }
+        } catch (Exception e) {
+            LOGGER.log(Level.WARNING, "Failed to extract class name", e);
+        }
+        return file.getName().replace(".java", "");
+    }
+    
     private static String mergeCallersToJson(String jsonResult, List<CallerFinder.CallerInfo> callers) {
         if (callers.isEmpty()) {
             return jsonResult;
         }
         
         try {
-            // 构建 callers JSON 数组
             StringBuilder callersJson = new StringBuilder();
             callersJson.append(",\n  \"callers\": [\n");
             for (int i = 0; i < callers.size(); i++) {
@@ -559,7 +534,6 @@ public class CodeLens {
             }
             callersJson.append("  ]");
             
-            // 在 JSON 末尾 } 之前插入 callers
             int lastBrace = jsonResult.lastIndexOf("}");
             if (lastBrace > 0) {
                 return jsonResult.substring(0, lastBrace) + callersJson + "\n}";
@@ -570,9 +544,6 @@ public class CodeLens {
         return jsonResult;
     }
     
-    /**
-     * JSON 字符串转义
-     */
     private static String escapeJson(String s) {
         if (s == null) return "";
         return s.replace("\\", "\\\\")
@@ -582,9 +553,6 @@ public class CodeLens {
                  .replace("\t", "\\t");
     }
     
-    /**
-     * 构建 LLM 分析的系统提示词
-     */
     private static String buildSystemPrompt() {
         return "你是Java遗留代码分析专家。必须严格按JSON格式输出，不要输出任何JSON以外的内容。"
             + "JSON Schema如下：\n"
@@ -611,9 +579,6 @@ public class CodeLens {
             + "11. 只输出JSON，不要markdown代码块包裹";
     }
     
-    /**
-     * 向上查找项目根目录
-     */
     private static java.nio.file.Path findProjectRoot(java.nio.file.Path start) {
         java.nio.file.Path current = start;
         while (current != null) {
@@ -625,73 +590,76 @@ public class CodeLens {
         return null;
     }
 
-    /**
-     * 判断方法名是否涉及表名/列名参数（可能用于SQL拼接）
-     */
     private static boolean isTableNameParamMethod(String methodName) {
         return methodName.contains("ByName") || methodName.contains("ByNames")
             || methodName.contains("ByNameList") || methodName.contains("ByTableName")
             || methodName.contains("ByColumn") || methodName.contains("ByColumns");
     }
 
-    /**
-     * 判断是否为琐碎调用，需要过滤
-     */
     private static boolean isTrivialCall(String methodName) {
-        // getter/setter/is
         if (methodName.startsWith("get") && methodName.length() > 3
                 && Character.isUpperCase(methodName.charAt(3))) return true;
         if (methodName.startsWith("set") && methodName.length() > 3
                 && Character.isUpperCase(methodName.charAt(3))) return true;
         if (methodName.startsWith("is") && methodName.length() > 2
                 && Character.isUpperCase(methodName.charAt(2))) return true;
-        // Object 基础方法
         if (methodName.equals("toString")) return true;
         if (methodName.equals("hashCode")) return true;
         if (methodName.equals("equals")) return true;
         if (methodName.equals("getClass")) return true;
         if (methodName.equals("valueOf")) return true;
-        // 常见集合操作
         if (methodName.equals("add") || methodName.equals("size")
                 || methodName.equals("contains") || methodName.equals("remove")
                 || methodName.equals("iterator") || methodName.equals("toArray")) return true;
-        // RuoYi/Spring 框架通用方法
         if (methodName.equals("startPage")) return true;
         if (methodName.equals("getDataTable")) return true;
         if (methodName.equals("toAjax")) return true;
         if (methodName.equals("error")) return true;
         if (methodName.equals("success")) return true;
         
-        // SLF4J/Log4j 日志方法（只过滤纯日志方法，不影响业务 log() 调用）
-        // 注意：auditLogger.log() 这种是业务方法，不过滤
-        // 只在 caller 是 logger/log 时才过滤，这里无法判断 caller，暂不过滤
         return false;
     }
 
     /**
-     * JSON 格式化输出（使用 Jackson）
+     * JSON 格式化输出（纯 Java 实现，无需 Jackson）
      */
     private static String prettyPrintJson(String json) {
-        try {
-            com.fasterxml.jackson.databind.ObjectMapper mapper = new com.fasterxml.jackson.databind.ObjectMapper();
-            Object obj = mapper.readValue(json, Object.class);
-            return mapper.writerWithDefaultPrettyPrinter().writeValueAsString(obj);
-        } catch (Exception e) {
-            // 如果解析失败，返回原文
-            return json;
+        StringBuilder sb = new StringBuilder();
+        int indent = 0;
+        boolean inString = false;
+        for (int i = 0; i < json.length(); i++) {
+            char c = json.charAt(i);
+            if (c == '"' && (i == 0 || json.charAt(i-1) != '\\')) {
+                inString = !inString;
+            }
+            if (inString) {
+                sb.append(c);
+                continue;
+            }
+            if (c == '{' || c == '[') {
+                sb.append(c).append('\n');
+                indent++;
+                sb.append("  ".repeat(indent));
+            } else if (c == '}' || c == ']') {
+                sb.append('\n');
+                indent--;
+                sb.append("  ".repeat(indent)).append(c);
+            } else if (c == ',') {
+                sb.append(c).append('\n');
+                sb.append("  ".repeat(indent));
+            } else {
+                sb.append(c);
+            }
         }
+        return sb.toString();
     }
 
-    /**
-     * 构建结构化上下文，传给 LLM
-     */
     private static String buildStructContext(String packageName, List<ClassInfo> classInfos) {
         StringBuilder sb = new StringBuilder();
         sb.append("包名: ").append(packageName).append("\n");
         for (ClassInfo ci : classInfos) {
             sb.append(ci.isInterface ? "接口" : "类").append(": ").append(ci.name).append("\n");
             for (FieldInfo f : ci.fields) {
-                // 跳过日志字段，不算业务依赖
                 if (f.type.equals("Logger") || f.type.equals("Log")) continue;
                 sb.append("  字段 L").append(f.line).append(" | ").append(f.name).append(": ").append(f.type).append("\n");
             }
@@ -702,7 +670,6 @@ public class CodeLens {
             for (CallInfo c : ci.calls) {
                 String prefix = c.caller != null ? c.caller + "." : "";
                 sb.append("  调用 L").append(c.line).append(" | ").append(prefix).append(c.methodName).append("()");
-                // 标注可疑的Mapper调用：表名/列名参数可能用于SQL拼接
                 if (c.caller != null && c.caller.contains("Mapper") && isTableNameParamMethod(c.methodName)) {
                     sb.append(" [注意:表名/列名参数传入Mapper，需检查SQL是否使用${}拼接]");
                 }

@@ -1,16 +1,26 @@
 package com.codelens;
 
+import com.github.javaparser.StaticJavaParser;
+import com.github.javaparser.ast.CompilationUnit;
+import com.github.javaparser.ast.body.ClassOrInterfaceDeclaration;
+import com.github.javaparser.ast.body.EnumDeclaration;
+import com.github.javaparser.ast.body.MethodDeclaration;
+import com.github.javaparser.ast.expr.MethodCallExpr;
+import com.github.javaparser.ast.expr.Expression;
+
 import java.io.*;
 import java.nio.file.*;
 import java.security.*;
 import java.sql.*;
 import java.util.*;
 import java.util.logging.*;
-import java.util.regex.*;
+import java.util.Optional;
+
+import com.github.javaparser.ast.ImportDeclaration;
 
 /**
- * 代码索引模块 - 使用普通SQLite表（兼容性更好）
- * 不使用FTS5虚拟表，避免跨平台兼容问题
+ * 代码索引模块 - 使用 JavaParser 进行精确解析
+ * 不使用正则表达式，能正确处理泛型、Lambda、Builder 链式调用等复杂语法
  */
 public class CallIndex {
     
@@ -28,35 +38,6 @@ public class CallIndex {
     private final Path indexDir;
     private final Path dbPath;
     private Connection conn;
-    
-    // 正则模式
-    private static final Pattern CLASS_PATTERN = Pattern.compile(
-        "(?:public|private|protected)?\\s*(?:static)?\\s*(?:final)?\\s*class\\s+(\\w+)|" +
-        "(?:public|private|protected)?\\s*interface\\s+(\\w+)|" +
-        "(?:public|private|protected)?\\s*(?:static)?\\s*enum\\s+(\\w+)"
-    );
-    
-    private static final Pattern ANNOTATION_PATTERN = Pattern.compile("@(\\w+)");
-    
-    private static final Pattern IMPORT_PATTERN = Pattern.compile("import\\s+([\\w.]+);");
-    
-    private static final Pattern METHOD_PATTERN = Pattern.compile(
-        "(?:public|private|protected)?\\s*(?:static)?\\s*(?:synchronized)?\\s*" +
-        "(?:\\w+(?:<[^>]+>)?|void)\\s+(\\w+)\\s*\\([^)]*\\)\\s*(?:throws[^{]*)?\\{?"
-    );
-    
-    private static final Pattern METHOD_CALL_PATTERN = Pattern.compile(
-        "(?:(\\w+)\\s*\\.\\s*)?(\\w+)\\s*\\([^)]*\\)\\s*;?"
-    );
-    
-    private static final Pattern NULL_PATTERN = Pattern.compile("\\bnull\\b");
-    
-    // 常见框架注解
-    private static final Set<String> FRAMEWORK_ANNOTATIONS = new HashSet<>(Arrays.asList(
-        "Service", "Component", "Controller", "RestController", "Repository",
-        "Transactional", "Autowired", "Value", "Bean", "Configuration",
-        "Aspect", "Before", "After", "Around", "Pointcut"
-    ));
     
     public CallIndex(Path projectRoot) throws SQLException {
         this.indexDir = projectRoot.resolve(".codelens");
@@ -79,18 +60,16 @@ public class CallIndex {
             conn = DriverManager.getConnection("jdbc:sqlite:" + dbPath);
             conn.setAutoCommit(false);
             
-            // 检查旧版FTS5虚拟表残留，仅在表是虚拟表时才清理
+            // 检查旧版FTS5虚拟表残留
             try (Statement stmt = conn.createStatement()) {
                 try (ResultSet rs = stmt.executeQuery(
                         "SELECT name FROM sqlite_master WHERE type='table' AND name='code_index'")) {
                     if (rs.next()) {
-                        // code_index表已存在，检查是否是FTS5虚拟表
                         try (ResultSet rs2 = stmt.executeQuery(
                                 "SELECT sql FROM sqlite_master WHERE name='code_index'")) {
                             if (rs2.next()) {
                                 String sql = rs2.getString(1);
                                 if (sql != null && sql.contains("VIRTUAL TABLE")) {
-                                    // 旧版FTS5虚拟表，需要清理
                                     stmt.execute("DROP TABLE IF EXISTS code_index");
                                     stmt.execute("DROP TABLE IF EXISTS code_index_data");
                                     stmt.execute("DROP TABLE IF EXISTS code_index_idx");
@@ -102,15 +81,12 @@ public class CallIndex {
                                 }
                             }
                         }
-                        // 如果是普通表则不做任何清理，保留已有数据
                     }
-                    // 如果表不存在，CREATE TABLE IF NOT EXISTS 会自动创建
                 }
             } catch (SQLException e) {
                 // 忽略检查失败
             }
             
-            // 使用普通表 + 索引，不使用FTS5虚拟表
             try (Statement stmt = conn.createStatement()) {
                 stmt.execute("CREATE TABLE IF NOT EXISTS code_index (" +
                     "id INTEGER PRIMARY KEY AUTOINCREMENT, " +
@@ -165,9 +141,6 @@ public class CallIndex {
         return total;
     }
     
-    /**
-     * 检查文件是否需要索引（基于 MD5 增量）
-     */
     private boolean shouldIndexFile(Path file) throws IOException, NoSuchAlgorithmException {
         String hash = computeMD5(file);
         String filePath = file.toString();
@@ -186,9 +159,6 @@ public class CallIndex {
         return true;
     }
     
-    /**
-     * 计算文件 MD5
-     */
     private String computeMD5(Path file) throws IOException, NoSuchAlgorithmException {
         MessageDigest md = MessageDigest.getInstance("MD5");
         try (InputStream is = Files.newInputStream(file)) {
@@ -210,18 +180,13 @@ public class CallIndex {
      * 索引单个文件
      */
     public void indexFile(Path file) throws IOException, SQLException, NoSuchAlgorithmException {
-        List<String> lines = Files.readAllLines(file);
-        String content = String.join("\n", lines);
         String filePath = file.toString();
         String hash = computeMD5(file);
         
-        // 删除旧索引
         deleteFileIndex(filePath);
         
-        // 提取并索引各项
-        List<IndexEntry> entries = extractEntries(content, lines, filePath);
+        List<IndexEntry> entries = extractEntriesWithJavaParser(file);
         
-        // 批量插入
         try (PreparedStatement ps = conn.prepareStatement(
                 "INSERT INTO code_index(term, term_type, file_path, line_number) VALUES (?, ?, ?, ?)")) {
             for (IndexEntry entry : entries) {
@@ -234,7 +199,6 @@ public class CallIndex {
             ps.executeBatch();
         }
         
-        // 更新元数据
         try (PreparedStatement ps = conn.prepareStatement(
                 "INSERT OR REPLACE INTO index_meta(file_path, file_hash, last_indexed) VALUES (?, ?, ?)")) {
             ps.setString(1, filePath);
@@ -247,71 +211,95 @@ public class CallIndex {
     }
     
     /**
-     * 从文件中提取索引项
+     * 使用 JavaParser 从文件中提取索引项
      */
-    private List<IndexEntry> extractEntries(String content, List<String> lines, String filePath) {
+    private List<IndexEntry> extractEntriesWithJavaParser(Path file) {
         List<IndexEntry> entries = new ArrayList<>();
+        String filePath = file.toString();
         
-        for (int i = 0; i < lines.size(); i++) {
-            String line = lines.get(i);
-            int lineNum = i + 1;
+        try {
+            CompilationUnit cu = StaticJavaParser.parse(file);
             
-            // 提取类/接口/枚举声明
-            Matcher classMatcher = CLASS_PATTERN.matcher(line);
-            while (classMatcher.find()) {
-                for (int g = 1; g <= classMatcher.groupCount(); g++) {
-                    if (classMatcher.group(g) != null) {
-                        entries.add(new IndexEntry(classMatcher.group(g), TYPE_CLASS, filePath, lineNum));
-                    }
-                }
+            // 提取 CLASS/INTERFACE 声明
+            for (ClassOrInterfaceDeclaration cls : cu.findAll(ClassOrInterfaceDeclaration.class)) {
+                String className = cls.getNameAsString();
+                int lineNumber = cls.getRange().map(r -> r.begin.line).orElse(0);
+                
+                entries.add(new IndexEntry(className, TYPE_CLASS, filePath, lineNumber));
+                
+                // 提取类上的注解
+                cls.getAnnotations().forEach(ann -> {
+                    String annName = ann.getNameAsString();
+                    int annLine = ann.getRange().map(r -> r.begin.line).orElse(lineNumber);
+                    entries.add(new IndexEntry(annName, TYPE_ANNOTATION, filePath, annLine));
+                });
             }
             
-            // 提取注解（仅框架注解）
-            Matcher annMatcher = ANNOTATION_PATTERN.matcher(line);
-            while (annMatcher.find()) {
-                String annName = annMatcher.group(1);
-                if (FRAMEWORK_ANNOTATIONS.contains(annName) || annName.length() > 3) {
-                    entries.add(new IndexEntry(annName, TYPE_ANNOTATION, filePath, lineNum));
-                }
+            // 提取 ENUM 声明
+            for (EnumDeclaration enumDecl : cu.findAll(EnumDeclaration.class)) {
+                String enumName = enumDecl.getNameAsString();
+                int lineNumber = enumDecl.getRange().map(r -> r.begin.line).orElse(0);
+                
+                entries.add(new IndexEntry(enumName, TYPE_CLASS, filePath, lineNumber));
+                
+                enumDecl.getAnnotations().forEach(ann -> {
+                    String annName = ann.getNameAsString();
+                    int annLine = ann.getRange().map(r -> r.begin.line).orElse(lineNumber);
+                    entries.add(new IndexEntry(annName, TYPE_ANNOTATION, filePath, annLine));
+                });
             }
             
-            // 提取 import 语句
-            Matcher impMatcher = IMPORT_PATTERN.matcher(line);
-            while (impMatcher.find()) {
-                String imp = impMatcher.group(1);
-                entries.add(new IndexEntry(imp, TYPE_IMPORT, filePath, lineNum));
-                // 同时索引 import 的最后一部分（类名）
-                int lastDot = imp.lastIndexOf('.');
+            // 提取 IMPORT 语句
+            for (ImportDeclaration imp : cu.getImports()) {
+                String fullName = imp.getNameAsString();
+                int lineNumber = imp.getRange().map(r -> r.begin.line).orElse(0);
+                
+                entries.add(new IndexEntry(fullName, TYPE_IMPORT, filePath, lineNumber));
+                
+                int lastDot = fullName.lastIndexOf('.');
                 if (lastDot > 0) {
-                    entries.add(new IndexEntry(imp.substring(lastDot + 1), TYPE_IMPORT, filePath, lineNum));
+                    String shortName = fullName.substring(lastDot + 1);
+                    entries.add(new IndexEntry(shortName, TYPE_IMPORT, filePath, lineNumber));
                 }
             }
             
             // 提取方法声明
-            Matcher methodMatcher = METHOD_PATTERN.matcher(line);
-            while (methodMatcher.find()) {
-                String methodName = methodMatcher.group(1);
+            for (MethodDeclaration method : cu.findAll(MethodDeclaration.class)) {
+                String methodName = method.getNameAsString();
+                int lineNumber = method.getRange().map(r -> r.begin.line).orElse(0);
+                
                 if (!isTrivialMethod(methodName)) {
-                    entries.add(new IndexEntry(methodName, TYPE_METHOD, filePath, lineNum));
+                    entries.add(new IndexEntry(methodName, TYPE_METHOD, filePath, lineNumber));
                 }
             }
             
             // 提取方法调用
-            Matcher callMatcher = METHOD_CALL_PATTERN.matcher(line);
-            while (callMatcher.find()) {
-                String caller = callMatcher.group(1);
-                String methodName = callMatcher.group(2);
+            for (MethodCallExpr call : cu.findAll(MethodCallExpr.class)) {
+                int lineNumber = call.getRange().map(r -> r.begin.line).orElse(0);
+                String methodName = call.getNameAsString();
                 
-                if (caller != null && !isTrivialMethod(methodName)) {
-                    entries.add(new IndexEntry(caller + "." + methodName, TYPE_CALLEE, filePath, lineNum));
-                    entries.add(new IndexEntry(methodName, TYPE_CALLEE, filePath, lineNum));
+                if (!isTrivialMethod(methodName)) {
+                    Optional<Expression> scopeOpt = call.getScope();
+                    if (scopeOpt.isPresent()) {
+                        Expression scope = scopeOpt.get();
+                        String scopeStr = scope.toString();
+                        entries.add(new IndexEntry(scopeStr + "." + methodName, TYPE_CALLEE, filePath, lineNumber));
+                    }
+                    entries.add(new IndexEntry(methodName, TYPE_CALLEE, filePath, lineNumber));
                 }
             }
             
-            // 标记 null 使用
-            if (NULL_PATTERN.matcher(line).find()) {
-                entries.add(new IndexEntry("null", TYPE_NULL_LITERAL, filePath, lineNum));
+            // 简单检查 null 字面量
+            List<String> lines = Files.readAllLines(file);
+            java.util.regex.Pattern nullPattern = java.util.regex.Pattern.compile("\\bnull\\b");
+            for (int i = 0; i < lines.size(); i++) {
+                if (nullPattern.matcher(lines.get(i)).find()) {
+                    entries.add(new IndexEntry("null", TYPE_NULL_LITERAL, filePath, i + 1));
+                }
             }
+            
+        } catch (Exception e) {
+            LOGGER.warning("Failed to parse " + filePath + " with JavaParser: " + e.getMessage());
         }
         
         return entries;
@@ -324,9 +312,6 @@ public class CallIndex {
         return false;
     }
     
-    /**
-     * 删除文件的索引
-     */
     private void deleteFileIndex(String filePath) throws SQLException {
         try (PreparedStatement ps = conn.prepareStatement(
                 "DELETE FROM code_index WHERE file_path = ?")) {
@@ -335,9 +320,6 @@ public class CallIndex {
         }
     }
     
-    /**
-     * 查询包含特定类的文件
-     */
     public List<IndexResult> findByClass(String className) throws SQLException {
         List<IndexResult> results = new ArrayList<>();
         
@@ -362,9 +344,6 @@ public class CallIndex {
         return results;
     }
     
-    /**
-     * 查询方法被谁调用
-     */
     public List<IndexResult> findCallers(String methodName) throws SQLException {
         List<IndexResult> results = new ArrayList<>();
         
@@ -388,9 +367,6 @@ public class CallIndex {
         return results;
     }
     
-    /**
-     * 查询所有类/接口定义
-     */
     public List<IndexResult> findAllClasses() throws SQLException {
         List<IndexResult> results = new ArrayList<>();
         
@@ -413,9 +389,6 @@ public class CallIndex {
         return results;
     }
     
-    /**
-     * 查询特定类型的索引项
-     */
     public List<IndexResult> findByType(String type) throws SQLException {
         List<IndexResult> results = new ArrayList<>();
         
@@ -438,10 +411,6 @@ public class CallIndex {
         return results;
     }
     
-    /**
-     * 查询以指定前缀开头的 term（配合指定类型）
-     * 用于查找如 "ClassName.method()" 模式的 CALLEE 记录
-     */
     public List<IndexResult> findByTermPrefix(String prefix, String type) throws SQLException {
         List<IndexResult> results = new ArrayList<>();
         
