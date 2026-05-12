@@ -518,15 +518,18 @@ public class CodeLens {
         if (gitRoot != null) {
             return gitRoot;
         }
-        // 没有 .git 时退而找 pom.xml
+        
+        // 没有 .git 时退而找 pom.xml，但需要找最高层的 pom.xml
+        // 多模块项目有多个 pom.xml（如父 pom 和子模块 pom），要找到最顶层的那个
+        java.nio.file.Path topmostPom = null;
         current = start.toAbsolutePath().normalize();
         while (current != null) {
             if (Files.exists(current.resolve("pom.xml"))) {
-                return current;
+                topmostPom = current;
             }
             current = current.getParent();
         }
-        return null;
+        return topmostPom;
     }
     
     /**

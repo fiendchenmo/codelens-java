@@ -65,31 +65,24 @@ public class CallerFinder {
     
     /**
      * 查找方法调用了指定类方法的文件
+     * 正确逻辑：查找 CALLEE 类型的索引项中，term 以 "className." 开头的
+     * 即表示某个地方调用了 className 的方法，这些记录的 file_path 就是调用方
      */
     private void findMethodCallers(String className, List<CallerInfo> results, Set<String> visited) 
             throws SQLException {
         
-        // 查找所有类方法
-        List<CallIndex.IndexResult> methods = callIndex.findByType(CallIndex.TYPE_METHOD);
+        // 查找 CALLEE 类型的索引项中，以 "className." 开头的（即目标类的方法被调用）
+        List<CallIndex.IndexResult> callees = callIndex.findByTermPrefix(className + ".", CallIndex.TYPE_CALLEE);
         
-        for (CallIndex.IndexResult method : methods) {
-            if (method.term.equals(className)) {
-                // 找到了同名的方法声明
-                continue;
-            }
-            
-            // 查找调用该方法的地方
-            List<CallIndex.IndexResult> callers = callIndex.findCallers(method.term);
-            for (CallIndex.IndexResult caller : callers) {
-                if (!visited.contains(caller.filePath)) {
-                    visited.add(caller.filePath);
-                    CallerInfo info = new CallerInfo();
-                    info.filePath = caller.filePath;
-                    info.type = CallerType.METHOD_CALL;
-                    info.description = "calls " + method.term + "()";
-                    info.lineNumber = caller.lineNumber;
-                    results.add(info);
-                }
+        for (CallIndex.IndexResult callee : callees) {
+            if (!visited.contains(callee.filePath)) {
+                visited.add(callee.filePath);
+                CallerInfo info = new CallerInfo();
+                info.filePath = callee.filePath;
+                info.type = CallerType.METHOD_CALL;
+                info.description = "calls " + callee.term;
+                info.lineNumber = callee.lineNumber;
+                results.add(info);
             }
         }
     }

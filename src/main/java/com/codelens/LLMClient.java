@@ -14,7 +14,7 @@ public class LLMClient {
 
     public static String analyze(String apiKey, String systemPrompt, String userPrompt) throws Exception {
         String body = "{"
-            + "\"model\": \"deepseek-chat\","
+            + "\"model\": \"deepseek-v4-flash\","
             + "\"messages\": ["
             + "  {\"role\": \"system\", \"content\": \"" + escapeJson(systemPrompt) + "\"},"
             + "  {\"role\": \"user\", \"content\": \"" + escapeJson(userPrompt) + "\"}"

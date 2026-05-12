@@ -438,6 +438,33 @@ public class CallIndex {
         return results;
     }
     
+    /**
+     * 查询以指定前缀开头的 term（配合指定类型）
+     * 用于查找如 "ClassName.method()" 模式的 CALLEE 记录
+     */
+    public List<IndexResult> findByTermPrefix(String prefix, String type) throws SQLException {
+        List<IndexResult> results = new ArrayList<>();
+        
+        String sql = "SELECT term, term_type, file_path, line_number FROM code_index " +
+                    "WHERE term LIKE ? AND term_type = ? ORDER BY term, file_path";
+        try (PreparedStatement ps = conn.prepareStatement(sql)) {
+            ps.setString(1, prefix + "%");
+            ps.setString(2, type);
+            try (ResultSet rs = ps.executeQuery()) {
+                while (rs.next()) {
+                    results.add(new IndexResult(
+                        rs.getString("term"),
+                        rs.getString("term_type"),
+                        rs.getString("file_path"),
+                        rs.getInt("line_number")
+                    ));
+                }
+            }
+        }
+        
+        return results;
+    }
+    
     public void close() {
         if (conn != null) {
             try {
