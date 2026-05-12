@@ -99,7 +99,6 @@ public class CallIndex {
                     "file_hash TEXT, " +
                     "last_indexed TEXT)");
                 
-                stmt.execute("CREATE INDEX IF NOT EXISTS idx_term_type ON code_index(term_type)");
             }
             conn.commit();
             LOGGER.info("Database initialized: " + dbPath);
