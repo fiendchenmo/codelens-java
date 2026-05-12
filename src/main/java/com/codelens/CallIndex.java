@@ -92,7 +92,7 @@ public class CallIndex {
             try (Statement stmt = conn.createStatement()) {
                 
                 stmt.execute("CREATE VIRTUAL TABLE IF NOT EXISTS code_index USING fts5(" +
-                    "term, term_type, file_path, line_number, content='none', tokenize='unicode61')");
+                    "term, term_type, file_path, line_number, content='', tokenize='unicode61')");
                 
                 stmt.execute("CREATE TABLE IF NOT EXISTS index_meta (" +
                     "file_path TEXT PRIMARY KEY, " +
