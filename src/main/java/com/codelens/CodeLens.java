@@ -240,15 +240,29 @@ public class CodeLens {
     private static void handleCallers(String[] args) {
         if (args.length < 2) {
             System.out.println("错误: callers 命令需要指定类名");
-            System.out.println("用法: java -jar codelens.jar callers <类名>");
+            System.out.println("用法: java -jar codelens.jar callers <类名> [项目目录]");
             return;
         }
         
         String className = args[1];
+        java.nio.file.Path projectRoot = null;
         
-        // 查找项目根目录（向上查找 .codelens 目录）
-        java.nio.file.Path current = Paths.get(".").toAbsolutePath().normalize();
-        java.nio.file.Path projectRoot = findProjectRoot(current);
+        // 支持第二个参数指定项目路径
+        if (args.length >= 3) {
+            java.nio.file.Path specifiedPath = Paths.get(args[2]).toAbsolutePath().normalize();
+            if (Files.exists(specifiedPath.resolve(".codelens"))) {
+                projectRoot = specifiedPath;
+            } else {
+                // 即使没有 .codelens 也尝试用指定路径
+                projectRoot = specifiedPath;
+            }
+        }
+        
+        // 如果没有指定路径，从当前目录向上查找
+        if (projectRoot == null) {
+            java.nio.file.Path current = Paths.get(".").toAbsolutePath().normalize();
+            projectRoot = findProjectRoot(current);
+        }
         
         if (projectRoot == null) {
             System.out.println("错误: 未找到索引目录 .codelens");
@@ -362,6 +376,17 @@ public class CodeLens {
                 
                 if (projectRoot != null && indexBuilt) {
                     CallIndex callIndex = new CallIndex(projectRoot);
+                    
+                    // 诊断：先查一下索引里有没有这个类
+                    java.util.List<CallIndex.IndexResult> classCheck = callIndex.findByClass(className);
+                    if (classCheck.isEmpty()) {
+                        System.out.println("⚠️  索引中未找到类 " + className + " 的任何记录");
+                        System.out.println("   这可能是因为索引范围不包含该类或其调用方所在模块");
+                        System.out.println("   项目根目录: " + projectRoot);
+                    } else {
+                        System.out.println("索引中找到 " + classCheck.size() + " 条相关记录");
+                    }
+                    
                     CallerFinder finder = new CallerFinder(callIndex, projectRoot);
                     callers = finder.findCallersWithInterfacePenetration(className);
                     finder.printReport(className, callers);
