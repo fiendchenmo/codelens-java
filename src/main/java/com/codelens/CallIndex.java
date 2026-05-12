@@ -79,6 +79,23 @@ public class CallIndex {
             conn = DriverManager.getConnection("jdbc:sqlite:" + dbPath);
             conn.setAutoCommit(false);
             
+            // 清理旧版FTS5虚拟表残留（如果存在的话）
+            try (Statement stmt = conn.createStatement()) {
+                try {
+                    stmt.execute("DROP TABLE IF EXISTS code_index");
+                    stmt.execute("DROP TABLE IF EXISTS code_index_data");
+                    stmt.execute("DROP TABLE IF EXISTS code_index_idx");
+                    stmt.execute("DROP TABLE IF EXISTS code_index_content");
+                    stmt.execute("DROP TABLE IF EXISTS code_index_docsize");
+                    stmt.execute("DROP TABLE IF EXISTS code_index_config");
+                    conn.commit();
+                    LOGGER.info("Cleaned up legacy FTS5 tables");
+                } catch (SQLException e) {
+                    // 忽略清理失败
+                    conn.rollback();
+                }
+            }
+            
             // 使用普通表 + 索引，不使用FTS5虚拟表
             try (Statement stmt = conn.createStatement()) {
                 stmt.execute("CREATE TABLE IF NOT EXISTS code_index (" +
