@@ -133,7 +133,7 @@ public class CallIndex {
     /**
      * 检查文件是否需要索引（基于 MD5 增量）
      */
-    private boolean shouldIndexFile(Path file) throws IOException {
+    private boolean shouldIndexFile(Path file) throws IOException, java.security.NoSuchAlgorithmException {
         String hash = computeMD5(file);
         String filePath = file.toString();
         
@@ -154,7 +154,7 @@ public class CallIndex {
     /**
      * 计算文件 MD5
      */
-    private String computeMD5(Path file) throws IOException {
+    private String computeMD5(Path file) throws IOException, java.security.NoSuchAlgorithmException {
         MessageDigest md = MessageDigest.getInstance("MD5");
         try (InputStream is = Files.newInputStream(file)) {
             byte[] buf = new byte[8192];
@@ -174,7 +174,7 @@ public class CallIndex {
     /**
      * 索引单个文件
      */
-    public void indexFile(Path file) throws IOException, SQLException {
+    public void indexFile(Path file) throws IOException, SQLException, java.security.NoSuchAlgorithmException {
         List<String> lines = Files.readAllLines(file);
         String content = String.join("\n", lines);
         String filePath = file.toString();
@@ -204,7 +204,7 @@ public class CallIndex {
                 "INSERT OR REPLACE INTO index_meta(file_path, file_hash, last_indexed) VALUES (?, ?, ?)")) {
             ps.setString(1, filePath);
             ps.setString(2, hash);
-            ps.setString(3, new Timestamp(System.currentTimeMillis()).toString());
+            ps.setString(3, new java.sql.Timestamp(System.currentTimeMillis()).toString());
             ps.execute();
         }
         
