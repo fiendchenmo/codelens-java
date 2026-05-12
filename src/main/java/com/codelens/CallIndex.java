@@ -104,9 +104,9 @@ public class CallIndex {
     /**
      * 索引指定目录
      */
-    public void indexDirectory(Path dir) throws SQLException {
+    public int indexDirectory(Path dir) throws SQLException {
         LOGGER.info("Indexing directory: " + dir);
-        int count = 0;
+        java.util.concurrent.atomic.AtomicInteger count = new java.util.concurrent.atomic.AtomicInteger(0);
         
         try {
             Files.walk(dir)
@@ -115,7 +115,7 @@ public class CallIndex {
                     try {
                         if (shouldIndexFile(file)) {
                             indexFile(file);
-                            count++;
+                            count.incrementAndGet();
                         }
                     } catch (Exception e) {
                         LOGGER.warning("Failed to index " + file + ": " + e.getMessage());
@@ -125,7 +125,9 @@ public class CallIndex {
             throw new SQLException("Directory walk failed", e);
         }
         
-        LOGGER.info("Indexed " + count + " files");
+        int total = count.get();
+        LOGGER.info("Indexed " + total + " files");
+        return total;
     }
     
     /**
@@ -304,12 +306,13 @@ public class CallIndex {
     public List<IndexResult> findByClass(String className) throws SQLException {
         List<IndexResult> results = new ArrayList<>();
         
-        // 1. 直接查询 import 中的类
+        // 查询 import 和 class 定义中的类
         String sql = "SELECT term, term_type, file_path, line_number FROM code_index " +
-                    "WHERE term = ? AND term_type = ? ORDER BY file_path, line_number";
+                    "WHERE term = ? AND term_type IN (?, ?) ORDER BY file_path, line_number";
         try (PreparedStatement ps = conn.prepareStatement(sql)) {
             ps.setString(1, className);
             ps.setString(2, TYPE_IMPORT);
+            ps.setString(3, TYPE_CLASS);
             try (ResultSet rs = ps.executeQuery()) {
                 while (rs.next()) {
                     results.add(new IndexResult(

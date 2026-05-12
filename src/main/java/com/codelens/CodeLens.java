@@ -239,9 +239,9 @@ public class CodeLens {
         
         try {
             CallIndex callIndex = new CallIndex(dir);
-            callIndex.indexDirectory(dir);
+            int count = callIndex.indexDirectory(dir);
             callIndex.close();
-            System.out.println("\n✅ 索引建立完成!");
+            System.out.println("\n✅ 索引建立完成! 共索引 " + count + " 个文件");
         } catch (SQLException e) {
             LOGGER.log(Level.SEVERE, "索引建立失败", e);
             System.out.println("\n❌ 索引建立失败: " + e.getMessage());
@@ -281,7 +281,7 @@ public class CodeLens {
             CallIndex callIndex = new CallIndex(projectRoot);
             CallerFinder finder = new CallerFinder(callIndex, projectRoot);
             
-            List<CallerFinder.CallerInfo> callers = finder.findCallers(className);
+            List<CallerFinder.CallerInfo> callers = finder.findCallersWithInterfacePenetration(className);
             finder.printReport(className, callers);
             
             callIndex.close();

@@ -104,27 +104,12 @@ public class CallerFinder {
         
         Set<String> implementations = new HashSet<>();
         
-        // 1. 查找所有类定义
+        // 1. 查找所有类定义，检查 implements 列表
         List<CallIndex.IndexResult> classes = callIndex.findAllClasses();
         
         for (CallIndex.IndexResult cls : classes) {
             if (implementsInterface(cls.filePath, cls.term, interfaceName)) {
                 implementations.add(cls.term);
-            }
-        }
-        
-        // 2. 查找标注了 @Service/@Component/@Repository 的类
-        List<CallIndex.IndexResult> services = callIndex.findByType(CallIndex.TYPE_ANNOTATION);
-        for (CallIndex.IndexResult ann : services) {
-            if (ann.term.equals("Service") || ann.term.equals("Component") || 
-                ann.term.equals("Repository")) {
-                // 尝试从文件名推断类名
-                Path file = Paths.get(ann.filePath);
-                String fileName = file.getFileName().toString();
-                if (fileName.endsWith(".java")) {
-                    String className = fileName.replace(".java", "");
-                    implementations.add(className);
-                }
             }
         }
         
@@ -183,7 +168,6 @@ public class CallerFinder {
         Set<String> visited = new HashSet<>();
         
         // 1. 首先查找直接的依赖
-        findCallers(className);
         List<CallerInfo> directCallers = findCallers(className);
         for (CallerInfo info : directCallers) {
             if (!visited.contains(info.filePath)) {
@@ -196,7 +180,7 @@ public class CallerFinder {
         if (isInterface(className)) {
             Set<String> impls = findInterfaceImplementations(className);
             for (String impl : impls) {
-                if (!impl.equals(className) && !visited.contains(impl)) {
+                if (!impl.equals(className)) {
                     List<CallerInfo> implCallers = findCallers(impl);
                     for (CallerInfo info : implCallers) {
                         if (!visited.contains(info.filePath)) {
