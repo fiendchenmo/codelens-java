@@ -77,12 +77,19 @@ public class CallIndex {
         try {
             Class.forName("org.sqlite.JDBC");
             conn = DriverManager.getConnection("jdbc:sqlite:" + dbPath);
+            
+            // PRAGMA 必须在 autoCommit=true 时执行
+            try (Statement pragmaStmt = conn.createStatement()) {
+                pragmaStmt.execute("PRAGMA journal_mode=WAL");
+                pragmaStmt.execute("PRAGMA synchronous=NORMAL");
+            }
+            
             conn.setAutoCommit(false);
+
+
             
             // 创建 FTS5 虚拟表
             try (Statement stmt = conn.createStatement()) {
-                stmt.execute("PRAGMA journal_mode=WAL");
-                stmt.execute("PRAGMA synchronous=NORMAL");
                 
                 stmt.execute("CREATE VIRTUAL TABLE IF NOT EXISTS code_index USING fts5(" +
                     "term, term_type, file_path, line_number, content='none', tokenize='unicode61')");
