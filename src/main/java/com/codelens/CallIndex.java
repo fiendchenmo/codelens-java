@@ -9,8 +9,8 @@ import java.util.logging.*;
 import java.util.regex.*;
 
 /**
- * FTS5 倒排索引模块 - 轻量级 Java 代码扫描器
- * 不使用完整 JavaParser AST，仅词法扫描 + 正则提取
+ * 代码索引模块 - 使用普通SQLite表（兼容性更好）
+ * 不使用FTS5虚拟表，避免跨平台兼容问题
  */
 public class CallIndex {
     
@@ -77,28 +77,26 @@ public class CallIndex {
         try {
             Class.forName("org.sqlite.JDBC");
             conn = DriverManager.getConnection("jdbc:sqlite:" + dbPath);
-            
-            // PRAGMA 必须在 autoCommit=true 时执行
-            try (Statement pragmaStmt = conn.createStatement()) {
-                // WAL mode removed for Windows compatibility
-                pragmaStmt.execute("PRAGMA synchronous=FULL");
-            }
-            
             conn.setAutoCommit(false);
-
-
             
-            // 创建 FTS5 虚拟表
+            // 使用普通表 + 索引，不使用FTS5虚拟表
             try (Statement stmt = conn.createStatement()) {
+                stmt.execute("CREATE TABLE IF NOT EXISTS code_index (" +
+                    "id INTEGER PRIMARY KEY AUTOINCREMENT, " +
+                    "term TEXT NOT NULL, " +
+                    "term_type TEXT NOT NULL, " +
+                    "file_path TEXT NOT NULL, " +
+                    "line_number INTEGER NOT NULL)");
                 
-                stmt.execute("CREATE VIRTUAL TABLE IF NOT EXISTS code_index USING fts5(" +
-                    "term, term_type, file_path, line_number, tokenize='unicode61')");
+                stmt.execute("CREATE INDEX IF NOT EXISTS idx_term ON code_index(term)");
+                stmt.execute("CREATE INDEX IF NOT EXISTS idx_term_type ON code_index(term_type)");
+                stmt.execute("CREATE INDEX IF NOT EXISTS idx_file_path ON code_index(file_path)");
+                stmt.execute("CREATE INDEX IF NOT EXISTS idx_term_and_type ON code_index(term, term_type)");
                 
                 stmt.execute("CREATE TABLE IF NOT EXISTS index_meta (" +
                     "file_path TEXT PRIMARY KEY, " +
                     "file_hash TEXT, " +
                     "last_indexed TEXT)");
-                
             }
             conn.commit();
             LOGGER.info("Database initialized: " + dbPath);
@@ -139,7 +137,7 @@ public class CallIndex {
     /**
      * 检查文件是否需要索引（基于 MD5 增量）
      */
-    private boolean shouldIndexFile(Path file) throws IOException, java.security.NoSuchAlgorithmException {
+    private boolean shouldIndexFile(Path file) throws IOException, NoSuchAlgorithmException {
         String hash = computeMD5(file);
         String filePath = file.toString();
         
@@ -160,7 +158,7 @@ public class CallIndex {
     /**
      * 计算文件 MD5
      */
-    private String computeMD5(Path file) throws IOException, java.security.NoSuchAlgorithmException {
+    private String computeMD5(Path file) throws IOException, NoSuchAlgorithmException {
         MessageDigest md = MessageDigest.getInstance("MD5");
         try (InputStream is = Files.newInputStream(file)) {
             byte[] buf = new byte[8192];
@@ -180,7 +178,7 @@ public class CallIndex {
     /**
      * 索引单个文件
      */
-    public void indexFile(Path file) throws IOException, SQLException, java.security.NoSuchAlgorithmException {
+    public void indexFile(Path file) throws IOException, SQLException, NoSuchAlgorithmException {
         List<String> lines = Files.readAllLines(file);
         String content = String.join("\n", lines);
         String filePath = file.toString();
@@ -312,7 +310,6 @@ public class CallIndex {
     public List<IndexResult> findByClass(String className) throws SQLException {
         List<IndexResult> results = new ArrayList<>();
         
-        // 查询 import 和 class 定义中的类
         String sql = "SELECT term, term_type, file_path, line_number FROM code_index " +
                     "WHERE term = ? AND term_type IN (?, ?) ORDER BY file_path, line_number";
         try (PreparedStatement ps = conn.prepareStatement(sql)) {
