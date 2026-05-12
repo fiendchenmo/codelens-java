@@ -79,21 +79,35 @@ public class CallIndex {
             conn = DriverManager.getConnection("jdbc:sqlite:" + dbPath);
             conn.setAutoCommit(false);
             
-            // 清理旧版FTS5虚拟表残留（如果存在的话）
+            // 检查旧版FTS5虚拟表残留，仅在表是虚拟表时才清理
             try (Statement stmt = conn.createStatement()) {
-                try {
-                    stmt.execute("DROP TABLE IF EXISTS code_index");
-                    stmt.execute("DROP TABLE IF EXISTS code_index_data");
-                    stmt.execute("DROP TABLE IF EXISTS code_index_idx");
-                    stmt.execute("DROP TABLE IF EXISTS code_index_content");
-                    stmt.execute("DROP TABLE IF EXISTS code_index_docsize");
-                    stmt.execute("DROP TABLE IF EXISTS code_index_config");
-                    conn.commit();
-                    LOGGER.info("Cleaned up legacy FTS5 tables");
-                } catch (SQLException e) {
-                    // 忽略清理失败
-                    conn.rollback();
+                try (ResultSet rs = stmt.executeQuery(
+                        "SELECT name FROM sqlite_master WHERE type='table' AND name='code_index'")) {
+                    if (rs.next()) {
+                        // code_index表已存在，检查是否是FTS5虚拟表
+                        try (ResultSet rs2 = stmt.executeQuery(
+                                "SELECT sql FROM sqlite_master WHERE name='code_index'")) {
+                            if (rs2.next()) {
+                                String sql = rs2.getString(1);
+                                if (sql != null && sql.contains("VIRTUAL TABLE")) {
+                                    // 旧版FTS5虚拟表，需要清理
+                                    stmt.execute("DROP TABLE IF EXISTS code_index");
+                                    stmt.execute("DROP TABLE IF EXISTS code_index_data");
+                                    stmt.execute("DROP TABLE IF EXISTS code_index_idx");
+                                    stmt.execute("DROP TABLE IF EXISTS code_index_content");
+                                    stmt.execute("DROP TABLE IF EXISTS code_index_docsize");
+                                    stmt.execute("DROP TABLE IF EXISTS code_index_config");
+                                    conn.commit();
+                                    LOGGER.info("Cleaned up legacy FTS5 tables");
+                                }
+                            }
+                        }
+                        // 如果是普通表则不做任何清理，保留已有数据
+                    }
+                    // 如果表不存在，CREATE TABLE IF NOT EXISTS 会自动创建
                 }
+            } catch (SQLException e) {
+                // 忽略检查失败
             }
             
             // 使用普通表 + 索引，不使用FTS5虚拟表
