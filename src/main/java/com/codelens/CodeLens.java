@@ -10,22 +10,84 @@ import com.github.javaparser.ast.expr.MethodCallExpr;
 import java.io.File;
 import java.nio.file.Files;
 import java.nio.file.Paths;
+import java.sql.SQLException;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.logging.Level;
+import java.util.logging.Logger;
 
 /**
- * Day 2：结构化输出 + 行号引用 + 方法调用过滤 + JSON格式化
+ * CodeLens - Java 代码分析工具
+ * 
+ * 支持的命令:
+ * - analyze <Java文件路径> [API_KEY] : 分析 Java 文件
+ * - index <目录路径>                    : 建立代码索引
+ * - callers <类名>                      : 查询反向依赖
  */
 public class CodeLens {
+    
+    private static final Logger LOGGER = Logger.getLogger(CodeLens.class.getName());
 
     public static void main(String[] args) throws Exception {
         if (args.length < 1) {
-            System.out.println("用法：java -jar codelens.jar <Java文件路径> [DeepSeek API Key]");
+            printUsage();
             return;
         }
 
-        String filePath = args[0];
-        String apiKey = args.length >= 2 ? args[1] : "";
+        String command = args[0];
+        
+        switch (command) {
+            case "analyze":
+                handleAnalyze(args);
+                break;
+            case "index":
+                handleIndex(args);
+                break;
+            case "callers":
+                handleCallers(args);
+                break;
+            case "--help":
+            case "-h":
+                printUsage();
+                break;
+            default:
+                // 兼容旧用法：无命令时视为 analyze
+                handleAnalyze(args);
+                break;
+        }
+    }
+    
+    private static void printUsage() {
+        System.out.println("CodeLens - Java 代码分析工具");
+        System.out.println("");
+        System.out.println("用法:");
+        System.out.println("  java -jar codelens.jar analyze <Java文件路径> [API_KEY]");
+        System.out.println("                              - 分析 Java 文件（使用 LLM）");
+        System.out.println("  java -jar codelens.jar index <目录路径>");
+        System.out.println("                              - 建立代码索引（FTS5）");
+        System.out.println("  java -jar codelens.jar callers <类名>");
+        System.out.println("                              - 查询反向依赖关系");
+        System.out.println("  java -jar codelens.jar --help");
+        System.out.println("                              - 显示帮助信息");
+        System.out.println("");
+        System.out.println("示例:");
+        System.out.println("  java -jar codelens.jar analyze src/main/java/MyService.java");
+        System.out.println("  java -jar codelens.jar analyze src/main/java/MyService.java YOUR_API_KEY");
+        System.out.println("  java -jar codelens.jar index src/main/java");
+        System.out.println("  java -jar codelens.jar callers UserService");
+    }
+    
+    // ========== analyze 命令 ==========
+    
+    private static void handleAnalyze(String[] args) throws Exception {
+        if (args.length < 2) {
+            System.out.println("错误: analyze 命令需要指定 Java 文件路径");
+            System.out.println("用法: java -jar codelens.jar analyze <Java文件路径> [API_KEY]");
+            return;
+        }
+
+        String filePath = args[1];
+        String apiKey = args.length >= 3 ? args[2] : "";
 
         // ========== Step 1：JavaParser 解析（含行号） ==========
         System.out.println("━━━ Step 1：JavaParser 结构化解析 ━━━\n");
@@ -146,6 +208,104 @@ public class CodeLens {
 
         String result = LLMClient.analyze(apiKey, systemPrompt, userPrompt);
         System.out.println(prettyPrintJson(result));
+    }
+    
+    // ========== index 命令 ==========
+    
+    private static void handleIndex(String[] args) {
+        if (args.length < 2) {
+            System.out.println("错误: index 命令需要指定目录路径");
+            System.out.println("用法: java -jar codelens.jar index <目录路径>");
+            return;
+        }
+        
+        String dirPath = args[1];
+        java.nio.file.Path dir = Paths.get(dirPath);
+        
+        if (!Files.exists(dir)) {
+            System.out.println("错误: 目录不存在: " + dirPath);
+            return;
+        }
+        
+        if (!Files.isDirectory(dir)) {
+            System.out.println("错误: 路径不是目录: " + dirPath);
+            return;
+        }
+        
+        System.out.println("━━━ 建立代码索引 ━━━");
+        System.out.println("目录: " + dirPath);
+        System.out.println("索引存储: " + dir.resolve(".codelens"));
+        System.out.println("");
+        
+        try {
+            CallIndex callIndex = new CallIndex(dir);
+            callIndex.indexDirectory(dir);
+            callIndex.close();
+            System.out.println("\n✅ 索引建立完成!");
+        } catch (SQLException e) {
+            LOGGER.log(Level.SEVERE, "索引建立失败", e);
+            System.out.println("\n❌ 索引建立失败: " + e.getMessage());
+        } catch (Exception e) {
+            LOGGER.log(Level.SEVERE, "索引建立失败", e);
+            System.out.println("\n❌ 索引建立失败: " + e.getMessage());
+        }
+    }
+    
+    // ========== callers 命令 ==========
+    
+    private static void handleCallers(String[] args) {
+        if (args.length < 2) {
+            System.out.println("错误: callers 命令需要指定类名");
+            System.out.println("用法: java -jar codelens.jar callers <类名>");
+            return;
+        }
+        
+        String className = args[1];
+        
+        // 查找项目根目录（向上查找 .codelens 目录）
+        java.nio.file.Path current = Paths.get(".").toAbsolutePath().normalize();
+        java.nio.file.Path projectRoot = findProjectRoot(current);
+        
+        if (projectRoot == null) {
+            System.out.println("错误: 未找到索引目录 .codelens");
+            System.out.println("请先运行: java -jar codelens.jar index <项目目录>");
+            return;
+        }
+        
+        System.out.println("━━━ 反向依赖查询 ━━━");
+        System.out.println("类名: " + className);
+        System.out.println("项目: " + projectRoot);
+        System.out.println("");
+        
+        try {
+            CallIndex callIndex = new CallIndex(projectRoot);
+            CallerFinder finder = new CallerFinder(callIndex, projectRoot);
+            
+            List<CallerFinder.CallerInfo> callers = finder.findCallers(className);
+            finder.printReport(className, callers);
+            
+            callIndex.close();
+        } catch (SQLException e) {
+            LOGGER.log(Level.SEVERE, "查询失败", e);
+            System.out.println("❌ 查询失败: " + e.getMessage());
+        } catch (Exception e) {
+            LOGGER.log(Level.SEVERE, "查询失败", e);
+            System.out.println("❌ 查询失败: " + e.getMessage());
+        }
+    }
+    
+    /**
+     * 向上查找项目根目录
+     */
+    private static java.nio.file.Path findProjectRoot(java.nio.file.Path start) {
+        java.nio.file.Path current = start;
+        while (current != null) {
+            if (Files.exists(current.resolve(".codelens"))) {
+                return current;
+            }
+            current = current.getParent();
+        }
+        return null;
     }
 
     /**
