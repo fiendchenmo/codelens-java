@@ -480,8 +480,23 @@ public class CodeLens {
      */
     private static java.nio.file.Path findProjectRootForFull(java.nio.file.Path start) {
         java.nio.file.Path current = start.toAbsolutePath().normalize();
+        // 优先找 .git 目录（代表项目根），找到后继续往上检查是否有更高级的 .git
+        // 这样多模块项目会索引整个项目而非单个模块
+        java.nio.file.Path gitRoot = null;
+        java.nio.file.Path temp = current;
+        while (temp != null) {
+            if (Files.exists(temp.resolve(".git"))) {
+                gitRoot = temp;
+            }
+            temp = temp.getParent();
+        }
+        if (gitRoot != null) {
+            return gitRoot;
+        }
+        // 没有 .git 时退而找 pom.xml
+        current = start.toAbsolutePath().normalize();
         while (current != null) {
-            if (Files.exists(current.resolve(".git")) || Files.exists(current.resolve("pom.xml"))) {
+            if (Files.exists(current.resolve("pom.xml"))) {
                 return current;
             }
             current = current.getParent();
