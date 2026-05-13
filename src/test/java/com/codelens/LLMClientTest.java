@@ -1,44 +1,79 @@
 package com.codelens;
 
 import org.junit.jupiter.api.Test;
-
+import java.lang.reflect.Method;
 import static org.junit.jupiter.api.Assertions.*;
 
 class LLMClientTest {
     
-    @Test
-    void testEscapeJson_specialCharacters() {
-        // 测试 LLMClient 的 escapeJson 方法（通过反射调用私有方法）
-        // 由于 escapeJson 是私有的，我们测试其效果通过分析提示词构建
-        
-        String input = "test with \"quotes\" and \\backslashes\\ and \nnewlines";
-        
-        // 简单验证字符串处理不抛异常
-        assertNotNull(input);
-        assertTrue(input.contains("\"quotes\""));
-        assertTrue(input.contains("\\backslashes\\"));
-        assertTrue(input.contains("\n"));
+    // 反射获取私有方法
+    private Object invokePrivate(String methodName, Class<?> paramType, Object arg) throws Exception {
+        Method m = LLMClient.class.getDeclaredMethod(methodName, paramType);
+        m.setAccessible(true);
+        return m.invoke(null, arg);
     }
     
     @Test
-    void testEscapeJson_emptyString() {
-        String input = "";
-        assertNotNull(input);
-        assertEquals("", input);
+    void testEscapeJson_quotes() throws Exception {
+        String result = (String) invokePrivate("escapeJson", String.class, "hello \"world\"");
+        assertEquals("hello \\\"world\\\"", result);
     }
     
     @Test
-    void testEscapeJson_nullHandling() {
-        // 验证 null 处理逻辑
-        String result = (null == null) ? "" : null;
+    void testEscapeJson_backslash() throws Exception {
+        String result = (String) invokePrivate("escapeJson", String.class, "path\\to\\file");
+        assertEquals("path\\\\to\\\\file", result);
+    }
+    
+    @Test
+    void testEscapeJson_newline() throws Exception {
+        String result = (String) invokePrivate("escapeJson", String.class, "line1\nline2");
+        assertEquals("line1\\nline2", result);
+    }
+    
+    @Test
+    void testEscapeJson_tab() throws Exception {
+        String result = (String) invokePrivate("escapeJson", String.class, "col1\tcol2");
+        assertEquals("col1\\tcol2", result);
+    }
+    
+    @Test
+    void testEscapeJson_mixed() throws Exception {
+        String result = (String) invokePrivate("escapeJson", String.class, "a\"b\\c\nd");
+        assertEquals("a\\\"b\\\\c\\nd", result);
+    }
+    
+    @Test
+    void testEscapeJson_empty() throws Exception {
+        String result = (String) invokePrivate("escapeJson", String.class, "");
         assertEquals("", result);
     }
     
     @Test
-    void testEscapeJson_tabAndNewline() {
-        String input = "line1\ttab\tline2\nline3";
-        assertNotNull(input);
-        assertTrue(input.contains("\t"));
-        assertTrue(input.contains("\n"));
+    void testExtractContentField_simple() throws Exception {
+        String json = "{\"content\":\"hello world\"}";
+        String result = (String) invokePrivate("extractContentField", String.class, json);
+        assertEquals("hello world", result);
+    }
+    
+    @Test
+    void testExtractContentField_withEscapes() throws Exception {
+        String json = "{\"content\":\"line1\\nline2\\\"quoted\\\"\"}";
+        String result = (String) invokePrivate("extractContentField", String.class, json);
+        assertEquals("line1\nline2\"quoted\"", result);
+    }
+    
+    @Test
+    void testExtractContentField_withBackslash() throws Exception {
+        String json = "{\"content\":\"path\\\\to\\\\file\"}";
+        String result = (String) invokePrivate("extractContentField", String.class, json);
+        assertEquals("path\\to\\file", result);
+    }
+    
+    @Test
+    void testExtractContentField_noContentKey() throws Exception {
+        String json = "{\"error\":\"something\"}";
+        String result = (String) invokePrivate("extractContentField", String.class, json);
+        assertEquals(json, result); // 返回原文
     }
 }

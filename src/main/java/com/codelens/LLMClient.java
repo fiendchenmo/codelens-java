@@ -53,25 +53,65 @@ public class LLMClient {
 
         String responseBody = sb.toString();
 
-        // 提取 content 字段
-        int idx = responseBody.indexOf("\"content\":");
-        if (idx > 0) {
-            int start = responseBody.indexOf("\"", idx + 10) + 1;
-            int end = start;
-            while (end < responseBody.length()) {
-                if (responseBody.charAt(end) == '"' && responseBody.charAt(end - 1) != '\\') break;
-                end++;
-            }
-            return responseBody.substring(start, end)
-                    .replace("\\n", "\n")
-                    .replace("\\\"", "\"")
-                    .replace("\\\\", "\\");
-        }
-
-        return responseBody;
+        // 使用健壮的状态机解析 JSON content 字段
+        return extractContentField(responseBody);
     }
 
-    private static String escapeJson(String s) {
+    /**
+     * 使用状态机解析 JSON 中的 "content" 字段
+     * 正确处理所有转义序列：\\", \\\\, \\n, \\r, \\t, \\uXXXX
+     */
+    static String extractContentField(String json) {
+        // 找到 "content" key
+        int idx = json.indexOf("\"content\"");
+        if (idx < 0) return json;
+
+        // 跳到冒号后面的值
+        int colon = json.indexOf(':', idx);
+        if (colon < 0) return json;
+
+        // 找到值的起始引号
+        int start = json.indexOf('"', colon + 1);
+        if (start < 0) return json;
+        start++; // 跳过起始引号
+
+        // 状态机解析字符串内容
+        StringBuilder sb = new StringBuilder();
+        int i = start;
+        while (i < json.length()) {
+            char c = json.charAt(i);
+            if (c == '\\') {
+                // 转义序列
+                if (i + 1 < json.length()) {
+                    char next = json.charAt(i + 1);
+                    switch (next) {
+                        case '"':  sb.append('"');  i += 2; break;
+                        case '\\': sb.append('\\'); i += 2; break;
+                        case 'n':  sb.append('\n'); i += 2; break;
+                        case 'r':  sb.append('\r'); i += 2; break;
+                        case 't':  sb.append('\t'); i += 2; break;
+                        case 'u':  // Unicode 转义
+                            if (i + 5 < json.length()) {
+                                String hex = json.substring(i + 2, i + 6);
+                                sb.append((char) Integer.parseInt(hex, 16));
+                                i += 6;
+                            } else { i += 2; }
+                            break;
+                        default: sb.append(next); i += 2; break;
+                    }
+                } else { i++; }
+            } else if (c == '"') {
+                // 字符串结束
+                break;
+            } else {
+                sb.append(c);
+                i++;
+            }
+        }
+        return sb.toString();
+    }
+
+    static String escapeJson(String s) {
         StringBuilder sb = new StringBuilder();
         for (char c : s.toCharArray()) {
             switch (c) {

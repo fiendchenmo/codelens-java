@@ -271,7 +271,7 @@ public class CodeLens {
             System.out.println();
             
             // 查询被谁调用
-            List<CallerFinder.CallerInfo> callers = callerFinder.findCallers(className);
+            List<CallerFinder.CallerInfo> callers = callerFinder.findCallersWithInterfacePenetration(className);
             
             if (callers.isEmpty()) {
                 System.out.println("没有找到调用 " + className + " 的代码");
@@ -283,7 +283,7 @@ public class CodeLens {
             }
             
             indexer.close();
-        } catch (SQLException e) {
+        } catch (Exception e) {
             System.out.println("⚠️ 查询失败: " + e.getMessage());
             LOGGER.log(Level.SEVERE, "查询失败", e);
         }
@@ -337,7 +337,7 @@ public class CodeLens {
             System.out.println("━━━ Step 3: 反向依赖查询 ━━━\n");
             
             CallerFinder callerFinder = new CallerFinder(indexer, projectRoot);
-            List<CallerFinder.CallerInfo> callers = callerFinder.findCallers(className);
+            List<CallerFinder.CallerInfo> callers = callerFinder.findCallersWithInterfacePenetration(className);
             
             if (callers.isEmpty()) {
                 System.out.println("没有找到调用 " + className + " 的代码");
