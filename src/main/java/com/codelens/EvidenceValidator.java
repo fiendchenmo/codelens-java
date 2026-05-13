@@ -201,10 +201,16 @@ public class EvidenceValidator {
     }
 
     static boolean findMethodDefinition(String[] lines, int centerLine, String methodName, int range) {
+        // Extract simple method name: remove parameter signature
+        // LLM may return "generatorCode(String)" but source has "generatorCode(String tableName, ZipOutputStream...)"
+        String simpleName = methodName;
+        int parenIdx = simpleName.indexOf('(');
+        if (parenIdx > 0) simpleName = simpleName.substring(0, parenIdx).trim();
+        
         int start = Math.max(1, centerLine - range);
         int end = Math.min(lines.length, centerLine + range);
         for (int i = start; i <= end; i++) {
-            if (lines[i - 1].contains(methodName)) {
+            if (lines[i - 1].contains(simpleName)) {
                 return true;
             }
         }
