@@ -252,26 +252,31 @@ public class CodeLens {
             classInfos.add(info);
         }
 
-        System.out.println("📦 包名: " + packageName);
+        System.out.println("包名: " + ColorUtil.info(packageName));
         for (ClassInfo ci : classInfos) {
-            System.out.println("\n🏷️ " + (ci.isInterface ? "接口" : "类") + ": " + ci.name);
+            System.out.println("\n" + ColorUtil.heading((ci.isInterface ? "接口" : "类") + ": " + ci.name));
             if (!ci.fields.isEmpty()) {
                 System.out.println("  字段:");
                 for (FieldInfo f : ci.fields) {
-                    System.out.println("    L" + f.line + " | " + f.name + ": " + f.type);
+                    System.out.println("    L" + f.line + " | " + f.name + ": " + ColorUtil.framework(f.type));
                 }
             }
             if (!ci.methods.isEmpty()) {
                 System.out.println("  方法:");
                 for (MethodInfo m : ci.methods) {
-                    System.out.println("    L" + m.line + " | " + m.returnType + " " + m.name + "(" + m.params + ")");
+                    System.out.println("    L" + m.line + " | " + ColorUtil.business(m.name) + "(" + ColorUtil.framework(m.params) + ")");
                 }
             }
             if (!ci.calls.isEmpty()) {
                 System.out.println("  业务调用（已过滤getter/setter/框架调用）:");
                 for (CallInfo c : ci.calls) {
                     String prefix = c.caller != null ? c.caller + "." : "";
-                    System.out.println("    L" + c.line + " | → " + prefix + c.methodName + "()");
+                    String callDisplay = prefix + c.methodName + "()";
+                    if (isInfrastructureCall(c.methodName, c.caller)) {
+                        System.out.println("    L" + c.line + " | " + ColorUtil.framework("→ " + callDisplay));
+                    } else {
+                        System.out.println("    L" + c.line + " | " + ColorUtil.business("→ " + callDisplay));
+                    }
                 }
             }
         }
@@ -535,26 +540,31 @@ public class CodeLens {
                 classInfos.add(info);
             }
             
-            System.out.println("📦 包名: " + packageName);
+            System.out.println("包名: " + ColorUtil.info(packageName));
             for (ClassInfo ci : classInfos) {
-                System.out.println("\n🏷️ " + (ci.isInterface ? "接口" : "类") + ": " + ci.name);
+                System.out.println("\n" + ColorUtil.heading((ci.isInterface ? "接口" : "类") + ": " + ci.name));
                 if (!ci.fields.isEmpty()) {
                     System.out.println("  字段:");
                     for (FieldInfo f : ci.fields) {
-                        System.out.println("    L" + f.line + " | " + f.name + ": " + f.type);
+                        System.out.println("    L" + f.line + " | " + f.name + ": " + ColorUtil.framework(f.type));
                     }
                 }
                 if (!ci.methods.isEmpty()) {
                     System.out.println("  方法:");
                     for (MethodInfo m : ci.methods) {
-                        System.out.println("    L" + m.line + " | " + m.returnType + " " + m.name + "(" + m.params + ")");
+                        System.out.println("    L" + m.line + " | " + ColorUtil.business(m.name) + "(" + ColorUtil.framework(m.params) + ")");
                     }
                 }
                 if (!ci.calls.isEmpty()) {
                     System.out.println("  业务调用（已过滤getter/setter/框架调用）:");
                     for (CallInfo c : ci.calls) {
                         String prefix = c.caller != null ? c.caller + "." : "";
-                        System.out.println("    L" + c.line + " | → " + prefix + c.methodName + "()");
+                        String callDisplay = prefix + c.methodName + "()";
+                    if (isInfrastructureCall(c.methodName, c.caller)) {
+                        System.out.println("    L" + c.line + " | " + ColorUtil.framework("→ " + callDisplay));
+                    } else {
+                        System.out.println("    L" + c.line + " | " + ColorUtil.business("→ " + callDisplay));
+                    }
                     }
                 }
             }
@@ -748,6 +758,33 @@ public class CodeLens {
         return methodName.contains("ByName") || methodName.contains("ByNames")
             || methodName.contains("ByNameList") || methodName.contains("ByTableName")
             || methodName.contains("ByColumn") || methodName.contains("ByColumns");
+    }
+
+    private static boolean isInfrastructureCall(String methodName, String caller) {
+        // getter/setter/is
+        if (methodName.startsWith("get") && methodName.length() > 3
+                && Character.isUpperCase(methodName.charAt(3))) return true;
+        if (methodName.startsWith("set") && methodName.length() > 3
+                && Character.isUpperCase(methodName.charAt(3))) return true;
+        if (methodName.startsWith("is") && methodName.length() > 2
+                && Character.isUpperCase(methodName.charAt(2))) return true;
+        // JDK/工具库包名
+        if (caller != null) {
+            if (caller.startsWith("System.") || caller.startsWith("Collections.")
+                    || caller.startsWith("Arrays.") || caller.startsWith("Objects.")) return true;
+            if (caller.startsWith("Logger.") || caller.startsWith("log.")
+                    || caller.startsWith("logger.")) return true;
+        }
+        // 常见集合/工具方法
+        if (methodName.equals("toString") || methodName.equals("hashCode")
+                || methodName.equals("equals") || methodName.equals("getClass")
+                || methodName.equals("valueOf") || methodName.equals("add")
+                || methodName.equals("size") || methodName.equals("contains")
+                || methodName.equals("remove") || methodName.equals("iterator")
+                || methodName.equals("toArray") || methodName.equals("put")
+                || methodName.equals("get") || methodName.equals("stream")
+                || methodName.equals("collect") || methodName.equals("forEach")) return true;
+        return false;
     }
 
     private static boolean isTrivialCall(String methodName) {
