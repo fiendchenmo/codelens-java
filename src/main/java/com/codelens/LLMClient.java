@@ -12,17 +12,57 @@ import java.net.URL;
  */
 public class LLMClient {
 
+    // 默认配置常量
+    private static final String DEFAULT_API_URL = "https://api.deepseek.com/v1/chat/completions";
+    private static final String DEFAULT_MODEL = "deepseek-v4-flash";
+    private static final double DEFAULT_TEMPERATURE = 0.1;
+
+    /**
+     * 分析接口（使用默认配置）
+     * @param apiKey API Key
+     * @param systemPrompt 系统提示
+     * @param userPrompt 用户提示
+     * @return LLM 响应内容
+     * @throws Exception 网络或API错误
+     */
     public static String analyze(String apiKey, String systemPrompt, String userPrompt) throws Exception {
+        return analyze(apiKey, systemPrompt, userPrompt, null, null, Double.NaN);
+    }
+
+    /**
+     * 分析接口（支持自定义API配置）
+     * @param apiKey API Key
+     * @param systemPrompt 系统提示
+     * @param userPrompt 用户提示
+     * @param apiUrl API地址（null或空使用默认值）
+     * @param model 模型名（null或空使用默认值）
+     * @param temperature 温度参数（Double.NaN表示使用默认值）
+     * @return LLM 响应内容
+     * @throws Exception 网络或API错误
+     */
+    public static String analyze(String apiKey, String systemPrompt, String userPrompt,
+                                 String apiUrl, String model, double temperature) throws Exception {
+        // 参数回退到默认值
+        if (apiUrl == null || apiUrl.trim().isEmpty()) {
+            apiUrl = DEFAULT_API_URL;
+        }
+        if (model == null || model.trim().isEmpty()) {
+            model = DEFAULT_MODEL;
+        }
+        if (Double.isNaN(temperature)) {
+            temperature = DEFAULT_TEMPERATURE;
+        }
+
         String body = "{"
-            + "\"model\": \"deepseek-v4-flash\","
+            + "\"model\": \"" + escapeJson(model) + "\","
             + "\"messages\": ["
             + "  {\"role\": \"system\", \"content\": \"" + escapeJson(systemPrompt) + "\"},"
             + "  {\"role\": \"user\", \"content\": \"" + escapeJson(userPrompt) + "\"}"
             + "],"
-            + "\"temperature\": 0.1"
+            + "\"temperature\": " + temperature
             + "}";
 
-        URL url = new URL("https://api.deepseek.com/v1/chat/completions");
+        URL url = new URL(apiUrl);
         HttpURLConnection conn = (HttpURLConnection) url.openConnection();
         conn.setRequestMethod("POST");
         conn.setRequestProperty("Content-Type", "application/json");
@@ -55,6 +95,27 @@ public class LLMClient {
 
         // 使用健壮的状态机解析 JSON content 字段
         return extractContentField(responseBody);
+    }
+
+    /**
+     * 获取默认API URL
+     */
+    public static String getDefaultApiUrl() {
+        return DEFAULT_API_URL;
+    }
+
+    /**
+     * 获取默认模型名
+     */
+    public static String getDefaultModel() {
+        return DEFAULT_MODEL;
+    }
+
+    /**
+     * 获取默认温度参数
+     */
+    public static double getDefaultTemperature() {
+        return DEFAULT_TEMPERATURE;
     }
 
     /**

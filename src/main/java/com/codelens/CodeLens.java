@@ -12,7 +12,9 @@ import java.nio.file.Files;
 import java.nio.file.Paths;
 import java.sql.SQLException;
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.logging.Level;
 import java.util.logging.Logger;
 
@@ -20,13 +22,16 @@ import java.util.logging.Logger;
  * CodeLens - Java 代码分析工具
  * 
  * 支持的命令:
- * - analyze <Java文件路径> [API_KEY] : 分析 Java 文件
+ * - analyze <Java文件路径> [API_KEY] [--api-url=URL] [--model=MODEL] [--temperature=TEMP]
  * - index <目录路径>                    : 建立代码索引
  * - callers <类名>                       : 查询反向依赖
- * - full <Java文件路径> [API_KEY]       : 一键完成 index + callers + analyze
+ * - full <Java文件路径> [API_KEY] [--api-url=URL] [--model=MODEL] [--temperature=TEMP]
  * 
  * 环境变量:
- * - CODELENS_API_KEY: API Key（可选，优先级低于命令行参数）
+ * - CODELENS_API_KEY: API Key
+ * - CODELENS_API_URL: API 地址（默认 https://api.deepseek.com/v1/chat/completions）
+ * - CODELENS_MODEL: 模型名（默认 deepseek-v4-flash）
+ * - CODELENS_TEMPERATURE: 温度参数（默认 0.1）
  */
 public class CodeLens {
     
@@ -34,7 +39,7 @@ public class CodeLens {
 
     public static void main(String[] args) throws Exception {
         // 检测 --no-color 参数
-        List<String> filteredArgs = new ArrayList<>();
+        List<String> filteredArgs = new ArrayList<String>();
         for (String arg : args) {
             if (arg.equals("--no-color")) {
                 ColorUtil.setColorEnabled(false);
@@ -74,29 +79,99 @@ public class CodeLens {
         }
     }
     
+    /**
+     * 解析命令行参数中的选项
+     * @param args 命令行参数
+     * @return 解析后的选项映射
+     */
+    private static Map<String, String> parseOptions(String[] args) {
+        Map<String, String> options = new HashMap<String, String>();
+        for (String arg : args) {
+            if (arg.startsWith("--api-url=")) {
+                options.put("apiUrl", arg.substring("--api-url=".length()));
+            } else if (arg.startsWith("--model=")) {
+                options.put("model", arg.substring("--model=".length()));
+            } else if (arg.startsWith("--temperature=")) {
+                options.put("temperature", arg.substring("--temperature=".length()));
+            }
+        }
+        return options;
+    }
+    
+    /**
+     * 获取 API 配置，优先级：命令行参数 > 环境变量 > 默认值
+     */
+    private static String getApiUrl(Map<String, String> options) {
+        if (options.containsKey("apiUrl")) {
+            return options.get("apiUrl");
+        }
+        String env = System.getenv("CODELENS_API_URL");
+        return (env != null && !env.isEmpty()) ? env : null;
+    }
+    
+    private static String getModel(Map<String, String> options) {
+        if (options.containsKey("model")) {
+            return options.get("model");
+        }
+        String env = System.getenv("CODELENS_MODEL");
+        return (env != null && !env.isEmpty()) ? env : null;
+    }
+    
+    private static double getTemperature(Map<String, String> options) {
+        if (options.containsKey("temperature")) {
+            try {
+                return Double.parseDouble(options.get("temperature"));
+            } catch (NumberFormatException e) {
+                // 忽略非法值，使用后续逻辑
+            }
+        }
+        String env = System.getenv("CODELENS_TEMPERATURE");
+        if (env != null && !env.isEmpty()) {
+            try {
+                return Double.parseDouble(env);
+            } catch (NumberFormatException e) {
+                // 忽略非法值
+            }
+        }
+        return Double.NaN; // 表示使用默认值
+    }
+    
     private static void printUsage() {
         System.out.println(ColorUtil.heading("CodeLens - Java 代码分析工具"));
         System.out.println("");
         System.out.println("用法:");
-        System.out.println("  java -jar codelens.jar analyze <Java文件路径> [API_KEY]");
+        System.out.println("  java -jar codelens.jar analyze <Java文件路径> [API_KEY] [--api-url=URL] [--model=MODEL] [--temperature=TEMP]");
         System.out.println("                              - 分析 Java 文件（使用 LLM）");
         System.out.println("  java -jar codelens.jar index <目录路径>");
         System.out.println("                              - 建立代码索引");
         System.out.println("  java -jar codelens.jar callers <类名>");
         System.out.println("                              - 查询反向依赖关系");
-        System.out.println("  java -jar codelens.jar full <Java文件路径> [API_KEY]");
+        System.out.println("  java -jar codelens.jar full <Java文件路径> [API_KEY] [--api-url=URL] [--model=MODEL] [--temperature=TEMP]");
         System.out.println("                              - 一键完成 index + callers + analyze");
         System.out.println("  java -jar codelens.jar --help");
         System.out.println("                              - 显示帮助信息");
         System.out.println("  --no-color                   禁用颜色输出");
         System.out.println("");
+        System.out.println("选项:");
+        System.out.println("  --api-url=URL                API 地址（默认 https://api.deepseek.com/v1/chat/completions）");
+        System.out.println("  --model=MODEL                模型名（默认 deepseek-v4-flash）");
+        System.out.println("  --temperature=TEMP           温度参数（默认 0.1）");
+        System.out.println("");
         System.out.println("环境变量:");
-        System.out.println("  CODELENS_API_KEY - API Key（优先级低于命令行参数）");
+        System.out.println("  CODELENS_API_KEY     - API Key（优先级低于命令行参数）");
+        System.out.println("  CODELENS_API_URL     - API 地址（默认 https://api.deepseek.com/v1/chat/completions）");
+        System.out.println("  CODELENS_MODEL       - 模型名（默认 deepseek-v4-flash）");
+        System.out.println("  CODELENS_TEMPERATURE - 温度参数（默认 0.1）");
+        System.out.println("");
+        System.out.println("优先级: 命令行选项 > 环境变量 > 默认值");
         System.out.println("");
         System.out.println("示例:");
         System.out.println("  java -jar codelens.jar analyze src/main/java/MyService.java");
         System.out.println("  CODELENS_API_KEY=xxx java -jar codelens.jar analyze src/main/java/MyService.java");
         System.out.println("  java -jar codelens.jar analyze src/main/java/MyService.java YOUR_API_KEY");
+        System.out.println("  java -jar codelens.jar analyze src/main/java/MyService.java --model=gpt-4");
+        System.out.println("  java -jar codelens.jar analyze src/main/java/MyService.java --api-url=https://api.openai.com/v1/chat/completions --model=gpt-4 --temperature=0.7");
+        System.out.println("  CODELENS_MODEL=gpt-4 java -jar codelens.jar analyze src/main/java/MyService.java");
         System.out.println("  java -jar codelens.jar index src/main/java");
         System.out.println("  java -jar codelens.jar callers UserService");
         System.out.println("  java -jar codelens.jar full src/main/java/MyService.java YOUR_API_KEY");
@@ -107,12 +182,26 @@ public class CodeLens {
     private static void handleAnalyze(String[] args) throws Exception {
         if (args.length < 2) {
             System.out.println(ColorUtil.error("错误: analyze 命令需要指定 Java 文件路径"));
-            System.out.println("用法: java -jar codelens.jar analyze <Java文件路径> [API_KEY]");
+            System.out.println("用法: java -jar codelens.jar analyze <Java文件路径> [API_KEY] [--api-url=URL] [--model=MODEL] [--temperature=TEMP]");
             return;
         }
 
         String filePath = args[1];
-        String apiKey = args.length >= 3 ? args[2] : System.getenv("CODELENS_API_KEY");
+        
+        // 解析选项
+        Map<String, String> options = parseOptions(args);
+        String apiUrl = getApiUrl(options);
+        String model = getModel(options);
+        double temperature = getTemperature(options);
+        
+        // API Key: 命令行参数优先
+        String apiKey = null;
+        if (args.length >= 3 && !args[2].startsWith("--")) {
+            apiKey = args[2];
+        }
+        if (apiKey == null) {
+            apiKey = System.getenv("CODELENS_API_KEY");
+        }
         if (apiKey == null) apiKey = "";
 
         // ========== Step 1：JavaParser 解析（含行号） ==========
@@ -125,7 +214,7 @@ public class CodeLens {
                 .map(pd -> pd.getNameAsString())
                 .orElse("(默认包)");
 
-        List<ClassInfo> classInfos = new ArrayList<>();
+        List<ClassInfo> classInfos = new ArrayList<ClassInfo>();
         for (ClassOrInterfaceDeclaration cls : cu.findAll(ClassOrInterfaceDeclaration.class)) {
             ClassInfo info = new ClassInfo();
             info.name = cls.getNameAsString();
@@ -194,6 +283,9 @@ public class CodeLens {
         }
 
         System.out.println("\n" + ColorUtil.heading("━━━ Step 2：LLM 结构化分析 ━━━") + "\n");
+        
+        // 打印使用的配置
+        printLlmConfig(apiUrl, model, temperature);
 
         String code = Files.readString(Paths.get(filePath));
 
@@ -203,8 +295,21 @@ public class CodeLens {
             + "【结构化解析结果】\n" + structContext + "\n\n"
             + "【源码】\n" + code;
 
-        String result = LLMClient.analyze(apiKey, systemPrompt, userPrompt);
+        String result = LLMClient.analyze(apiKey, systemPrompt, userPrompt, apiUrl, model, temperature);
         System.out.println(prettyPrintJson(result));
+    }
+    
+    /**
+     * 打印 LLM 配置信息
+     */
+    private static void printLlmConfig(String apiUrl, String model, double temperature) {
+        String url = apiUrl != null ? apiUrl : LLMClient.getDefaultApiUrl();
+        String mdl = model != null ? model : LLMClient.getDefaultModel();
+        double temp = Double.isNaN(temperature) ? LLMClient.getDefaultTemperature() : temperature;
+        System.out.println(ColorUtil.info("API 地址: ") + url);
+        System.out.println(ColorUtil.info("模型: ") + mdl);
+        System.out.println(ColorUtil.info("温度: ") + temp);
+        System.out.println();
     }
     
     // ========== index 命令 ==========
@@ -306,12 +411,26 @@ public class CodeLens {
     private static void handleFull(String[] args) {
         if (args.length < 2) {
             System.out.println(ColorUtil.error("错误: full 命令需要指定 Java 文件路径"));
-            System.out.println("用法: java -jar codelens.jar full <Java文件路径> [API_KEY]");
+            System.out.println("用法: java -jar codelens.jar full <Java文件路径> [API_KEY] [--api-url=URL] [--model=MODEL] [--temperature=TEMP]");
             return;
         }
         
         String filePath = args[1];
-        String apiKey = args.length >= 3 ? args[2] : System.getenv("CODELENS_API_KEY");
+        
+        // 解析选项
+        Map<String, String> options = parseOptions(args);
+        String apiUrl = getApiUrl(options);
+        String model = getModel(options);
+        double temperature = getTemperature(options);
+        
+        // API Key: 命令行参数优先
+        String apiKey = null;
+        if (args.length >= 3 && !args[2].startsWith("--")) {
+            apiKey = args[2];
+        }
+        if (apiKey == null) {
+            apiKey = System.getenv("CODELENS_API_KEY");
+        }
         if (apiKey == null) apiKey = "";
         
         System.out.println(ColorUtil.heading("━━━ full 命令：一键分析 ━━━") + "\n");
@@ -369,7 +488,7 @@ public class CodeLens {
                     .map(pd -> pd.getNameAsString())
                     .orElse("(默认包)");
             
-            List<ClassInfo> classInfos = new ArrayList<>();
+            List<ClassInfo> classInfos = new ArrayList<ClassInfo>();
             for (ClassOrInterfaceDeclaration cls : cu.findAll(ClassOrInterfaceDeclaration.class)) {
                 ClassInfo info = new ClassInfo();
                 info.name = cls.getNameAsString();
@@ -436,6 +555,9 @@ public class CodeLens {
             } else {
                 System.out.println("\n" + ColorUtil.heading("━━━ Step 5: LLM 结构化分析 ━━━") + "\n");
                 
+                // 打印使用的配置
+                printLlmConfig(apiUrl, model, temperature);
+                
                 String code = Files.readString(Paths.get(filePath));
                 String structContext = buildStructContext(packageName, classInfos);
                 
@@ -444,7 +566,7 @@ public class CodeLens {
                     + "【结构化解析结果】\n" + structContext + "\n\n"
                     + "【源码】\n" + code;
                 
-                String result = LLMClient.analyze(apiKey, systemPrompt, userPrompt);
+                String result = LLMClient.analyze(apiKey, systemPrompt, userPrompt, apiUrl, model, temperature);
                 
                 String mergedResult = mergeCallersToJson(result, callers);
                 System.out.println(prettyPrintJson(mergedResult));
@@ -695,9 +817,9 @@ public class CodeLens {
     static class ClassInfo {
         String name;
         boolean isInterface;
-        List<FieldInfo> fields = new ArrayList<>();
-        List<MethodInfo> methods = new ArrayList<>();
-        List<CallInfo> calls = new ArrayList<>();
+        List<FieldInfo> fields = new ArrayList<FieldInfo>();
+        List<MethodInfo> methods = new ArrayList<MethodInfo>();
+        List<CallInfo> calls = new ArrayList<CallInfo>();
     }
 
     static class FieldInfo {
