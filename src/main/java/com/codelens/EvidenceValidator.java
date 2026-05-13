@@ -50,10 +50,10 @@ public class EvidenceValidator {
             Confidence c = overallConfidence();
             String label;
             switch (c) {
-                case CERTAIN: label = "🟢 CERTAIN"; break;
-                case HIGH:    label = "🟡 HIGH";    break;
-                case MEDIUM:  label = "🟠 MEDIUM";  break;
-                default:      label = "🔴 LOW";     break;
+                case CERTAIN: label = "[OK] CERTAIN"; break;
+                case HIGH:    label = "[!!] HIGH";    break;
+                case MEDIUM:  label = "[!] MEDIUM";  break;
+                default:      label = "[XX] LOW";     break;
             }
             sb.append("校验结果: ").append(label)
               .append(" (").append(passedCount).append("/").append(totalChecked).append(" 通过)\n");
@@ -61,9 +61,9 @@ public class EvidenceValidator {
                 for (ValidationIssue issue : issues) {
                     String prefix;
                     switch (issue.confidence) {
-                        case LOW:    prefix = "🔴"; break;
-                        case MEDIUM: prefix = "🟠"; break;
-                        default:     prefix = "🟡"; break;
+                        case LOW:    prefix = "[XX]"; break;
+                        case MEDIUM: prefix = "[!]"; break;
+                        default:     prefix = "[!!]"; break;
                     }
                     sb.append(prefix).append(" ").append(issue.toString()).append("\n");
                 }
