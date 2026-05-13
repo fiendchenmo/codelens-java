@@ -297,6 +297,16 @@ public class CodeLens {
 
         String result = LLMClient.analyze(apiKey, systemPrompt, userPrompt, apiUrl, model, temperature);
         System.out.println(prettyPrintJson(result));
+
+        // L1 证据校验
+        try {
+            String sourceCode = Files.readString(Paths.get(filePath));
+            EvidenceValidator.ValidationResult vr = EvidenceValidator.validate(result, sourceCode, null);
+            System.out.println("\n" + ColorUtil.heading("━━━ L1 证据校验 ━━━") + "\n");
+            System.out.println(vr.formatReport());
+        } catch (Exception e) {
+            // 校验失败不影响主流程
+        }
     }
     
     /**
@@ -570,6 +580,16 @@ public class CodeLens {
                 
                 String mergedResult = mergeCallersToJson(result, callers);
                 System.out.println(prettyPrintJson(mergedResult));
+
+                // L1 证据校验
+                try {
+                    String sourceCode = Files.readString(Paths.get(filePath));
+                    EvidenceValidator.ValidationResult vr = EvidenceValidator.validate(mergedResult, sourceCode, null);
+                    System.out.println("\n" + ColorUtil.heading("━━━ L1 证据校验 ━━━") + "\n");
+                    System.out.println(vr.formatReport());
+                } catch (Exception e) {
+                    // 校验失败不影响主流程
+                }
             }
             
             indexer.close();
