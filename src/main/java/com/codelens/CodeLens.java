@@ -33,6 +33,17 @@ public class CodeLens {
     private static final Logger LOGGER = Logger.getLogger(CodeLens.class.getName());
 
     public static void main(String[] args) throws Exception {
+        // 检测 --no-color 参数
+        List<String> filteredArgs = new ArrayList<>();
+        for (String arg : args) {
+            if (arg.equals("--no-color")) {
+                ColorUtil.setColorEnabled(false);
+            } else {
+                filteredArgs.add(arg);
+            }
+        }
+        args = filteredArgs.toArray(new String[0]);
+        
         if (args.length < 1) {
             printUsage();
             return;
@@ -64,7 +75,7 @@ public class CodeLens {
     }
     
     private static void printUsage() {
-        System.out.println("CodeLens - Java 代码分析工具");
+        System.out.println(ColorUtil.heading("CodeLens - Java 代码分析工具"));
         System.out.println("");
         System.out.println("用法:");
         System.out.println("  java -jar codelens.jar analyze <Java文件路径> [API_KEY]");
@@ -77,6 +88,7 @@ public class CodeLens {
         System.out.println("                              - 一键完成 index + callers + analyze");
         System.out.println("  java -jar codelens.jar --help");
         System.out.println("                              - 显示帮助信息");
+        System.out.println("  --no-color                   禁用颜色输出");
         System.out.println("");
         System.out.println("环境变量:");
         System.out.println("  CODELENS_API_KEY - API Key（优先级低于命令行参数）");
@@ -94,7 +106,7 @@ public class CodeLens {
     
     private static void handleAnalyze(String[] args) throws Exception {
         if (args.length < 2) {
-            System.out.println("错误: analyze 命令需要指定 Java 文件路径");
+            System.out.println(ColorUtil.error("错误: analyze 命令需要指定 Java 文件路径"));
             System.out.println("用法: java -jar codelens.jar analyze <Java文件路径> [API_KEY]");
             return;
         }
@@ -104,7 +116,7 @@ public class CodeLens {
         if (apiKey == null) apiKey = "";
 
         // ========== Step 1：JavaParser 解析（含行号） ==========
-        System.out.println("━━━ Step 1：JavaParser 结构化解析 ━━━\n");
+        System.out.println(ColorUtil.heading("━━━ Step 1：JavaParser 结构化解析 ━━━") + "\n");
 
         File file = new File(filePath);
         CompilationUnit cu = StaticJavaParser.parse(file);
@@ -177,11 +189,11 @@ public class CodeLens {
 
         // ========== Step 2：LLM 结构化分析 ==========
         if (apiKey.isEmpty()) {
-            System.out.println("\n━━━ 未提供 API Key，跳过 LLM 分析 ━━━");
+            System.out.println("\n" + ColorUtil.warning("━━━ 未提供 API Key，跳过 LLM 分析 ━━━"));
             return;
         }
 
-        System.out.println("\n━━━ Step 2：LLM 结构化分析 ━━━\n");
+        System.out.println("\n" + ColorUtil.heading("━━━ Step 2：LLM 结构化分析 ━━━") + "\n");
 
         String code = Files.readString(Paths.get(filePath));
 
@@ -199,7 +211,7 @@ public class CodeLens {
     
     private static void handleIndex(String[] args) {
         if (args.length < 2) {
-            System.out.println("错误: index 命令需要指定目录路径");
+            System.out.println(ColorUtil.error("错误: index 命令需要指定目录路径"));
             System.out.println("用法: java -jar codelens.jar index <目录路径>");
             return;
         }
@@ -208,7 +220,7 @@ public class CodeLens {
         java.nio.file.Path dir = Paths.get(dirPath);
         
         if (!Files.exists(dir) || !Files.isDirectory(dir)) {
-            System.out.println("错误: 目录不存在或不是有效目录: " + dirPath);
+            System.out.println(ColorUtil.error("错误: 目录不存在或不是有效目录: ") + dirPath);
             return;
         }
         
@@ -237,7 +249,7 @@ public class CodeLens {
     
     private static void handleCallers(String[] args) {
         if (args.length < 2) {
-            System.out.println("错误: callers 命令需要指定类名");
+            System.out.println(ColorUtil.error("错误: callers 命令需要指定类名"));
             System.out.println("用法: java -jar codelens.jar callers <类名>");
             return;
         }
@@ -247,7 +259,7 @@ public class CodeLens {
         java.nio.file.Path projectRoot = findProjectRoot(currentDir);
         
         if (projectRoot == null) {
-            System.out.println("错误: 未找到 .codelens 索引目录，请先运行 index 命令");
+            System.out.println(ColorUtil.error("错误: 未找到 .codelens 索引目录，请先运行 index 命令"));
             return;
         }
         
@@ -259,12 +271,12 @@ public class CodeLens {
             List<CallIndex.IndexResult> classResults = indexer.findByClass(className);
             
             if (classResults.isEmpty()) {
-                System.out.println("未找到类: " + className);
+                System.out.println(ColorUtil.warning("未找到类: ") + className);
                 indexer.close();
                 return;
             }
             
-            System.out.println("找到类 " + className + " 在以下位置:");
+            System.out.println(ColorUtil.info("找到类 ") + className + ColorUtil.info(" 在以下位置:"));
             for (CallIndex.IndexResult r : classResults) {
                 System.out.println("  " + r);
             }
@@ -274,9 +286,9 @@ public class CodeLens {
             List<CallerFinder.CallerInfo> callers = callerFinder.findCallersWithInterfacePenetration(className);
             
             if (callers.isEmpty()) {
-                System.out.println("没有找到调用 " + className + " 的代码");
+                System.out.println(ColorUtil.warning("没有找到调用 ") + className + ColorUtil.warning(" 的代码"));
             } else {
-                System.out.println("找到 " + callers.size() + " 处调用 " + className + " 的代码:");
+                System.out.println(ColorUtil.info("找到 ") + callers.size() + ColorUtil.info(" 处调用 ") + className + ColorUtil.info(" 的代码:"));
                 for (CallerFinder.CallerInfo caller : callers) {
                     System.out.println("  " + caller);
                 }
@@ -293,7 +305,7 @@ public class CodeLens {
     
     private static void handleFull(String[] args) {
         if (args.length < 2) {
-            System.out.println("错误: full 命令需要指定 Java 文件路径");
+            System.out.println(ColorUtil.error("错误: full 命令需要指定 Java 文件路径"));
             System.out.println("用法: java -jar codelens.jar full <Java文件路径> [API_KEY]");
             return;
         }
@@ -302,14 +314,14 @@ public class CodeLens {
         String apiKey = args.length >= 3 ? args[2] : System.getenv("CODELENS_API_KEY");
         if (apiKey == null) apiKey = "";
         
-        System.out.println("━━━ full 命令：一键分析 ━━━\n");
+        System.out.println(ColorUtil.heading("━━━ full 命令：一键分析 ━━━") + "\n");
         
         try {
             File file = new File(filePath);
             java.nio.file.Path fileAbsolutePath = file.toPath().toAbsolutePath().normalize();
             
             // Step 1: 索引
-            System.out.println("━━━ Step 1: 索引项目 ━━━\n");
+            System.out.println(ColorUtil.heading("━━━ Step 1: 索引项目 ━━━") + "\n");
             
             java.nio.file.Path projectRoot = findProjectRootForFull(fileAbsolutePath.getParent());
             if (projectRoot == null) {
@@ -328,21 +340,21 @@ public class CodeLens {
             System.out.println("索引了 " + indexedCount + " 个文件\n");
             
             // Step 2: 找类名
-            System.out.println("━━━ Step 2: 定位类 ━━━\n");
+            System.out.println(ColorUtil.heading("━━━ Step 2: 定位类 ━━━") + "\n");
             
             String className = extractClassName(file);
             System.out.println("目标类: " + className + "\n");
             
             // Step 3: 找 callers
-            System.out.println("━━━ Step 3: 反向依赖查询 ━━━\n");
+            System.out.println(ColorUtil.heading("━━━ Step 3: 反向依赖查询 ━━━") + "\n");
             
             CallerFinder callerFinder = new CallerFinder(indexer, projectRoot);
             List<CallerFinder.CallerInfo> callers = callerFinder.findCallersWithInterfacePenetration(className);
             
             if (callers.isEmpty()) {
-                System.out.println("没有找到调用 " + className + " 的代码");
+                System.out.println(ColorUtil.warning("没有找到调用 ") + className + ColorUtil.warning(" 的代码"));
             } else {
-                System.out.println("找到 " + callers.size() + " 处调用:");
+                System.out.println(ColorUtil.info("找到 ") + callers.size() + ColorUtil.info(" 处调用:"));
                 for (CallerFinder.CallerInfo caller : callers) {
                     System.out.println("  " + caller);
                 }
@@ -350,7 +362,7 @@ public class CodeLens {
             System.out.println();
             
             // Step 4: JavaParser + LLM
-            System.out.println("━━━ Step 4: 结构化解析 ━━━\n");
+            System.out.println(ColorUtil.heading("━━━ Step 4: 结构化解析 ━━━") + "\n");
             
             CompilationUnit cu = StaticJavaParser.parse(file);
             String packageName = cu.getPackageDeclaration()
@@ -420,9 +432,9 @@ public class CodeLens {
             
             // LLM 分析
             if (apiKey.isEmpty()) {
-                System.out.println("\n━━━ 未提供 API Key，跳过 LLM 分析 ━━━");
+                System.out.println("\n" + ColorUtil.warning("━━━ 未提供 API Key，跳过 LLM 分析 ━━━"));
             } else {
-                System.out.println("\n━━━ Step 5: LLM 结构化分析 ━━━\n");
+                System.out.println("\n" + ColorUtil.heading("━━━ Step 5: LLM 结构化分析 ━━━") + "\n");
                 
                 String code = Files.readString(Paths.get(filePath));
                 String structContext = buildStructContext(packageName, classInfos);
@@ -444,7 +456,7 @@ public class CodeLens {
             LOGGER.log(Level.SEVERE, "分析失败", e);
         }
         
-        System.out.println("\n━━━ full 命令执行完成 ━━━");
+        System.out.println("\n" + ColorUtil.heading("━━━ full 命令执行完成 ━━━"));
     }
     
     private static java.nio.file.Path findProjectRootForFull(java.nio.file.Path start) {

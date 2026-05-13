@@ -248,18 +248,59 @@ public class CallerFinder {
     }
     
     // 内部类：调用方信息
+    // 内部类：调用方信息
     public static class CallerInfo {
         public String filePath;
         public CallerType type;
         public String description;
         public int lineNumber;
+        
+        @Override
+        public String toString() {
+            String typeLabel = ColorUtil.business("[" + type.label + "]");
+            String detail = filePath + ":" + lineNumber + "  " + description;
+            
+            // 判断是否为基础设施调用（getter/setter/JDK/工具库）
+            if (isInfrastructure(description)) {
+                typeLabel = ColorUtil.framework("[" + type.label + "]");
+                detail = ColorUtil.framework(detail);
+            }
+            
+            return typeLabel + "  " + detail;
+        }
     }
     
     // 调用类型枚举
     public enum CallerType {
-        IMPORT,
-        METHOD_CALL,
-        FIELD_ACCESS,
-        ANNOTATION_USAGE
+        IMPORT("import", true),         // true = 业务
+        METHOD_CALL("calls", false),     // 需要看具体调用目标
+        FIELD_ACCESS("field", false),
+        ANNOTATION_USAGE("annotation", false);
+        
+        public final String label;
+        public final boolean isBusiness;
+        
+        CallerType(String label, boolean isBusiness) {
+            this.label = label;
+            this.isBusiness = isBusiness;
+        }
+    }
+    
+    /**
+     * 判断是否为基础设施调用（getter/setter/JDK/工具库）
+     */
+    private static boolean isInfrastructure(String description) {
+        if (description == null) return false;
+        // getter/setter 模式：calls getXXX / setXXX / isXXX
+        if (description.matches(".*\\b(get|set|is)[A-Z]\\w*.*")) return true;
+        // JDK / 工具库包名
+        if (description.startsWith("import java.") || description.startsWith("import javax.")) return true;
+        if (description.startsWith("import org.apache.commons.")) return true;
+        if (description.startsWith("import com.google.common.")) return true;
+        if (description.startsWith("import org.slf4j.")) return true;
+        if (description.contains("java.lang.System.") || description.contains("java.util.")) return true;
+        if (description.contains("org.apache.commons.")) return true;
+        if (description.contains("com.google.common.")) return true;
+        return false;
     }
 }
