@@ -801,7 +801,9 @@ public class CodeLens {
             + "9. key_methods必须包含方法上的关键注解（特别是@Transactional、@Async、@Scheduled等影响行为的注解）和可见性\n"
             + "10. 同一类安全风险只列一条risk，在description中列举所有涉及方法，只标首个入口行号\n"
             + "11. class_analysis只写数据流路径，不要重复其他字段内容\n"
-            + "12. 只输出JSON，不要markdown代码块包裹";
+            + "12. 只输出JSON，不要markdown代码块包裹\n"
+            + "13. 检查Spring AOP自调用问题: 当一个方法内部直接调用同类其他@Transactional方法, 这是通过this调用而非代理, @Transactional不生效, 事务被跳过而非合并. 这类自调用必须标注为风险\n"
+            + "14. 架构改进建议必须包含trade-off分析: 每个suggestion需说明解决了什么问题/引入了什么新问题/适用前提条件. 例如先调调度器再改DB的建议需说明: 如果Quartz用JDBC JobStore则调度器操作也在DB事务内, 此建议不适用";
     }
     
     private static java.nio.file.Path findProjectRoot(java.nio.file.Path start) {
