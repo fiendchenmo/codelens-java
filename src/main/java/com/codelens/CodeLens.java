@@ -551,6 +551,17 @@ public class CodeLens {
                     mi.returnType = method.getTypeAsString();
                     mi.params = method.getParameters().toString();
                     mi.line = method.getRange().map(r -> r.begin.line).orElse(-1);
+                    // 提取注解
+                    List<String> annots = new ArrayList<>();
+                    for (com.github.javaparser.ast.expr.AnnotationExpr ae : method.getAnnotations()) {
+                        annots.add(ae.getNameAsString());
+                    }
+                    mi.annotations = String.join(", ", annots);
+                    // 提取可见性
+                    mi.visibility = "";
+                    if (method.isPublic()) mi.visibility = "public";
+                    else if (method.isProtected()) mi.visibility = "protected";
+                    else if (method.isPrivate()) mi.visibility = "private";
                     info.methods.add(mi);
                 }
                 
@@ -766,29 +777,31 @@ public class CodeLens {
     }
     
     private static String buildSystemPrompt() {
-        return "你是Java遗留代码分析专家。必须严格按JSON格式输出，不要输出任何JSON以外的内容。"
+        return "你是Java遗留代码分析专家，专精架构级问题发现。必须严格按JSON格式输出，不要输出任何JSON以外的内容。"
             + "JSON Schema如下：\n"
             + "{\n"
             + "  \"summary\": \"一句话功能摘要\",\n"
-            + "  \"design_intent\": \"设计意图分析\",\n"
+            + "  \"design_intent\": \"设计意图分析：这个类在整个系统中的角色，它协调了哪些外部资源\",\n"
             + "  \"class_analysis\": \"数据流描述：从输入到输出的关键数据流转路径，只写数据流，不要重复summary和design_intent\",\n"
-            + "  \"dependencies\": [{\"name\": \"依赖对象\", \"type\": \"依赖类型(字段注入/静态方法调用)\", \"line\": 行号, \"reason\": \"依赖原因\"}],\n"
-            + "  \"risks\": [{\"description\": \"风险描述，必须基于代码事实\", \"line\": 行号, \"severity\": \"高/中/低\", \"suggestion\": \"修复建议\"}],\n"
-            + "  \"key_methods\": [{\"name\": \"方法名\", \"line\": 行号, \"purpose\": \"作用\", \"calls\": [\"调用的方法\"], \"notes\": \"该方法的特殊情况或注意事项\"}],\n"
-            + "  \"architecture_issues\": [\"架构级问题描述，不标行号\"]\n"
+            + "  \"dependencies\": [{\"name\": \"依赖对象\", \"type\": \"依赖类型(字段注入/静态方法调用/构造注入)\", \"line\": 行号, \"reason\": \"依赖原因\"}],\n"
+            + "  \"risks\": [{\"description\": \"风险描述，必须基于代码事实，包含触发场景和影响范围\", \"line\": 行号, \"severity\": \"高/中/低\", \"impact\": \"影响面：哪些场景会触发，对系统的影响范围\", \"suggestion\": \"修复建议\"}],\n"
+            + "  \"key_methods\": [{\"name\": \"方法名(含参数签名)\", \"line\": 行号, \"visibility\": \"public/private/protected\", \"annotations\": \"方法上的注解如@Transactional等\", \"purpose\": \"作用\", \"calls\": [\"调用的方法\"], \"notes\": \"该方法的特殊情况或注意事项\"}],\n"
+            + "  \"framework_integration\": \"框架集成分析：本类使用了哪些框架（Spring/Quartz/MyBatis等），框架的关键调用链是什么，框架的行为如何影响本类的逻辑正确性\",\n"
+            + "  \"architecture_issues\": [{\"issue\": \"架构级问题描述\", \"category\": \"分类(状态一致性/事务边界/并发安全/资源管理/初始化时序)\", \"impact\": \"对系统的影响\", \"suggestion\": \"改进建议\"}]\n"
             + "}\n"
             + "要求：\n"
             + "1. 每条risks和dependencies必须指向具体代码行号（line字段）\n"
-            + "2. dependencies只列出第三方和框架类（如JSON/JSONObject/Velocity/IOUtils/FileUtils/SecurityUtils/GenUtils/StringUtils等），不要列项目内部类（ServiceException/Constants/GenConstants/Collectors等），不要列日志类（Logger/Log等框架内置），不要列getter/setter\n"
-            + "3. risks必须基于代码事实，不要猜测，不要写\"需确认\"类模糊描述——要么是问题标对应severity，要么不是就不写；severity判断：未捕获异常导致程序崩溃=高，数据不一致/事务不回滚=高，逻辑错误导致校验被跳过=中，可恢复的异常=中，代码风格问题=低\n"
-            + "4. 必须检查安全风险：路径遍历（文件路径拼接）、SQL注入（表名/列名拼接传入Mapper时若无法确认使用#{}参数化查询应标为风险）、空指针链（链式调用未判空）、JSON解析异常（parseObject/parse传入空或非法字符串），安全类风险不得遗漏\n"
-            + "5. 检查异常处理对事务的影响：catch块吞异常会导致Spring事务不回滚，这是事务方法的严重问题；不要对已确认继承RuntimeException的异常重复标风险\n"
-            + "6. 检查if-else逻辑时注意分支是否真的能执行到，不要把\"跳过校验\"误判为\"错误地要求校验\"\n"
-            + "7. risks应覆盖以下维度且每类至少检查是否有问题：安全（路径遍历/SQL注入/JSON解析异常）、逻辑缺陷（不可达分支/条件错误）、事务边界（catch吞异常）、空指针/越界、重复代码（多个方法重复相同流程）、方法设计（同名重载方法参数类型不同但逻辑不一致，如两个downloadCode或两个generatorCode行为差异）\n"
-            + "8. 同一类安全风险只列一条risk，在description中列举所有涉及方法（如\"selectDbTableListByNames等3个ByName方法将表名传入Mapper\"），只标首个入口行号，绝对不要拆成多条\n"
-            + "9. architecture_issues只写整体性问题，不带行号\n"
-            + "10. class_analysis只写数据流路径，不要重复其他字段内容\n"
-            + "11. 只输出JSON，不要markdown代码块包裹";
+            + "2. dependencies必须包含所有依赖注入的字段（标注了[依赖注入]的字段），以及第三方和框架类的静态调用；不要列日志类（Logger/Log），不要列getter/setter，不要列纯值对象类（String/Integer/List等）\n"
+            + "3. risks必须基于代码事实，不要猜测，不要写\"需确认\"类模糊描述；每条risk必须包含impact字段说明影响面：什么场景触发、对系统有什么影响、是否可被框架兜住；severity判断：未捕获异常导致程序崩溃=高，数据不一致/事务不回滚=高，跨资源状态不一致=高，逻辑错误导致校验被跳过=中，可恢复的异常=中，代码风格问题=低\n"
+            + "4. 必须检查安全风险：路径遍历（文件路径拼接）、SQL注入（表名/列名拼接传入Mapper时若无法确认使用#{}参数化查询应标为风险）、空指针链（链式调用未判空，说明什么输入会触发null）、JSON解析异常，安全类风险不得遗漏\n"
+            + "5. 检查异常处理对事务的影响：catch块吞异常会导致Spring事务不回滚，这是事务方法的严重问题；特别关注@Transactional方法中的异常处理\n"
+            + "6. 检查跨资源一致性：当一个方法同时操作DB和外部系统（调度器/缓存/消息队列），必须分析两阶段操作的失败场景——DB成功但外部系统失败时状态是否一致，是否有补偿/回滚机制。这类问题必须写入architecture_issues，同时在risks中标注具体代码行\n"
+            + "7. architecture_issues不得为空！必须检查以下维度：状态一致性（多资源操作的原子性）、事务边界（@Transactional的粒度和覆盖范围）、并发安全（共享状态的线程安全）、资源管理（连接/流的关闭）、初始化时序（@PostConstruct/静态块的初始化顺序）。每个issue必须有category/impact/suggestion三个字段\n"
+            + "8. framework_integration不得为空！必须分析本类使用的框架的关键行为：框架方法的副作用、框架异常处理机制、框架与DB的事务关系。例如：如果用了Quartz，要分析调度操作（pause/resume/delete job）与DB状态的一致性；如果用了Spring事务，要分析@Transactional的传播行为和回滚条件\n"
+            + "9. key_methods必须包含方法上的关键注解（特别是@Transactional、@Async、@Scheduled等影响行为的注解）和可见性\n"
+            + "10. 同一类安全风险只列一条risk，在description中列举所有涉及方法，只标首个入口行号\n"
+            + "11. class_analysis只写数据流路径，不要重复其他字段内容\n"
+            + "12. 只输出JSON，不要markdown代码块包裹";
     }
     
     private static java.nio.file.Path findProjectRoot(java.nio.file.Path start) {
@@ -900,11 +913,27 @@ public class CodeLens {
             sb.append(ci.isInterface ? "接口" : "类").append(": ").append(ci.name).append("\n");
             for (FieldInfo f : ci.fields) {
                 if (f.type.equals("Logger") || f.type.equals("Log")) continue;
-                sb.append("  字段 L").append(f.line).append(" | ").append(f.name).append(": ").append(f.type).append("\n");
+                sb.append("  字段 L").append(f.line).append(" | ").append(f.name).append(": ").append(f.type);
+                // 标记依赖注入字段
+                if (f.type.contains("Mapper") || f.type.contains("Service") || f.type.contains("Repository")
+                        || f.type.contains("Component") || f.type.contains("Scheduler") || f.type.contains("Template")
+                        || f.type.contains("Client") || f.type.contains("Manager") || f.type.contains("Factory")
+                        || f.type.contains("Handler") || f.type.contains("Provider") || f.type.contains("Builder")
+                        || f.type.contains("Config") || f.type.contains("DataSource") || f.type.contains("Redis")
+                        || f.type.contains("Cache") || f.type.contains("Queue") || f.type.contains("Pool")) {
+                    sb.append(" [依赖注入]");
+                }
+                sb.append("\n");
             }
             for (MethodInfo m : ci.methods) {
-                sb.append("  方法 L").append(m.line).append(" | ").append(m.returnType)
-                  .append(" ").append(m.name).append("(").append(m.params).append(")\n");
+                sb.append("  方法 L").append(m.line).append(" | ");
+                if (m.visibility != null && !m.visibility.isEmpty()) {
+                    sb.append(m.visibility).append(" ");
+                }
+                if (m.annotations != null && !m.annotations.isEmpty()) {
+                    sb.append("@").append(m.annotations.replace(", ", " @")).append(" ");
+                }
+                sb.append(m.returnType).append(" ").append(m.name).append("(").append(m.params).append(")\n");
             }
             for (CallInfo c : ci.calls) {
                 String prefix = c.caller != null ? c.caller + "." : "";
@@ -937,6 +966,8 @@ public class CodeLens {
         String name;
         String returnType;
         String params;
+        String annotations;
+        String visibility;
         int line;
     }
 

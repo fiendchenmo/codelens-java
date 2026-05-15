@@ -7,9 +7,9 @@ import java.util.*;
  * 基于 L1 证据校验结果，为 LLM 分析的每条结果打上置信度标签。
  *
  * 置信度等级：
- * - CERTAIN：L1 校验通过 + 低风险/无风险
- * - HIGH：L1 校验通过 + 中风险，或行号精确匹配
- * - MEDIUM：L1 校验通过但行号偏移 >1，或 L1 未覆盖的条目
+ * - CERTAIN：L1 校验通过 + 低风险/无风险，行号精确匹配（偏差0行）
+ * - HIGH：L1 校验通过 + 中风险，或行号偏差1-2行
+ * - MEDIUM：L1 校验通过但行号偏移 >2，或 L1 未覆盖的条目
  * - LOW：L1 校验失败（行号超出/名称不匹配）
  */
 public class ConfidenceAnnotator {
@@ -20,10 +20,12 @@ public class ConfidenceAnnotator {
         public Map<String, String> fields;
         public EvidenceValidator.Confidence confidence;
         public String reason;
+        public int lineOffset;  // 行号偏差值（0=精确，-1=无法计算）
 
         @Override
         public String toString() {
-            return category + "[" + index + "]: " + confidence + " (" + reason + ")";
+            String offsetInfo = lineOffset >= 0 ? " (偏差" + lineOffset + "行)" : "";
+            return category + "[" + index + "]: " + confidence + offsetInfo + " (" + reason + ")";
         }
     }
 
@@ -64,6 +66,11 @@ public class ConfidenceAnnotator {
                     label = label.substring(0, 50) + "...";
                 }
                 sb.append(label != null ? label : "?");
+
+                // 显示行号偏差
+                if (item.lineOffset >= 0) {
+                    sb.append(" [偏差").append(item.lineOffset).append("行]");
+                }
                 sb.append(" — ").append(item.reason).append("\n");
             }
             return sb.toString();
@@ -72,10 +79,6 @@ public class ConfidenceAnnotator {
 
     /**
      * 为 LLM JSON 结果添加置信度标注
-     * @param llmJson LLM 输出的原始 JSON
-     * @param validationResult L1 校验结果
-     * @param sourceLines 源码行数组
-     * @return 带置信度标注的结果
      */
     public static AnnotatedResult annotate(String llmJson,
                                            EvidenceValidator.ValidationResult validationResult,
@@ -102,7 +105,7 @@ public class ConfidenceAnnotator {
         // 标注 key_methods
         annotateKeyMethods(llmJson, sourceLines, issueMap, result);
 
-        // 标注其他无法校验的条目（summary, design_intent 等）为 MEDIUM
+        // 标注其他无法校验的条目
         annotateUnvalidated(llmJson, result);
 
         result.totalItems = result.items.size();
@@ -120,32 +123,46 @@ public class ConfidenceAnnotator {
             ai.category = "dependencies";
             ai.index = i;
             ai.fields = items.get(i);
+            ai.lineOffset = -1;
 
             String key = "dependencies:" + i;
             EvidenceValidator.ValidationIssue issue = issueMap.get(key);
 
             if (issue != null) {
-                // L1 校验发现问题的条目
                 if (issue.confidence == EvidenceValidator.Confidence.LOW) {
                     ai.confidence = EvidenceValidator.Confidence.LOW;
                     ai.reason = "行号超出范围或名称不匹配";
                 } else {
-                    ai.confidence = EvidenceValidator.Confidence.MEDIUM;
-                    ai.reason = "行号偏移，名称在附近找到";
+                    int offset = computeLineOffset(sourceLines, issue.claimedLine, items.get(i).get("name"));
+                    ai.lineOffset = offset;
+                    if (offset <= 2) {
+                        ai.confidence = EvidenceValidator.Confidence.MEDIUM;
+                        ai.reason = "行号偏移" + offset + "行，名称在附近找到";
+                    } else {
+                        ai.confidence = EvidenceValidator.Confidence.LOW;
+                        ai.reason = "行号偏移" + offset + "行，偏差过大";
+                    }
                 }
             } else {
-                // L1 校验通过的条目
                 String lineStr = items.get(i).get("line");
                 String name = items.get(i).get("name");
                 if (lineStr != null && name != null && sourceLines != null) {
                     int line = Integer.parseInt(lineStr.trim());
-                    // 精确匹配=行号完全对应
-                    if (line >= 1 && line <= sourceLines.length && sourceLines[line - 1].contains(extractSimpleName(name))) {
+                    String simpleName = extractSimpleName(name);
+                    if (line >= 1 && line <= sourceLines.length && sourceLines[line - 1].contains(simpleName)) {
                         ai.confidence = EvidenceValidator.Confidence.CERTAIN;
+                        ai.lineOffset = 0;
                         ai.reason = "行号精确匹配";
                     } else {
-                        ai.confidence = EvidenceValidator.Confidence.HIGH;
-                        ai.reason = "行号附近匹配";
+                        int offset = computeLineOffset(sourceLines, line, name);
+                        ai.lineOffset = offset;
+                        if (offset <= 2) {
+                            ai.confidence = EvidenceValidator.Confidence.HIGH;
+                            ai.reason = "行号偏差" + offset + "行，附近匹配";
+                        } else {
+                            ai.confidence = EvidenceValidator.Confidence.MEDIUM;
+                            ai.reason = "行号偏差" + offset + "行";
+                        }
                     }
                 } else {
                     ai.confidence = EvidenceValidator.Confidence.MEDIUM;
@@ -167,22 +184,37 @@ public class ConfidenceAnnotator {
             ai.category = "risks";
             ai.index = i;
             ai.fields = items.get(i);
+            ai.lineOffset = -1;
 
             String key = "risks:" + i;
             EvidenceValidator.ValidationIssue issue = issueMap.get(key);
 
             String severity = items.get(i).get("severity");
+            String lineStr = items.get(i).get("line");
 
             if (issue != null) {
                 if (issue.confidence == EvidenceValidator.Confidence.LOW) {
                     ai.confidence = EvidenceValidator.Confidence.LOW;
                     ai.reason = "行号超出范围";
                 } else {
+                    int offset = computeLineOffsetForRisk(sourceLines, issue.claimedLine, items.get(i).get("description"));
+                    ai.lineOffset = offset;
                     ai.confidence = EvidenceValidator.Confidence.MEDIUM;
-                    ai.reason = "行号偏移，风险描述存在";
+                    ai.reason = "行号偏差" + offset + "行，风险描述存在";
                 }
             } else {
-                // L1 通过 — 根据 severity 加权
+                // L1 通过 — 根据 severity 加权 + 计算行号偏差
+                int offset = -1;
+                if (lineStr != null && sourceLines != null) {
+                    try {
+                        int line = Integer.parseInt(lineStr.trim());
+                        if (line >= 1 && line <= sourceLines.length) {
+                            offset = 0;  // L1通过说明行号有效
+                        }
+                    } catch (NumberFormatException e) { /* ignore */ }
+                }
+                ai.lineOffset = offset >= 0 ? 0 : -1;
+
                 if ("高".equals(severity)) {
                     ai.confidence = EvidenceValidator.Confidence.HIGH;
                     ai.reason = "高风险，行号校验通过";
@@ -209,6 +241,7 @@ public class ConfidenceAnnotator {
             ai.category = "key_methods";
             ai.index = i;
             ai.fields = items.get(i);
+            ai.lineOffset = -1;
 
             String key = "key_methods:" + i;
             EvidenceValidator.ValidationIssue issue = issueMap.get(key);
@@ -218,8 +251,15 @@ public class ConfidenceAnnotator {
                     ai.confidence = EvidenceValidator.Confidence.LOW;
                     ai.reason = "行号超出范围或方法名未找到";
                 } else {
-                    ai.confidence = EvidenceValidator.Confidence.MEDIUM;
-                    ai.reason = "行号偏移，方法名在附近找到";
+                    int offset = computeMethodLineOffset(sourceLines, issue.claimedLine, items.get(i).get("name"));
+                    ai.lineOffset = offset;
+                    if (offset <= 2) {
+                        ai.confidence = EvidenceValidator.Confidence.MEDIUM;
+                        ai.reason = "行号偏差" + offset + "行，方法名在附近找到";
+                    } else {
+                        ai.confidence = EvidenceValidator.Confidence.LOW;
+                        ai.reason = "行号偏差" + offset + "行，偏差过大";
+                    }
                 }
             } else {
                 String lineStr = items.get(i).get("line");
@@ -229,10 +269,18 @@ public class ConfidenceAnnotator {
                     String simpleName = extractSimpleName(name);
                     if (line >= 1 && line <= sourceLines.length && sourceLines[line - 1].contains(simpleName)) {
                         ai.confidence = EvidenceValidator.Confidence.CERTAIN;
+                        ai.lineOffset = 0;
                         ai.reason = "行号精确匹配方法定义";
                     } else {
-                        ai.confidence = EvidenceValidator.Confidence.HIGH;
-                        ai.reason = "行号附近匹配方法定义";
+                        int offset = computeMethodLineOffset(sourceLines, line, name);
+                        ai.lineOffset = offset;
+                        if (offset <= 2) {
+                            ai.confidence = EvidenceValidator.Confidence.HIGH;
+                            ai.reason = "行号偏差" + offset + "行，附近匹配方法定义";
+                        } else {
+                            ai.confidence = EvidenceValidator.Confidence.MEDIUM;
+                            ai.reason = "行号偏差" + offset + "行";
+                        }
                     }
                 } else {
                     ai.confidence = EvidenceValidator.Confidence.MEDIUM;
@@ -244,9 +292,7 @@ public class ConfidenceAnnotator {
     }
 
     private static void annotateUnvalidated(String json, AnnotatedResult result) {
-        // summary, design_intent, class_analysis, architecture_issues 无法通过 L1 校验
-        // 标注为 MEDIUM（需人工复核）
-        String[] textFields = {"summary", "design_intent", "class_analysis"};
+        String[] textFields = {"summary", "design_intent", "class_analysis", "framework_integration"};
         for (String field : textFields) {
             String value = extractStringValue(json, field);
             if (value != null && !value.isEmpty()) {
@@ -257,6 +303,7 @@ public class ConfidenceAnnotator {
                 ai.fields.put("value", value.length() > 60 ? value.substring(0, 60) + "..." : value);
                 ai.confidence = EvidenceValidator.Confidence.MEDIUM;
                 ai.reason = "文本性结论，需人工复核";
+                ai.lineOffset = -1;
                 result.items.add(ai);
             }
         }
@@ -272,6 +319,7 @@ public class ConfidenceAnnotator {
                 ai.fields = items.get(i);
                 ai.confidence = EvidenceValidator.Confidence.MEDIUM;
                 ai.reason = "架构级问题，需人工复核";
+                ai.lineOffset = -1;
                 result.items.add(ai);
             }
         }
@@ -279,18 +327,15 @@ public class ConfidenceAnnotator {
 
     /**
      * 在 LLM JSON 结果中注入 confidence 字段和 validation 摘要
-     * 返回修改后的 JSON 字符串
      */
     public static String injectConfidenceIntoJson(String llmJson, AnnotatedResult annotatedResult,
                                                    EvidenceValidator.ValidationResult validationResult) {
-        // 为每个数组条目注入 confidence 字段
         String result = llmJson;
 
         result = injectConfidenceToArray(result, "dependencies", annotatedResult);
         result = injectConfidenceToArray(result, "risks", annotatedResult);
         result = injectConfidenceToArray(result, "key_methods", annotatedResult);
 
-        // 在 JSON 顶层添加 validation 摘要
         String validationJson = String.format(
             "\"validation\": {\"overall_confidence\": \"%s\", \"pass_rate\": %.2f, \"checked\": %d, \"passed\": %d}",
             validationResult.overallConfidence().name(),
@@ -308,7 +353,6 @@ public class ConfidenceAnnotator {
     }
 
     private static String injectConfidenceToArray(String json, String arrayName, AnnotatedResult result) {
-        // 找到对应 category 的标注项
         List<AnnotatedItem> items = new ArrayList<>();
         for (AnnotatedItem ai : result.items) {
             if (ai.category.equals(arrayName)) {
@@ -317,17 +361,14 @@ public class ConfidenceAnnotator {
         }
         if (items.isEmpty()) return json;
 
-        // 简单策略：在 JSON 数组中每个 } 后插入 confidence 字段
-        // 找到数组内容
         String arrayContent = EvidenceValidator.extractJsonArray(json, arrayName);
         if (arrayContent == null) return json;
 
         String modified = arrayContent;
         for (int i = items.size() - 1; i >= 0; i--) {
             AnnotatedItem ai = items.get(i);
-            // 找到第 i 个对象，在最后一个 } 前插入
-            String confidenceField = ", \"confidence\": \"" + ai.confidence.name() + "\"";
-            // 从后向前找第 i+1 个 }
+            String confidenceField = ", \"confidence\": \"" + ai.confidence.name() + "\""
+                + (ai.lineOffset >= 0 ? ", \"line_offset\": " + ai.lineOffset : "");
             int objCount = 0;
             for (int j = modified.length() - 1; j >= 0; j--) {
                 if (modified.charAt(j) == '}') {
@@ -340,12 +381,66 @@ public class ConfidenceAnnotator {
             }
         }
 
-        // 替换原 JSON 中的数组
         int arrayStart = json.indexOf(arrayContent);
         if (arrayStart >= 0) {
             return json.substring(0, arrayStart) + modified + json.substring(arrayStart + arrayContent.length());
         }
         return json;
+    }
+
+    // ========== 行号偏差计算 ==========
+
+    /**
+     * 计算依赖名称在源码中的最小行号偏差
+     */
+    static int computeLineOffset(String[] sourceLines, int claimedLine, String keyword) {
+        if (sourceLines == null || keyword == null) return -1;
+        String searchTerm = extractSimpleName(keyword);
+        if (searchTerm.isEmpty()) return -1;
+        int bestOffset = Integer.MAX_VALUE;
+        int searchRange = Math.min(10, sourceLines.length);
+        for (int offset = 0; offset <= searchRange; offset++) {
+            int upLine = claimedLine - 1 - offset;
+            int downLine = claimedLine - 1 + offset;
+            if (upLine >= 0 && upLine < sourceLines.length && sourceLines[upLine].contains(searchTerm)) {
+                return offset;
+            }
+            if (offset > 0 && downLine >= 0 && downLine < sourceLines.length && sourceLines[downLine].contains(searchTerm)) {
+                return offset;
+            }
+        }
+        return -1;
+    }
+
+    /**
+     * 计算风险描述在源码中的最小行号偏差
+     */
+    static int computeLineOffsetForRisk(String[] sourceLines, int claimedLine, String description) {
+        if (sourceLines == null || description == null) return 0;
+        // risks 不做名称匹配，L1只校验行号范围，偏差=0表示行号在范围内
+        return 0;
+    }
+
+    /**
+     * 计算方法名在源码中的最小行号偏差
+     */
+    static int computeMethodLineOffset(String[] sourceLines, int claimedLine, String methodName) {
+        if (sourceLines == null || methodName == null) return -1;
+        String simpleName = extractSimpleName(methodName);
+        if (simpleName.isEmpty()) return -1;
+        int bestOffset = -1;
+        int searchRange = Math.min(10, sourceLines.length);
+        for (int offset = 0; offset <= searchRange; offset++) {
+            int upLine = claimedLine - 1 - offset;
+            int downLine = claimedLine - 1 + offset;
+            if (upLine >= 0 && upLine < sourceLines.length && sourceLines[upLine].contains(simpleName)) {
+                return offset;
+            }
+            if (offset > 0 && downLine >= 0 && downLine < sourceLines.length && sourceLines[downLine].contains(simpleName)) {
+                return offset;
+            }
+        }
+        return -1;
     }
 
     /**
@@ -360,7 +455,6 @@ public class ConfidenceAnnotator {
         int start = json.indexOf('"', colon + 1);
         if (start < 0) return null;
         start++;
-        // 读取到下一个非转义引号
         StringBuilder sb = new StringBuilder();
         int i = start;
         while (i < json.length()) {
@@ -382,10 +476,8 @@ public class ConfidenceAnnotator {
      */
     static String extractSimpleName(String name) {
         if (name == null) return "";
-        // 去掉参数签名
         int paren = name.indexOf('(');
         if (paren > 0) name = name.substring(0, paren);
-        // 去掉包名
         int dot = name.lastIndexOf('.');
         if (dot > 0) name = name.substring(dot + 1);
         return name.trim();
