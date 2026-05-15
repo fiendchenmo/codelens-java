@@ -38,11 +38,14 @@ public class CodeLens {
     private static final Logger LOGGER = Logger.getLogger(CodeLens.class.getName());
 
     public static void main(String[] args) throws Exception {
-        // 检测 --no-color 参数
+        // 检测 --no-color 和 --no-validate 参数
+        boolean noValidate = false;
         List<String> filteredArgs = new ArrayList<String>();
         for (String arg : args) {
             if (arg.equals("--no-color")) {
                 ColorUtil.setColorEnabled(false);
+            } else if (arg.equals("--no-validate")) {
+                noValidate = true;
             } else {
                 filteredArgs.add(arg);
             }
@@ -58,7 +61,7 @@ public class CodeLens {
         
         switch (command) {
             case "analyze":
-                handleAnalyze(args);
+                handleAnalyze(args, noValidate);
                 break;
             case "index":
                 handleIndex(args);
@@ -67,14 +70,14 @@ public class CodeLens {
                 handleCallers(args);
                 break;
             case "full":
-                handleFull(args);
+                handleFull(args, noValidate);
                 break;
             case "--help":
             case "-h":
                 printUsage();
                 break;
             default:
-                handleAnalyze(args);
+                handleAnalyze(args, noValidate);
                 break;
         }
     }
@@ -151,6 +154,7 @@ public class CodeLens {
         System.out.println("  java -jar codelens.jar --help");
         System.out.println("                              - 显示帮助信息");
         System.out.println("  --no-color                   禁用颜色输出");
+        System.out.println("  --no-validate                跳过L1+L2证据校验");
         System.out.println("");
         System.out.println("选项:");
         System.out.println("  --api-url=URL                API 地址（默认 https://api.deepseek.com/v1/chat/completions）");
@@ -179,7 +183,7 @@ public class CodeLens {
     
     // ========== analyze 命令 ==========
     
-    private static void handleAnalyze(String[] args) throws Exception {
+    private static void handleAnalyze(String[] args, boolean noValidate) throws Exception {
         if (args.length < 2) {
             System.out.println(ColorUtil.error("错误: analyze 命令需要指定 Java 文件路径"));
             System.out.println("用法: java -jar codelens.jar analyze <Java文件路径> [API_KEY] [--api-url=URL] [--model=MODEL] [--temperature=TEMP]");
@@ -303,14 +307,22 @@ public class CodeLens {
         String result = LLMClient.analyze(apiKey, systemPrompt, userPrompt, apiUrl, model, temperature);
         System.out.println(prettyPrintJson(result));
 
-        // L1 证据校验
-        try {
-            String sourceCode = Files.readString(Paths.get(filePath));
-            EvidenceValidator.ValidationResult vr = EvidenceValidator.validate(result, sourceCode, null);
-            System.out.println("\n" + ColorUtil.heading("━━━ L1 证据校验 ━━━") + "\n");
-            System.out.println(vr.formatReport());
-        } catch (Exception e) {
-            // 校验失败不影响主流程
+        // L1+L2 证据校验与置信度标注
+        if (!noValidate) {
+            try {
+                String sourceCode = Files.readString(Paths.get(filePath));
+                String[] sourceLines = sourceCode.split("\n");
+                EvidenceValidator.ValidationResult vr = EvidenceValidator.validate(result, sourceCode, null);
+                System.out.println("\n" + ColorUtil.heading("━━━ L1 证据校验 ━━━") + "\n");
+                System.out.println(vr.formatReport());
+
+                // L2 置信度标注
+                ConfidenceAnnotator.AnnotatedResult ar = ConfidenceAnnotator.annotate(result, vr, sourceLines);
+                System.out.println(ColorUtil.heading("━━━ L2 置信度标注 ━━━") + "\n");
+                System.out.println(ar.formatReport());
+            } catch (Exception e) {
+                // 校验失败不影响主流程
+            }
         }
     }
     
@@ -423,7 +435,7 @@ public class CodeLens {
     
     // ========== full 命令 ==========
     
-    private static void handleFull(String[] args) {
+    private static void handleFull(String[] args, boolean noValidate) {
         if (args.length < 2) {
             System.out.println(ColorUtil.error("错误: full 命令需要指定 Java 文件路径"));
             System.out.println("用法: java -jar codelens.jar full <Java文件路径> [API_KEY] [--api-url=URL] [--model=MODEL] [--temperature=TEMP]");
@@ -591,14 +603,22 @@ public class CodeLens {
                 String mergedResult = mergeCallersToJson(result, callers);
                 System.out.println(prettyPrintJson(mergedResult));
 
-                // L1 证据校验
-                try {
-                    String sourceCode = Files.readString(Paths.get(filePath));
-                    EvidenceValidator.ValidationResult vr = EvidenceValidator.validate(mergedResult, sourceCode, null);
-                    System.out.println("\n" + ColorUtil.heading("━━━ L1 证据校验 ━━━") + "\n");
-                    System.out.println(vr.formatReport());
-                } catch (Exception e) {
-                    // 校验失败不影响主流程
+                // L1+L2 证据校验与置信度标注
+                if (!noValidate) {
+                    try {
+                        String sourceCode = Files.readString(Paths.get(filePath));
+                        String[] sourceLines = sourceCode.split("\n");
+                        EvidenceValidator.ValidationResult vr = EvidenceValidator.validate(mergedResult, sourceCode, null);
+                        System.out.println("\n" + ColorUtil.heading("━━━ L1 证据校验 ━━━") + "\n");
+                        System.out.println(vr.formatReport());
+
+                        // L2 置信度标注
+                        ConfidenceAnnotator.AnnotatedResult ar = ConfidenceAnnotator.annotate(mergedResult, vr, sourceLines);
+                        System.out.println(ColorUtil.heading("━━━ L2 置信度标注 ━━━") + "\n");
+                        System.out.println(ar.formatReport());
+                    } catch (Exception e) {
+                        // 校验失败不影响主流程
+                    }
                 }
             }
             
