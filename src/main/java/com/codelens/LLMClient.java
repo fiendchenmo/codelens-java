@@ -59,7 +59,8 @@ public class LLMClient {
             + "  {\"role\": \"system\", \"content\": \"" + escapeJson(systemPrompt) + "\"},"
             + "  {\"role\": \"user\", \"content\": \"" + escapeJson(userPrompt) + "\"}"
             + "],"
-            + "\"temperature\": " + temperature
+            + "\"temperature\": " + temperature + ","
+            + "\"max_tokens\": 8192"
             + "}";
 
         URL url = new URL(apiUrl);
