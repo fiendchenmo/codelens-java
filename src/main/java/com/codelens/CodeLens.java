@@ -791,7 +791,7 @@ public class CodeLens {
             + "}\n"
             + "要求：\n"
             + "1. 每条risks和dependencies必须指向具体代码行号（line字段）\n"
-            + "2. dependencies必须包含所有依赖注入的字段（标注了[依赖注入]的字段），以及所有第三方和框架类的静态方法调用（如ScheduleUtils.xxx、CronUtils.xxx等工具类调用，在结构化解析的调用列表中有出现的都必须列入）；不要列日志类（Logger/Log），不要列getter/setter，不要列纯值对象类（String/Integer/List等）\n"
+            + "2. dependencies必须包含所有依赖注入的字段（标注了[依赖注入]的字段），以及所有第三方和框架类的静态方法调用；同一静态方法在不同业务场景中使用应按用途拆分为多条(如ScheduleUtils.createScheduleJob在init和insertJob中用途不同应分列)，同场景同方法可合并为一条标注首个行号；每条dependency的line指向首次调用行。不要列日志类（Logger/Log），不要列getter/setter，不要列纯值对象类（String/Integer/List等）\n"
             + "3. risks必须基于代码事实，不要猜测，不要写\"需确认\"类模糊描述；每条risk必须包含impact字段说明影响面：什么场景触发、对系统有什么影响、是否可被框架兜住、是否有自动恢复机制(如重启恢复)。severity判断：不可恢复的数据损坏/状态永久不一致=高，未捕获异常导致程序崩溃=高，事务无法补偿的外部系统状态变更=高；被@Transactional兜住会回滚的异常=中(即使抛NPE只要事务回滚就不算高)，逻辑错误导致校验被跳过=中，可恢复的异常=中，代码风格问题=低\n"
             + "4. 必须检查安全风险：路径遍历（文件路径拼接）、SQL注入（表名/列名拼接传入Mapper时若无法确认使用#{}参数化查询应标为风险）、空指针链（链式调用未判空，说明什么输入会触发null）、JSON解析异常，安全类风险不得遗漏\n"
             + "5. 检查异常处理对事务的影响：catch块吞异常会导致Spring事务不回滚，这是事务方法的严重问题；特别关注@Transactional方法中的异常处理\n"
