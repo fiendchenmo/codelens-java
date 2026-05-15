@@ -40,12 +40,15 @@ public class CodeLens {
     public static void main(String[] args) throws Exception {
         // 检测 --no-color 和 --no-validate 参数
         boolean noValidate = false;
+        boolean noCache = false;
         List<String> filteredArgs = new ArrayList<String>();
         for (String arg : args) {
             if (arg.equals("--no-color")) {
                 ColorUtil.setColorEnabled(false);
             } else if (arg.equals("--no-validate")) {
                 noValidate = true;
+            } else if (arg.equals("--no-cache")) {
+                noCache = true;
             } else {
                 filteredArgs.add(arg);
             }
@@ -61,7 +64,7 @@ public class CodeLens {
         
         switch (command) {
             case "analyze":
-                handleAnalyze(args, noValidate);
+                handleAnalyze(args, noValidate, noCache);
                 break;
             case "index":
                 handleIndex(args);
@@ -70,14 +73,14 @@ public class CodeLens {
                 handleCallers(args);
                 break;
             case "full":
-                handleFull(args, noValidate);
+                handleFull(args, noValidate, noCache);
                 break;
             case "--help":
             case "-h":
                 printUsage();
                 break;
             default:
-                handleAnalyze(args, noValidate);
+                handleAnalyze(args, noValidate, noCache);
                 break;
         }
     }
@@ -155,6 +158,7 @@ public class CodeLens {
         System.out.println("                              - 显示帮助信息");
         System.out.println("  --no-color                   禁用颜色输出");
         System.out.println("  --no-validate                跳过L1+L2证据校验");
+        System.out.println("  --no-cache                   禁用LLM摘要缓存，强制重新分析");
         System.out.println("");
         System.out.println("选项:");
         System.out.println("  --api-url=URL                API 地址（默认 https://api.deepseek.com/v1/chat/completions）");
@@ -183,7 +187,7 @@ public class CodeLens {
     
     // ========== analyze 命令 ==========
     
-    private static void handleAnalyze(String[] args, boolean noValidate) throws Exception {
+    private static void handleAnalyze(String[] args, boolean noValidate, boolean noCache) throws Exception {
         if (args.length < 2) {
             System.out.println(ColorUtil.error("错误: analyze 命令需要指定 Java 文件路径"));
             System.out.println("用法: java -jar codelens.jar analyze <Java文件路径> [API_KEY] [--api-url=URL] [--model=MODEL] [--temperature=TEMP]");
@@ -298,13 +302,25 @@ public class CodeLens {
 
         String code = Files.readString(Paths.get(filePath));
 
-        String structContext = buildStructContext(packageName, classInfos);
-        String systemPrompt = buildSystemPrompt();
-        String userPrompt = "分析以下Java文件：\n\n"
-            + "【结构化解析结果】\n" + structContext + "\n\n"
-            + "【源码】\n" + code;
+        // LLM 摘要缓存
+        String effectiveModel = model != null ? model : LLMClient.getDefaultModel();
+        SummaryCache cache = new SummaryCache(findProjectRoot(Paths.get(filePath)), !noCache);
+        SummaryCache.CacheEntry cached = cache.lookup(filePath, code, effectiveModel);
 
-        String result = LLMClient.analyze(apiKey, systemPrompt, userPrompt, apiUrl, model, temperature);
+        String result;
+        if (cached != null) {
+            result = cached.result;
+            System.out.println(ColorUtil.info("[缓存命中] ") + "文件内容未变更，使用上次分析结果（模型: " + cached.model + "）\n");
+        } else {
+            String structContext = buildStructContext(packageName, classInfos);
+            String systemPrompt = buildSystemPrompt();
+            String userPrompt = "分析以下Java文件：\n\n"
+                + "【结构化解析结果】\n" + structContext + "\n\n"
+                + "【源码】\n" + code;
+
+            result = LLMClient.analyze(apiKey, systemPrompt, userPrompt, apiUrl, model, temperature);
+            cache.save(filePath, code, effectiveModel, result);
+        }
         System.out.println(prettyPrintJson(result));
 
         // L1+L2 证据校验与置信度标注
@@ -435,7 +451,7 @@ public class CodeLens {
     
     // ========== full 命令 ==========
     
-    private static void handleFull(String[] args, boolean noValidate) {
+    private static void handleFull(String[] args, boolean noValidate, boolean noCache) {
         if (args.length < 2) {
             System.out.println(ColorUtil.error("错误: full 命令需要指定 Java 文件路径"));
             System.out.println("用法: java -jar codelens.jar full <Java文件路径> [API_KEY] [--api-url=URL] [--model=MODEL] [--temperature=TEMP]");
@@ -598,7 +614,19 @@ public class CodeLens {
                     + "【结构化解析结果】\n" + structContext + "\n\n"
                     + "【源码】\n" + code;
                 
-                String result = LLMClient.analyze(apiKey, systemPrompt, userPrompt, apiUrl, model, temperature);
+                // LLM 摘要缓存
+                String effectiveModelForCache = model != null ? model : LLMClient.getDefaultModel();
+                SummaryCache fullCache = new SummaryCache(findProjectRoot(Paths.get(filePath)), !noCache);
+                SummaryCache.CacheEntry fullCached = fullCache.lookup(filePath, code, effectiveModelForCache);
+
+                String result;
+                if (fullCached != null) {
+                    result = fullCached.result;
+                    System.out.println(ColorUtil.info("[缓存命中] ") + "文件内容未变更，使用上次分析结果（模型: " + fullCached.model + "）\n");
+                } else {
+                    result = LLMClient.analyze(apiKey, systemPrompt, userPrompt, apiUrl, model, temperature);
+                    fullCache.save(filePath, code, effectiveModelForCache, result);
+                }
                 
                 String mergedResult = mergeCallersToJson(result, callers);
                 System.out.println(prettyPrintJson(mergedResult));
