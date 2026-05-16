@@ -133,7 +133,7 @@ public class EvidenceValidator {
     }
 
     private static void validateKeyMethods(String json, String[] sourceLines, ValidationResult result) {
-        String arrayContent = extractJsonArray(json, "key_methods");
+        String arrayContent = extractJsonArray(json, "keyMethods");
         if (arrayContent == null) return;
         List<Map<String, String>> items = parseJsonObjects(arrayContent);
         for (int i = 0; i < items.size(); i++) {
@@ -145,14 +145,14 @@ public class EvidenceValidator {
                 int claimedLine = Integer.parseInt(lineStr.trim());
                 result.totalChecked++;
                 if (claimedLine < 1 || claimedLine > sourceLines.length) {
-                    addIssue(result, "key_methods", i, claimedLine, "name", methodName, null,
+                    addIssue(result, "keyMethods", i, claimedLine, "name", methodName, null,
                             "行号超出源码范围", Confidence.LOW);
                     continue;
                 }
                 if (findMethodDefinition(sourceLines, claimedLine, methodName, 3)) {
                     result.passedCount++;
                 } else {
-                    addIssue(result, "key_methods", i, claimedLine, "name", methodName,
+                    addIssue(result, "keyMethods", i, claimedLine, "name", methodName,
                             sourceLines[claimedLine - 1].trim(), "行号附近未找到方法定义", Confidence.MEDIUM);
                 }
             } catch (NumberFormatException e) { /* skip */ }

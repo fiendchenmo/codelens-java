@@ -783,9 +783,9 @@ public class CodeLens {
             + "  \"summary\": \"一句话功能摘要\",\n"
             + "  \"design_intent\": \"设计意图分析：这个类在整个系统中的角色，它协调了哪些外部资源\",\n"
             + "  \"class_analysis\": \"数据流描述：从输入到输出的关键数据流转路径，只写数据流，不要重复summary和design_intent\",\n"
-            + "  \"dependencies\": [{\"name\": \"依赖对象\", \"type\": \"依赖类型(字段注入/静态方法调用/构造注入)\", \"line\": 行号, \"reason\": \"依赖原因\"}],\n"
+            + "  \"dependencies\": [{\"name\": \"依赖对象\", \"type\": \"依赖类型(字段注入/静态方法调用/构造注入)\", \"line\": 行号, \"description\": \"依赖原因\"}],\n"
             + "  \"risks\": [{\"description\": \"风险描述，必须基于代码事实，包含触发场景和影响范围\", \"line\": 行号, \"severity\": \"高/中/低\", \"impact\": \"影响面：哪些场景会触发，对系统的影响范围\", \"suggestion\": \"修复建议\"}],\n"
-            + "  \"key_methods\": [{\"name\": \"方法名(含参数签名)\", \"line\": 行号, \"visibility\": \"public/private/protected\", \"annotations\": \"方法上的注解如@Transactional等\", \"purpose\": \"作用\", \"calls\": [\"调用的方法\"], \"notes\": \"该方法的特殊情况或注意事项\"}],\n"
+            + "  \"keyMethods\": [{\"name\": \"方法名(含参数签名)\", \"line\": 行号, \"visibility\": \"public/private/protected\", \"annotations\": \"方法上的注解如@Transactional等\", \"purpose\": \"作用\", \"calls\": [\"调用的方法\"], \"description\": \"该方法的特殊情况或注意事项\"}],\n"
             + "  \"framework_integration\": \"框架集成分析：本类使用了哪些框架（Spring/Quartz/MyBatis等），框架的关键调用链是什么，框架的行为如何影响本类的逻辑正确性\",\n"
             + "  \"architecture_issues\": [{\"issue\": \"架构级问题描述\", \"category\": \"分类(状态一致性/事务边界/并发安全/资源管理/初始化时序)\", \"impact\": \"对系统的影响\", \"suggestion\": \"改进建议\"}]\n"
             + "}\n"
@@ -798,13 +798,13 @@ public class CodeLens {
             + "6. 检查跨资源一致性：当一个方法同时操作DB和外部系统（调度器/缓存/消息队列），必须分析两阶段操作的失败场景——DB成功但外部系统失败时状态是否一致，是否有补偿/回滚机制。这类问题必须写入architecture_issues，同时在risks中标注具体代码行\n"
             + "7. architecture_issues不得为空且不得合并为单条！每个维度的问题必须独立列出，至少3条。必须检查以下维度：状态一致性（多资源操作的原子性）、事务边界（@Transactional的粒度和覆盖范围）、并发安全（共享状态的线程安全）、资源管理（连接/流的关闭）、初始化时序（@PostConstruct/静态块的初始化顺序）。每类问题独立一条issue，不要合并不同类别的问题。每个issue必须有category/impact/suggestion三个字段\n"
             + "8. framework_integration不得为空！必须分析本类使用的框架的关键行为和前提条件：框架方法的副作用、框架异常处理机制、框架与DB的事务关系。例如：如果用了Quartz，必须分析JobStore类型（RAMJobStore内存存储vs JobStoreTX/JDBC持久化）对一致性的影响——若是JDBC JobStore则调度器操作和DB操作共享同一数据库，跨资源一致性问题可能不存在；如果是RAMJobStore则是真正的跨资源问题。如果用了Spring事务，要分析@Transactional的传播行为和回滚条件\n"
-            + "9. key_methods必须包含方法上的关键注解（特别是@Transactional、@Async、@Scheduled等影响行为的注解）和可见性\n"
+            + "9. keyMethods必须包含方法上的关键注解（特别是@Transactional、@Async、@Scheduled等影响行为的注解）和可见性\n"
             + "10. 同一类安全风险只列一条risk，在description中列举所有涉及方法，只标首个入口行号\n"
             + "11. class_analysis只写数据流路径，不要重复其他字段内容\n"
             + "12. 只输出JSON，不要markdown代码块包裹\n"
             + "13. 检查Spring AOP自调用问题: 当一个方法内部直接调用同类其他@Transactional方法, 这是通过this调用而非代理, @Transactional不生效, 事务被跳过而非合并. 这类自调用必须标注为风险\n"
             + "14. 架构改进建议必须包含trade-off分析: 每个suggestion需说明解决了什么问题/引入了什么新问题/适用前提条件. 例如先调调度器再改DB的建议需说明: 如果Quartz用JDBC JobStore则调度器操作也在DB事务内, 此建议不适用\n"
-+ "15. key_methods的notes字段保持精简，只写关键发现，不要重复purpose已涵盖的内容。优先保证architecture_issues和risks的完整性";
++ "15. keyMethods的description字段保持精简，只写关键发现，不要重复purpose已涵盖的内容。优先保证architecture_issues和risks的完整性";
     }
     
     private static java.nio.file.Path findProjectRoot(java.nio.file.Path start) {

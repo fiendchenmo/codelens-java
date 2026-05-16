@@ -14,7 +14,7 @@ public class ConfidenceAnnotatorTest {
         String llmJson = "{" +
             "\"dependencies\": [{\"name\": \"JSONObject\", \"line\": 1}]," +
             "\"risks\": [{\"description\": \"some risk\", \"line\": 2, \"severity\": \"低\"}]," +
-            "\"key_methods\": [{\"name\": \"process\", \"line\": 3}]" +
+            "\"keyMethods\": [{\"name\": \"process\", \"line\": 3}]" +
             "}";
         EvidenceValidator.ValidationResult vr = EvidenceValidator.validate(llmJson, source, null);
         ConfidenceAnnotator.AnnotatedResult ar = ConfidenceAnnotator.annotate(llmJson, vr, source.split("\n"));
@@ -73,13 +73,13 @@ public class ConfidenceAnnotatorTest {
     @Test
     void testAnnotateMethodNotFound() {
         String source = "public class Test {\n    public void realMethod() {\n    }\n}";
-        String llmJson = "{\"key_methods\": [{\"name\": \"nonexist\", \"line\": 2}]}";
+        String llmJson = "{\"keyMethods\": [{\"name\": \"nonexist\", \"line\": 2}]}";
         EvidenceValidator.ValidationResult vr = EvidenceValidator.validate(llmJson, source, null);
         ConfidenceAnnotator.AnnotatedResult ar = ConfidenceAnnotator.annotate(llmJson, vr, source.split("\n"));
 
         ConfidenceAnnotator.AnnotatedItem methodItem = null;
         for (ConfidenceAnnotator.AnnotatedItem item : ar.items) {
-            if (item.category.equals("key_methods")) { methodItem = item; break; }
+            if (item.category.equals("keyMethods")) { methodItem = item; break; }
         }
         assertNotNull(methodItem);
         assertEquals(EvidenceValidator.Confidence.MEDIUM, methodItem.confidence);
@@ -88,13 +88,13 @@ public class ConfidenceAnnotatorTest {
     @Test
     void testAnnotateMethodExactMatch() {
         String source = "public class Test {\n    public void process() {\n    }\n}";
-        String llmJson = "{\"key_methods\": [{\"name\": \"process\", \"line\": 2}]}";
+        String llmJson = "{\"keyMethods\": [{\"name\": \"process\", \"line\": 2}]}";
         EvidenceValidator.ValidationResult vr = EvidenceValidator.validate(llmJson, source, null);
         ConfidenceAnnotator.AnnotatedResult ar = ConfidenceAnnotator.annotate(llmJson, vr, source.split("\n"));
 
         ConfidenceAnnotator.AnnotatedItem methodItem = null;
         for (ConfidenceAnnotator.AnnotatedItem item : ar.items) {
-            if (item.category.equals("key_methods")) { methodItem = item; break; }
+            if (item.category.equals("keyMethods")) { methodItem = item; break; }
         }
         assertNotNull(methodItem);
         assertEquals(EvidenceValidator.Confidence.CERTAIN, methodItem.confidence);
@@ -130,7 +130,7 @@ public class ConfidenceAnnotatorTest {
     @Test
     void testInjectConfidenceIntoJson() {
         String source = "import JSONObject;\npublic class Test {\n    public void process() {\n    }\n}";
-        String llmJson = "{\"dependencies\": [{\"name\": \"JSONObject\", \"line\": 1}], \"key_methods\": [{\"name\": \"process\", \"line\": 3}]}";
+        String llmJson = "{\"dependencies\": [{\"name\": \"JSONObject\", \"line\": 1}], \"keyMethods\": [{\"name\": \"process\", \"line\": 3}]}";
         EvidenceValidator.ValidationResult vr = EvidenceValidator.validate(llmJson, source, null);
         ConfidenceAnnotator.AnnotatedResult ar = ConfidenceAnnotator.annotate(llmJson, vr, source.split("\n"));
 
@@ -191,13 +191,13 @@ public class ConfidenceAnnotatorTest {
 @Test
     void testAnnotateMethodLineOutOfRange() {
         String source = "public class Test {\n    public void realMethod() {\n    }\n}";
-        String llmJson = "{\"key_methods\": [{\"name\": \"nonexist\", \"line\": 99}]}";
+        String llmJson = "{\"keyMethods\": [{\"name\": \"nonexist\", \"line\": 99}]}";
         EvidenceValidator.ValidationResult vr = EvidenceValidator.validate(llmJson, source, null);
         ConfidenceAnnotator.AnnotatedResult ar = ConfidenceAnnotator.annotate(llmJson, vr, source.split("\n"));
 
         ConfidenceAnnotator.AnnotatedItem methodItem = null;
         for (ConfidenceAnnotator.AnnotatedItem item : ar.items) {
-            if (item.category.equals("key_methods")) { methodItem = item; break; }
+            if (item.category.equals("keyMethods")) { methodItem = item; break; }
         }
         assertNotNull(methodItem);
         assertEquals(EvidenceValidator.Confidence.LOW, methodItem.confidence);

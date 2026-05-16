@@ -85,7 +85,7 @@ public class EvidenceValidatorTest {
         String llmJson = "{" +
             "\"dependencies\": [{\"name\": \"JSONObject\", \"line\": 1}]," +
             "\"risks\": [{\"description\": \"some risk\", \"line\": 2}]," +
-            "\"key_methods\": [{\"name\": \"process\", \"line\": 3}]" +
+            "\"keyMethods\": [{\"name\": \"process\", \"line\": 3}]" +
             "}";
         EvidenceValidator.ValidationResult result = EvidenceValidator.validate(llmJson, source, null);
         assertEquals(3, result.totalChecked);
@@ -119,7 +119,7 @@ public class EvidenceValidatorTest {
     @Test
     void testValidateMethodNotFound() {
         String source = "public class Test {\n    public void realMethod() {\n    }\n}";
-        String llmJson = "{\"key_methods\": [{\"name\": \"nonexist\", \"line\": 2}]}";
+        String llmJson = "{\"keyMethods\": [{\"name\": \"nonexist\", \"line\": 2}]}";
         EvidenceValidator.ValidationResult result = EvidenceValidator.validate(llmJson, source, null);
         assertEquals(1, result.totalChecked);
         assertEquals(0, result.passedCount);

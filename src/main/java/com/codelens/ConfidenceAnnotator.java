@@ -102,7 +102,7 @@ public class ConfidenceAnnotator {
         // 标注 risks
         annotateRisks(llmJson, sourceLines, issueMap, result);
 
-        // 标注 key_methods
+        // 标注 keyMethods
         annotateKeyMethods(llmJson, sourceLines, issueMap, result);
 
         // 标注其他无法校验的条目
@@ -233,17 +233,17 @@ public class ConfidenceAnnotator {
     private static void annotateKeyMethods(String json, String[] sourceLines,
                                             Map<String, EvidenceValidator.ValidationIssue> issueMap,
                                             AnnotatedResult result) {
-        String arrayContent = EvidenceValidator.extractJsonArray(json, "key_methods");
+        String arrayContent = EvidenceValidator.extractJsonArray(json, "keyMethods");
         if (arrayContent == null) return;
         List<Map<String, String>> items = EvidenceValidator.parseJsonObjects(arrayContent);
         for (int i = 0; i < items.size(); i++) {
             AnnotatedItem ai = new AnnotatedItem();
-            ai.category = "key_methods";
+            ai.category = "keyMethods";
             ai.index = i;
             ai.fields = items.get(i);
             ai.lineOffset = -1;
 
-            String key = "key_methods:" + i;
+            String key = "keyMethods:" + i;
             EvidenceValidator.ValidationIssue issue = issueMap.get(key);
 
             if (issue != null) {
@@ -334,7 +334,7 @@ public class ConfidenceAnnotator {
 
         result = injectConfidenceToArray(result, "dependencies", annotatedResult);
         result = injectConfidenceToArray(result, "risks", annotatedResult);
-        result = injectConfidenceToArray(result, "key_methods", annotatedResult);
+        result = injectConfidenceToArray(result, "keyMethods", annotatedResult);
 
         String validationJson = String.format(
             "\"validation\": {\"overall_confidence\": \"%s\", \"pass_rate\": %.2f, \"checked\": %d, \"passed\": %d}",
