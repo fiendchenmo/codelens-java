@@ -82,40 +82,38 @@ public class CodeMetaData {
      *   ]
      * }
      */
-    public static final String JSON_SCHEMA = """
-    {
-      "summary": "string (类功能概述，必填)",
-      "confidence": "string (CERTAIN|HIGH|MEDIUM|LOW，可选)",
-      "dependencies": [
-        {
-          "name": "string (依赖类/变量名，必填)",
-          "type": "string (import|field|method_call)",
-          "line": "string (行号，数字转字符串)",
-          "description": "string (1-2句描述)"
-        }
-      ],
-      "risks": [
-        {
-          "type": "string (SECURITY|PERFORMANCE|MAINTAINABILITY)",
-          "severity": "string (HIGH|MEDIUM|LOW)",
-          "description": "string (风险描述)",
-          "line": "string (行号)",
-          "suggestion": "string (修复建议)"
-        }
-      ],
-      "keyMethods": [
-        {
-          "name": "string (方法名，必填)",
-          "line": "string (行号)",
-          "signature": "string (方法签名，如 public User createUser(String name))",
-          "visibility": "string (public|private|protected)",
-          "complexity": "string (LOW|MEDIUM|HIGH)",
-          "calls": "string (调用次数，数字转字符串)",
-          "description": "string (方法功能描述)"
-        }
-      ]
-    }
-    """;
+    public static final String JSON_SCHEMA = "{\n"
+        + "  \"summary\": \"string (类功能概述，必填)\",\n"
+        + "  \"confidence\": \"string (CERTAIN|HIGH|MEDIUM|LOW，可选)\",\n"
+        + "  \"dependencies\": [\n"
+        + "    {\n"
+        + "      \"name\": \"string (依赖类/变量名，必填)\",\n"
+        + "      \"type\": \"string (import|field|method_call)\",\n"
+        + "      \"line\": \"string (行号，数字转字符串)\",\n"
+        + "      \"description\": \"string (1-2句描述)\"\n"
+        + "    }\n"
+        + "  ],\n"
+        + "  \"risks\": [\n"
+        + "    {\n"
+        + "      \"type\": \"string (SECURITY|PERFORMANCE|MAINTAINABILITY)\",\n"
+        + "      \"severity\": \"string (HIGH|MEDIUM|LOW)\",\n"
+        + "      \"description\": \"string (风险描述)\",\n"
+        + "      \"line\": \"string (行号)\",\n"
+        + "      \"suggestion\": \"string (修复建议)\"\n"
+        + "    }\n"
+        + "  ],\n"
+        + "  \"keyMethods\": [\n"
+        + "    {\n"
+        + "      \"name\": \"string (方法名，必填)\",\n"
+        + "      \"line\": \"string (行号)\",\n"
+        + "      \"signature\": \"string (方法签名，如 public User createUser(String name))\",\n"
+        + "      \"visibility\": \"string (public|private|protected)\",\n"
+        + "      \"complexity\": \"string (LOW|MEDIUM|HIGH)\",\n"
+        + "      \"calls\": \"string (调用次数，数字转字符串)\",\n"
+        + "      \"description\": \"string (方法功能描述)\"\n"
+        + "    }\n"
+        + "  ]\n"
+        + "}";
 
     /**
      * 标签规范定义
