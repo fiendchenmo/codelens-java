@@ -1,4 +1,4 @@
-// SYNC_VERSION: 2026-05-16-v2
+// SYNC_VERSION: 2026-05-17-v1
 // 维护方：喵呜（CLI端），prompt/校验器相关由喵呜拍板
 // 同步说明：两端共用 JSON Schema & 核心规则，修改需双方确认
 
@@ -17,17 +17,18 @@ public class CodeMetaData {
         public String name;        // 依赖名称
         public String type;       // 依赖类型：字段注入/静态方法调用/构造注入
         public String line;       // 所在行号
-        public String reason;     // 依赖原因
+        public String description; // 描述（合并 reason → description）
     }
 
     /**
      * 风险项结构
      */
     public static class Risk {
-        public String type;       // 风险类型：circular/transaction/cache/null/performance/security/other
-        public String line;        // 所在行号
-        public String description;// 风险描述
-        public String severity;   // 严重程度：high/medium/low
+        public String type;       // 风险类型：SECURITY|PERFORMANCE|MAINTAINABILITY
+        public String severity;   // 严重程度：HIGH|MEDIUM|LOW
+        public String description; // 风险描述
+        public String line;       // 所在行号
+        public String suggestion;  // 修复建议
     }
 
     /**
@@ -35,9 +36,12 @@ public class CodeMetaData {
      */
     public static class KeyMethod {
         public String name;       // 方法名
-        public String line;        // 所在行号
-        public String description; // 方法功能描述
-        public String complexity;  // 复杂度：high/medium/low
+        public String line;       // 所在行号
+        public String signature;  // 方法签名
+        public String visibility; // 可见性：public|private|protected
+        public String complexity; // 复杂度：LOW|MEDIUM|HIGH
+        public String calls;      // 调用次数
+        public String description; // 方法功能描述（合并 notes → description）
     }
 
     // ==================== JSON Schema ====================
@@ -51,7 +55,7 @@ public class CodeMetaData {
      *   class_analysis      - 数据流描述：从输入到输出的关键数据流转路径
      *   dependencies[]      - 依赖项列表
      *   risks[]             - 风险项列表
-     *   key_methods[]       - 关键方法列表
+     *   keyMethods[]        - 关键方法列表
      *   framework_integration - 框架集成分析
      *   architecture_issues[] - 架构级问题列表
      */
@@ -62,20 +66,21 @@ public class CodeMetaData {
             + "  \"class_analysis\": \"数据流描述：从输入到输出的关键数据流转路径，只写数据流，不要重复summary和design_intent\",\n"
             + "  \"dependencies\": [\n"
             + "    {\"name\": \"依赖对象\", \"type\": \"依赖类型(字段注入/静态方法调用/构造注入)\", "
-            + "\"line\": 行号, \"reason\": \"依赖原因\"}\n"
+            + "\"line\": 行号, \"description\": \"描述（1-2句）\"}\n"
             + "  ],\n"
             + "  \"risks\": [\n"
-            + "    {\"description\": \"风险描述，必须基于代码事实，包含触发场景和影响范围\", "
-            + "\"line\": 行号, \"severity\": \"高|中|低\", "
-            + "\"impact\": \"影响面：哪些场景会触发，对系统的影响范围\", "
+            + "    {\"type\": \"SECURITY|PERFORMANCE|MAINTAINABILITY\", "
+            + "\"description\": \"风险描述，必须基于代码事实\", "
+            + "\"line\": 行号, \"severity\": \"HIGH|MEDIUM|LOW\", "
             + "\"suggestion\": \"修复建议\"}\n"
             + "  ],\n"
-            + "  \"key_methods\": [\n"
-            + "    {\"name\": \"方法名(含参数签名)\", \"line\": 行号, "
+            + "  \"keyMethods\": [\n"
+            + "    {\"name\": \"方法名\", \"line\": 行号, "
+            + "\"signature\": \"方法签名(含参数类型)\", "
             + "\"visibility\": \"public|private|protected\", "
-            + "\"annotations\": \"方法上的注解如@Transactional等\", "
-            + "\"purpose\": \"作用\", \"calls\": [\"调用的方法\"], "
-            + "\"notes\": \"该方法的特殊情况或注意事项\"}\n"
+            + "\"complexity\": \"LOW|MEDIUM|HIGH\", "
+            + "\"calls\": \"调用次数\", "
+            + "\"description\": \"方法功能描述\"}\n"
             + "  ],\n"
             + "  \"framework_integration\": \"框架集成分析：本类使用了哪些框架（Spring/Quartz/MyBatis等），"
             + "框架的关键调用链是什么，框架的行为如何影响本类的逻辑正确性\",\n"
@@ -99,7 +104,7 @@ public class CodeMetaData {
             + "2. dependencies 必须包含所有依赖注入的字段，以及所有第三方和框架类的静态方法调用；"
             + "同一静态方法在不同业务场景中应按用途拆分为多条，同场景同方法可合并为一条标注首个行号。"
             + "不要列日志类（Logger/Log），不要列 getter/setter，不要列纯值对象类（String/Integer/List 等）\n"
-            + "3. risks 必须基于代码事实，不可猜测，不可写\"需确认\"类模糊描述；"
+            + "3. risks 必须基于代码事实，不可猜测，不可写"需确认"类模糊描述；"
             + "每条 risk 必须包含 impact 字段说明影响面。"
             + "severity 判断标准：不可恢复的数据损坏/状态永久不一致=高，"
             + "未捕获异常导致程序崩溃=高，事务无法补偿的外部系统状态变更=高；"
@@ -117,8 +122,8 @@ public class CodeMetaData {
             + "被调方法上的 @Transactional 会被跳过（Spring AOP 代理模式下 this 不走代理）。"
             + "如需事务一致性，必须通过注入的代理对象调用（@Autowired self）\n"
             + "8. 所有架构建议需标注前提条件：若依赖于运行时配置（如 Quartz JobStore 类型），"
-            + "必须明确标注。例如：\"假设使用 RAMJobStore（RuoYi 默认）→此方案可行\"，"
-            + "\"若使用 JDBC JobStore→前置条件已变更，建议重新评估\"。"
+            + "必须明确标注。例如："假设使用 RAMJobStore（RuoYi 默认）→此方案可行"，"
+            + ""若使用 JDBC JobStore→前置条件已变更，建议重新评估"。"
             + "对框架默认值标注即可，对可配置项必须标注假设值\n"
             + "9. 初始化时序问题（必查项）：检查 @PostConstruct / @EventListener / InitializingBean "
             + "标注的 init 方法。如果 init 方法中有多步操作（如 clear → selectAll → 逐条 create），"
@@ -126,7 +131,7 @@ public class CodeMetaData {
             + "同时检查 init 方法的执行时机——是否依赖外部资源（如 scheduler），该资源在 init 执行时是否已完全就绪\n"
             + "10. 复合操作原子性（必查项）：如果一个方法先执行 DB 操作（如 insert/update）再调用外部系统"
             + "（如 Quartz API），检查 DB 操作成功后外部调用失败的场景——"
-            + "这会导致\"幽灵记录\"（DB 有但外部无）。标记为事务/逻辑类风险，"
+            + "这会导致"幽灵记录"（DB 有但外部无）。标记为事务/逻辑类风险，"
             + "建议使用事务性发件箱模式或重新排序。区分 DB→外部 和 外部→DB 的顺序差异："
             + "前者产生幽灵记录，后者更安全\n"
             + "11. architecture_issues 不得为空且不得合并为单条！每个维度的问题必须独立列出，至少 3 条。"
@@ -142,7 +147,7 @@ public class CodeMetaData {
             + "要分析 @Transactional 的传播行为和回滚条件\n"
             + "13. 只输出 JSON，不要 markdown 代码块包裹，不要加任何前缀/后缀说明文字\n"
             + "14. 同一类安全风险只列一条 risk，在 description 中列举所有涉及方法，只标首个入口行号\n"
-            + "15. key_methods 的 notes 字段保持精简，只写关键发现，不要重复 purpose 已涵盖的内容。"
+            + "15. keyMethods 的 description 字段保持精简，只写关键发现，不要重复 purpose 已涵盖的内容。"
             + "优先保证 architecture_issues 和 risks 的完整性";
 
     /**
