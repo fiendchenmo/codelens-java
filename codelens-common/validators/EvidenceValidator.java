@@ -1,5 +1,5 @@
 // SYNC_SOURCE: codelens-java/src/main/java/com/codelens/EvidenceValidator.java
-// SYNC_VERSION: 2026-05-16-v1
+// SYNC_VERSION: 2026-05-16-v2
 // 维护方：喵呜（CLI端），prompt/校验器相关由喵呜拍板
 // 同步说明：零 IntelliJ SDK 依赖，纯文本处理，CLI 单测可覆盖
 
@@ -199,7 +199,7 @@ public class EvidenceValidator {
         result.issues.add(vi);
     }
 
-    private static String extractJsonArray(String json, String arrayName) {
+    public static String extractJsonArray(String json, String arrayName) {
         String search = "\"" + arrayName + "\"";
         int idx = json.indexOf(search);
         if (idx < 0) return null;
@@ -230,7 +230,7 @@ public class EvidenceValidator {
         return null;
     }
 
-    private static List<Map<String, String>> parseJsonObjects(String arrayContent) {
+    public static List<Map<String, String>> parseJsonObjects(String arrayContent) {
         List<Map<String, String>> result = new ArrayList<>();
         if (arrayContent == null || arrayContent.trim().isEmpty()) return result;
 

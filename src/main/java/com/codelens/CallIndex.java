@@ -117,26 +117,47 @@ public class CallIndex {
      */
     public int indexDirectory(Path dir) throws SQLException {
         LOGGER.info("Indexing directory: " + dir);
+        System.out.println("[DEBUG] indexDirectory: " + dir + " exists=" + Files.exists(dir) + " isDir=" + Files.isDirectory(dir));
         java.util.concurrent.atomic.AtomicInteger count = new java.util.concurrent.atomic.AtomicInteger(0);
+        java.util.concurrent.atomic.AtomicInteger walkedCount = new java.util.concurrent.atomic.AtomicInteger(0);
         
         try {
-            Files.walk(dir)
-                .filter(p -> p.toString().endsWith(".java"))
-                .forEach(file -> {
+            // DEBUG: walk without filter to see all entries
+            java.util.List<Path> allEntries = new java.util.ArrayList<>();
+            Files.walk(dir).forEach(p -> {
+                allEntries.add(p);
+                boolean isJava = p.toString().endsWith(".java");
+                if (allEntries.size() <= 5 || isJava) {
+                    System.out.println("[DEBUG]   entry[" + allEntries.size() + "] " + p.toString() + " endsWith(.java)=" + isJava + " isRegular=" + java.nio.file.Files.isRegularFile(p));
+                }
+            });
+            System.out.println("[DEBUG] Total files: " + allEntries.size());
+            int javaCount = 0;
+            for (Path p : allEntries) {
+                if (p.toString().endsWith(".java")) {
+                    javaCount++;
+                    if (javaCount <= 3) System.out.println("[DEBUG]   checking: " + p);
                     try {
-                        if (shouldIndexFile(file)) {
-                            indexFile(file);
+                        boolean should = shouldIndexFile(p);
+                        if (javaCount <= 3) System.out.println("[DEBUG]   shouldIndexFile=" + should);
+                        if (should) {
+                            indexFile(p);
                             count.incrementAndGet();
+                            if (count.get() <= 3) System.out.println("[DEBUG]   indexed OK, count=" + count.get());
                         }
                     } catch (Exception e) {
-                        LOGGER.warning("Failed to index " + file + ": " + e.getMessage());
+                        System.out.println("[DEBUG]   FAILED: " + e.getMessage());
+                        LOGGER.warning("Failed to index " + p + ": " + e.getMessage());
                     }
-                });
+                }
+            }
+            System.out.println("[DEBUG] java files found: " + javaCount + ", indexed: " + count.get());
         } catch (IOException e) {
             throw new SQLException("Directory walk failed", e);
         }
         
         int total = count.get();
+        System.out.println("[DEBUG] Walked total: " + walkedCount.get() + ", after filter: " + total);
         LOGGER.info("Indexed " + total + " files");
         return total;
     }
