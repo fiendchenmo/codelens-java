@@ -778,7 +778,7 @@ public class CodeLens {
                  .replace("\t", "\\t");
     }
     
-    private static java.nio.file.Path findProjectRoot
+    private static java.nio.file.Path findProjectRoot(java.nio.file.Path start) {
         java.nio.file.Path current = start;
         while (current != null) {
             if (Files.exists(current.resolve(".codelens"))) {
