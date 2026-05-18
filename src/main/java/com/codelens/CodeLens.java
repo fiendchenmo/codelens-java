@@ -6,6 +6,12 @@ import com.github.javaparser.ast.body.ClassOrInterfaceDeclaration;
 import com.github.javaparser.ast.body.MethodDeclaration;
 import com.github.javaparser.ast.body.FieldDeclaration;
 import com.github.javaparser.ast.expr.MethodCallExpr;
+import com.google.gson.Gson;
+import com.google.gson.GsonBuilder;
+import com.google.gson.JsonArray;
+import com.google.gson.JsonElement;
+import com.google.gson.JsonObject;
+import com.google.gson.JsonParser;
 
 import java.io.File;
 import java.nio.file.Files;
@@ -41,6 +47,7 @@ import com.codelens.common.prompts.SystemPrompt;
 public class CodeLens {
     
     private static final Logger LOGGER = Logger.getLogger(CodeLens.class.getName());
+    private static final Gson GSON = new GsonBuilder().setPrettyPrinting().create();
 
     public static void main(String[] args) throws Exception {
         // 检测 --no-color 和 --no-validate 参数
@@ -745,27 +752,21 @@ public class CodeLens {
         }
         
         try {
-            StringBuilder callersJson = new StringBuilder();
-            callersJson.append(",\n  \"callers\": [\n");
-            for (int i = 0; i < callers.size(); i++) {
-                CallerFinder.CallerInfo caller = callers.get(i);
-                callersJson.append("    {\n");
-                callersJson.append("      \"file\": \"").append(escapeJson(caller.filePath)).append("\",\n");
-                callersJson.append("      \"type\": \"").append(caller.type).append("\",\n");
-                callersJson.append("      \"line\": ").append(caller.lineNumber).append(",\n");
-                callersJson.append("      \"description\": \"").append(escapeJson(caller.description)).append("\"\n");
-                callersJson.append("    }");
-                if (i < callers.size() - 1) {
-                    callersJson.append(",");
-                }
-                callersJson.append("\n");
-            }
-            callersJson.append("  ]");
+            // 用 Gson 解析 JSON，避免 lastIndexOf('}') 被字符串内的 } 干扰
+            JsonObject root = JsonParser.parseString(jsonResult).getAsJsonObject();
             
-            int lastBrace = jsonResult.lastIndexOf("}");
-            if (lastBrace > 0) {
-                return jsonResult.substring(0, lastBrace) + callersJson + "\n}";
+            JsonArray callersArray = new JsonArray();
+            for (CallerFinder.CallerInfo caller : callers) {
+                JsonObject callerObj = new JsonObject();
+                callerObj.addProperty("file", caller.filePath);
+                callerObj.addProperty("type", caller.type);
+                callerObj.addProperty("line", caller.lineNumber);
+                callerObj.addProperty("description", caller.description);
+                callersArray.add(callerObj);
             }
+            root.add("callers", callersArray);
+            
+            return GSON.toJson(root);
         } catch (Exception e) {
             LOGGER.log(Level.WARNING, "合并 callers 到 JSON 失败", e);
         }
@@ -850,37 +851,16 @@ public class CodeLens {
     }
 
     /**
-     * JSON 格式化输出（纯 Java 实现，无需 Jackson）
+     * JSON 格式化输出（使用 Gson）
      */
     private static String prettyPrintJson(String json) {
-        StringBuilder sb = new StringBuilder();
-        int indent = 0;
-        boolean inString = false;
-        for (int i = 0; i < json.length(); i++) {
-            char c = json.charAt(i);
-            if (c == '"' && (i == 0 || json.charAt(i-1) != '\\')) {
-                inString = !inString;
-            }
-            if (inString) {
-                sb.append(c);
-                continue;
-            }
-            if (c == '{' || c == '[') {
-                sb.append(c).append('\n');
-                indent++;
-                sb.append("  ".repeat(indent));
-            } else if (c == '}' || c == ']') {
-                sb.append('\n');
-                indent--;
-                sb.append("  ".repeat(indent)).append(c);
-            } else if (c == ',') {
-                sb.append(c).append('\n');
-                sb.append("  ".repeat(indent));
-            } else {
-                sb.append(c);
-            }
+        try {
+            JsonElement element = JsonParser.parseString(json);
+            return GSON.toJson(element);
+        } catch (Exception e) {
+            // 如果解析失败，尝试返回原始 JSON
+            return json;
         }
-        return sb.toString();
     }
 
     private static String buildStructContext(String packageName, List<ClassInfo> classInfos) {

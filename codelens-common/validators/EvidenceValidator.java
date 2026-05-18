@@ -5,6 +5,13 @@
 
 package com.codelens.common.validators;
 
+import com.google.gson.Gson;
+import com.google.gson.GsonBuilder;
+import com.google.gson.JsonArray;
+import com.google.gson.JsonElement;
+import com.google.gson.JsonObject;
+import com.google.gson.JsonParser;
+
 import java.util.*;
 import java.util.regex.*;
 
@@ -18,6 +25,8 @@ import java.util.regex.*;
  * 3. 调用 result.formatReport() 生成可读报告
  */
 public class EvidenceValidator {
+
+    private static final Gson GSON = new GsonBuilder().create();
 
     public enum Confidence {
         CERTAIN, HIGH, MEDIUM, LOW
@@ -234,26 +243,39 @@ public class EvidenceValidator {
         List<Map<String, String>> result = new ArrayList<>();
         if (arrayContent == null || arrayContent.trim().isEmpty()) return result;
 
-        int i = 0;
-        while (i < arrayContent.length()) {
-            // 跳过空白
-            while (i < arrayContent.length() && Character.isWhitespace(arrayContent.charAt(i))) i++;
-            if (i >= arrayContent.length()) break;
-
-            if (arrayContent.charAt(i) == '{') {
-                int end = findMatchingBrace(arrayContent, i);
-                if (end > i) {
-                    String obj = arrayContent.substring(i, end + 1);
-                    Map<String, String> map = parseJsonObject(obj);
+        try {
+            // 用 Gson 解析 JSON 数组
+            JsonArray arr = JsonParser.parseString("[" + arrayContent + "]").getAsJsonArray();
+            for (JsonElement element : arr) {
+                if (element.isJsonObject()) {
+                    Map<String, String> map = parseJsonObject(element.getAsJsonObject());
                     if (!map.isEmpty()) {
                         result.add(map);
                     }
-                    i = end + 1;
+                }
+            }
+        } catch (Exception e) {
+            // 备用：原始手写解析
+            int i = 0;
+            while (i < arrayContent.length()) {
+                while (i < arrayContent.length() && Character.isWhitespace(arrayContent.charAt(i))) i++;
+                if (i >= arrayContent.length()) break;
+
+                if (arrayContent.charAt(i) == '{') {
+                    int end = findMatchingBrace(arrayContent, i);
+                    if (end > i) {
+                        String obj = arrayContent.substring(i, end + 1);
+                        Map<String, String> map = parseJsonObject(obj);
+                        if (!map.isEmpty()) {
+                            result.add(map);
+                        }
+                        i = end + 1;
+                    } else {
+                        i++;
+                    }
                 } else {
                     i++;
                 }
-            } else {
-                i++;
             }
         }
         return result;
@@ -277,19 +299,42 @@ public class EvidenceValidator {
         return -1;
     }
 
+    private static Map<String, String> parseJsonObject(JsonObject obj) {
+        Map<String, String> result = new LinkedHashMap<>();
+        if (obj == null) return result;
+        for (String key : obj.keySet()) {
+            JsonElement element = obj.get(key);
+            String value;
+            if (element.isJsonPrimitive()) {
+                value = element.getAsString();
+            } else {
+                // 嵌套对象或数组，转为字符串
+                value = element.toString();
+            }
+            result.put(key, value);
+        }
+        return result;
+    }
+
     private static Map<String, String> parseJsonObject(String json) {
         Map<String, String> result = new LinkedHashMap<>();
         if (json == null || !json.startsWith("{")) return result;
-
-        Pattern keyValue = Pattern.compile("\"([^\"]+)\"\\s*:\\s*(\"[^\"]*\"|\\d+)");
-        Matcher m = keyValue.matcher(json);
-        while (m.find()) {
-            String key = m.group(1);
-            String value = m.group(2);
-            if (value.startsWith("\"") && value.endsWith("\"")) {
-                value = value.substring(1, value.length() - 1);
+        try {
+            // 优先用 Gson 解析
+            JsonObject obj = JsonParser.parseString(json).getAsJsonObject();
+            return parseJsonObject(obj);
+        } catch (Exception e) {
+            // 备用：正则解析（不支持布尔/嵌套/转义）
+            Pattern keyValue = Pattern.compile("\"([^\"]+)\"\\s*:\\s*(\"[^\"]*\"|\\d+)");
+            Matcher m = keyValue.matcher(json);
+            while (m.find()) {
+                String key = m.group(1);
+                String value = m.group(2);
+                if (value.startsWith("\"") && value.endsWith("\"")) {
+                    value = value.substring(1, value.length() - 1);
+                }
+                result.put(key, value);
             }
-            result.put(key, value);
         }
         return result;
     }

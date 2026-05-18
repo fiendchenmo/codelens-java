@@ -1,5 +1,11 @@
 package com.codelens;
 
+import com.google.gson.Gson;
+import com.google.gson.GsonBuilder;
+import com.google.gson.JsonObject;
+import com.google.gson.JsonParser;
+import com.google.gson.JsonElement;
+
 import java.io.*;
 import java.nio.file.*;
 import java.security.MessageDigest;
@@ -19,6 +25,8 @@ import java.util.*;
 public class SummaryCache {
 
     private static final String CACHE_DIR = "cache";
+    private static final Gson GSON = new GsonBuilder().create();
+
     private final Path cacheRoot;
     private final boolean enabled;
 
@@ -34,7 +42,7 @@ public class SummaryCache {
     /**
      * 查找缓存
      * @param filePath 源文件路径
-     *param sourceCode 源文件内容
+     * @param sourceCode 源文件内容
      * @param model 使用的模型名
      * @return 缓存的 LLM 结果，null 表示未命中
      */
@@ -81,14 +89,23 @@ public class SummaryCache {
             Path cacheFile = cacheRoot.resolve(sourceHash + "_" + fileName.replace(".java", "") + ".json");
 
             long timestamp = System.currentTimeMillis();
-            String cacheContent = "{\n"
-                + "  \"source_hash\": \"" + sourceHash + "\",\n"
-                + "  \"file\": \"" + escapeJson(filePath) + "\",\n"
-                + "  \"model\": \"" + escapeJson(model != null ? model : "unknown") + "\",\n"
-                + "  \"timestamp\": " + timestamp + ",\n"
-                + "  \"result\": " + result + "\n"
-                + "}";
 
+            // 用 Gson 序列化为 JSON
+            Map<String, Object> cacheData = new LinkedHashMap<>();
+            cacheData.put("source_hash", sourceHash);
+            cacheData.put("file", filePath);
+            cacheData.put("model", model != null ? model : "unknown");
+            cacheData.put("timestamp", timestamp);
+            // result 本身是 JSON 字符串，需要解析后放入
+            try {
+                JsonElement resultElement = JsonParser.parseString(result);
+                cacheData.put("result", resultElement);
+            } catch (Exception e) {
+                // result 不是有效 JSON，当作字符串处理
+                cacheData.put("result", result);
+            }
+
+            String cacheContent = GSON.toJson(cacheData);
             Files.write(cacheFile, cacheContent.getBytes("UTF-8"));
         } catch (Exception e) {
             // 缓存写入失败不影响流程
@@ -160,89 +177,31 @@ public class SummaryCache {
 
     private CacheEntry parseCacheEntry(String content) {
         try {
+            JsonObject obj = JsonParser.parseString(content).getAsJsonObject();
+
             CacheEntry entry = new CacheEntry();
-            entry.sourceHash = extractJsonStringField(content, "source_hash");
-            entry.file = extractJsonStringField(content, "file");
-            entry.model = extractJsonStringField(content, "model");
+            entry.sourceHash = getStringField(obj, "source_hash");
+            entry.file = getStringField(obj, "file");
+            entry.model = getStringField(obj, "model");
 
-            String tsStr = extractJsonNumberField(content, "timestamp");
-            entry.timestamp = tsStr != null ? Long.parseLong(tsStr) : 0;
+            entry.timestamp = obj.has("timestamp") ? obj.get("timestamp").getAsLong() : 0;
 
-            // 提取 result 字段（整个 JSON 对象）
-            entry.result = extractResultField(content);
+            // 提取 result 字段（可以是任意 JSON 元素）
+            if (obj.has("result")) {
+                entry.result = GSON.toJson(obj.get("result"));
+            } else {
+                entry.result = null;
+            }
+
             return entry;
         } catch (Exception e) {
             return null;
         }
     }
 
-    static String extractJsonStringField(String json, String key) {
-        String searchKey = "\"" + key + "\"";
-        int idx = json.indexOf(searchKey);
-        if (idx < 0) return null;
-        int colon = json.indexOf(':', idx + searchKey.length());
-        if (colon < 0) return null;
-        int start = json.indexOf('"', colon + 1);
-        if (start < 0) return null;
-        start++;
-        StringBuilder sb = new StringBuilder();
-        int i = start;
-        while (i < json.length()) {
-            char c = json.charAt(i);
-            if (c == '\\' && i + 1 < json.length()) {
-                sb.append(json.charAt(i + 1));
-                i += 2;
-                continue;
-            }
-            if (c == '"') break;
-            sb.append(c);
-            i++;
-        }
-        return sb.toString();
-    }
-
-    static String extractJsonNumberField(String json, String key) {
-        String searchKey = "\"" + key + "\"";
-        int idx = json.indexOf(searchKey);
-        if (idx < 0) return null;
-        int colon = json.indexOf(':', idx + searchKey.length());
-        if (colon < 0) return null;
-        int start = colon + 1;
-        while (start < json.length() && json.charAt(start) == ' ') start++;
-        int end = start;
-        while (end < json.length() && (Character.isDigit(json.charAt(end)) || json.charAt(end) == '-')) end++;
-        return json.substring(start, end);
-    }
-
-    /**
-     * 提取 "result": {...} 中的完整 JSON 对象
-     */
-    static String extractResultField(String json) {
-        String searchKey = "\"result\"";
-        int idx = json.indexOf(searchKey);
-        if (idx < 0) return null;
-        int colon = json.indexOf(':', idx + searchKey.length());
-        if (colon < 0) return null;
-        int objStart = json.indexOf('{', colon);
-        if (objStart < 0) return null;
-
-        int depth = 0;
-        int i = objStart;
-        boolean inString = false;
-        while (i < json.length()) {
-            char c = json.charAt(i);
-            if (c == '\\' && inString) { i += 2; continue; }
-            if (c == '"') inString = !inString;
-            if (!inString) {
-                if (c == '{') depth++;
-                else if (c == '}') {
-                    depth--;
-                    if (depth == 0) {
-                        return json.substring(objStart, i + 1);
-                    }
-                }
-            }
-            i++;
+    private static String getStringField(JsonObject obj, String key) {
+        if (obj.has(key) && obj.get(key).isJsonPrimitive()) {
+            return obj.get(key).getAsString();
         }
         return null;
     }
@@ -259,14 +218,5 @@ public class SummaryCache {
         } catch (Exception e) {
             return String.valueOf(input.hashCode());
         }
-    }
-
-    static String escapeJson(String s) {
-        if (s == null) return "";
-        return s.replace("\\", "\\\\")
-                 .replace("\"", "\\\"")
-                 .replace("\n", "\\n")
-                 .replace("\r", "\\r")
-                 .replace("\t", "\\t");
     }
 }
