@@ -5,6 +5,7 @@ import java.nio.file.*;
 import java.sql.*;
 import java.util.*;
 import java.util.logging.*;
+import com.codelens.common.utils.ColorUtil;
 import java.util.regex.*;
 
 /**

@@ -9,6 +9,9 @@ import com.github.javaparser.ast.expr.MethodCallExpr;
 
 import java.io.File;
 import java.nio.file.Files;
+import com.codelens.common.validators.EvidenceValidator;
+import com.codelens.common.validators.ConfidenceAnnotator;
+import com.codelens.common.utils.ColorUtil;
 import java.nio.file.Paths;
 import java.sql.SQLException;
 import java.util.ArrayList;

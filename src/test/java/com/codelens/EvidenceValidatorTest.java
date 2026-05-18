@@ -1,4 +1,5 @@
 package com.codelens;
+import com.codelens.common.validators.EvidenceValidator;
 
 import org.junit.jupiter.api.Test;
 import static org.junit.jupiter.api.Assertions.*;
