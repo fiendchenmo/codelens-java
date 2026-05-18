@@ -4,6 +4,7 @@ import com.codelens.common.validators.EvidenceValidator;
 import com.codelens.common.validators.ConfidenceAnnotator;
 import com.codelens.common.prompts.SystemPrompt;
 import com.codelens.SummaryCache;
+import com.codelens.common.utils.ColorUtil;
 
 import java.io.File;
 import java.nio.file.Files;
@@ -96,8 +97,11 @@ public class AnalysisService {
             String structContext = JavaParserService.buildStructContext(packageName, classInfos);
             
             // 检查缓存
-            String cacheKey = noCache ? null : SummaryCache.generateKey(sourceCode);
-            String cachedSummary = (!noCache) ? SummaryCache.getInstance().get(cacheKey) : null;
+            Path projectRoot = JavaParserService.findProjectRoot(filePath);
+            if (projectRoot == null) projectRoot = filePath.getParent();
+            SummaryCache cache = new SummaryCache(projectRoot, !noCache);
+            SummaryCache.CacheEntry cachedEntry = cache.lookup(filePath.toString(), sourceCode, model);
+            String cachedSummary = (cachedEntry != null) ? cachedEntry.result : null;
             
             if (cachedSummary != null && !cachedSummary.isEmpty()) {
                 String mergedResult = JsonFormatter.mergeCallersToJson(cachedSummary, callers);
@@ -109,8 +113,7 @@ public class AnalysisService {
                         String[] sourceLines = sourceCode.split("\n");
                         
                         // L1 证据校验
-                        EvidenceValidator vr = new EvidenceValidator();
-                        vr.validate(mergedResult, sourceCode, null);
+                        EvidenceValidator.ValidationResult vr = EvidenceValidator.validate(mergedResult, sourceCode, null);
                         System.out.println("\n" + ColorUtil.heading("━━━ L1 证据校验 ━━━") + "\n");
                         System.out.println(vr.formatReport());
 
@@ -142,7 +145,7 @@ public class AnalysisService {
             
             // 保存缓存
             if (!noCache) {
-                SummaryCache.getInstance().put(cacheKey, prettyJson);
+                cache.save(filePath.toString(), sourceCode, model, prettyJson);
             }
             
             // 验证和标注
@@ -151,8 +154,7 @@ public class AnalysisService {
                     String[] sourceLines = sourceCode.split("\n");
                     
                     // L1 证据校验
-                    EvidenceValidator vr = new EvidenceValidator();
-                    vr.validate(mergedResult, sourceCode, null);
+                    EvidenceValidator.ValidationResult vr = EvidenceValidator.validate(mergedResult, sourceCode, null);
                     System.out.println("\n" + ColorUtil.heading("━━━ L1 证据校验 ━━━") + "\n");
                     System.out.println(vr.formatReport());
 
@@ -187,8 +189,8 @@ public class AnalysisService {
             double temperature
     ) {
         try {
-            // 读取系统提示词
-            String systemPrompt = SystemPrompt.getAnalyzePrompt();
+            // 读取系统提示词（SystemPrompt.build() 已包含完整提示词）
+            String systemPrompt = SystemPrompt.build();
             
             // 构建用户提示
             StringBuilder userPrompt = new StringBuilder();
@@ -199,26 +201,6 @@ public class AnalysisService {
             userPrompt.append("```java\n");
             userPrompt.append(sourceCode);
             userPrompt.append("\n```\n");
-            
-            // 优先使用 class 级别提示
-            String classPrompt = SystemPrompt.getClassLevelPrompt(mainClass.name);
-            if (classPrompt != null) {
-                userPrompt.append("\n").append(classPrompt);
-            }
-            
-            // 优先使用 method 级别提示
-            for (JavaParserService.MethodInfo method : mainClass.methods) {
-                String methodPrompt = SystemPrompt.getMethodLevelPrompt(mainClass.name, method.name);
-                if (methodPrompt != null) {
-                    userPrompt.append("\n").append(methodPrompt);
-                }
-            }
-            
-            // 优先使用 custom 提示
-            String customPrompt = SystemPrompt.getCustomPrompt();
-            if (customPrompt != null && !customPrompt.isEmpty()) {
-                userPrompt.append("\n").append(customPrompt);
-            }
             
             // 调用 LLM
             return callDeepSeekApi(

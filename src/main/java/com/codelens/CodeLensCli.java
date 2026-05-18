@@ -289,7 +289,7 @@ public class CodeLensCli {
         
         CallIndex indexer = new CallIndex(projectRoot);
         CallerFinder searcher = new CallerFinder(indexer, projectRoot);
-        List<CallerFinder.CallerInfo> callers = searcher.searchCallers(className);
+        List<CallerFinder.CallerInfo> callers = searcher.findCallers(className);
         
         if (callers.isEmpty()) {
             System.out.println("未找到调用该类的代码");
@@ -335,7 +335,7 @@ public class CodeLensCli {
             // 查找项目根目录
             Path projectRoot = JavaParserService.findProjectRootForFull(sourceFile.toPath());
             if (projectRoot == null) {
-                projectRoot = sourceFile.toAbsolutePath().getParent();
+                projectRoot = sourceFile.toPath().toAbsolutePath().getParent();
             }
             
             System.out.println("文件: " + filePath);
@@ -358,7 +358,7 @@ public class CodeLensCli {
             List<CallerFinder.CallerInfo> callers = new ArrayList<>();
             if (projectRoot.toFile().exists()) {
                 CallerFinder searcher = new CallerFinder(indexer, projectRoot);
-                callers = searcher.searchCallers(className);
+                callers = searcher.findCallers(className);
                 if (callers.isEmpty()) {
                     System.out.println("未找到调用该类的代码");
                 } else {

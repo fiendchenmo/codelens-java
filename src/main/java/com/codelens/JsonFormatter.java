@@ -85,7 +85,7 @@ public class JsonFormatter {
             for (CallerFinder.CallerInfo caller : callers) {
                 JsonObject callerObj = new JsonObject();
                 callerObj.addProperty("file", caller.filePath);
-                callerObj.addProperty("type", caller.type);
+                callerObj.addProperty("type", caller.type.label);
                 callerObj.addProperty("line", caller.lineNumber);
                 callerObj.addProperty("description", caller.description);
                 callersArray.add(callerObj);
