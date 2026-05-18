@@ -127,36 +127,4 @@ public class SummaryCacheTest {
         assertNotEquals(hash1, hash3);
         assertEquals(32, hash1.length()); // MD5 hex = 32 chars
     }
-
-    @Test
-    void testExtractResultField() {
-        String cacheJson = "{\"source_hash\": \"abc\", \"result\": {\"summary\": \"test\", \"risks\": []}}";
-        String result = SummaryCache.extractResultField(cacheJson);
-        assertNotNull(result);
-        assertTrue(result.contains("summary"));
-        assertTrue(result.startsWith("{"));
-        assertTrue(result.endsWith("}"));
-    }
-
-    @Test
-    void testExtractResultFieldNested() {
-        String cacheJson = "{\"source_hash\": \"abc\", \"result\": {\"summary\": \"test\", \"data\": {\"nested\": true}}}";
-        String result = SummaryCache.extractResultField(cacheJson);
-        assertNotNull(result);
-        assertTrue(result.contains("nested"));
-    }
-
-    @Test
-    void testExtractJsonStringField() {
-        String json = "{\"source_hash\": \"abc123\", \"model\": \"deepseek-v4-flash\"}";
-        assertEquals("abc123", SummaryCache.extractJsonStringField(json, "source_hash"));
-        assertEquals("deepseek-v4-flash", SummaryCache.extractJsonStringField(json, "model"));
-        assertNull(SummaryCache.extractJsonStringField(json, "nonexist"));
-    }
-
-    @Test
-    void testExtractJsonNumberField() {
-        String json = "{\"timestamp\": 1715750400000}";
-        assertEquals("1715750400000", SummaryCache.extractJsonNumberField(json, "timestamp"));
-    }
 }

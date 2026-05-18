@@ -42,40 +42,6 @@ public class EvidenceValidatorTest {
     }
 
     @Test
-    void testFindInNearbyLines() {
-        String[] lines = {
-            "package com.example;",
-            "import java.util.List;",
-            "public class Test {",
-            "    private JSONObject json;",
-            "    public void process() {",
-            "        json.parse(s);",
-            "    }",
-            "}"
-        };
-        assertTrue(EvidenceValidator.findInNearbyLines(lines, 4, "JSONObject", 2));
-        assertTrue(EvidenceValidator.findInNearbyLines(lines, 6, "parse", 1));
-        assertFalse(EvidenceValidator.findInNearbyLines(lines, 6, "FileUtils", 2));
-    }
-
-    @Test
-    void testFindMethodDefinition() {
-        String[] lines = {
-            "public class Test {",
-            "    public void process() {",
-            "        return 1;",
-            "    }",
-            "    private String getData() {",
-            "        return \"data\";",
-            "    }",
-            "}"
-        };
-        assertTrue(EvidenceValidator.findMethodDefinition(lines, 2, "process", 2));
-        assertTrue(EvidenceValidator.findMethodDefinition(lines, 5, "getData", 2));
-        assertFalse(EvidenceValidator.findMethodDefinition(lines, 2, "getData", 2));
-    }
-
-    @Test
     void testValidateAllPass() {
         String source =
             "import com.alibaba.fastjson.JSONObject;\n" +

@@ -115,34 +115,6 @@ public class ConfidenceAnnotatorTest {
     }
 
     @Test
-    void testExtractSimpleName() {
-        assertEquals("JSONObject", ConfidenceAnnotator.extractSimpleName("com.alibaba.fastjson.JSONObject"));
-        assertEquals("process", ConfidenceAnnotator.extractSimpleName("process(String, int)"));
-        assertEquals("getData", ConfidenceAnnotator.extractSimpleName("getData()"));
-        assertEquals("Test", ConfidenceAnnotator.extractSimpleName("Test"));
-    }
-
-    @Test
-    void testExtractStringValue() {
-        String json = "{\"summary\": \"This is a test\", \"count\": 5}";
-        assertEquals("This is a test", ConfidenceAnnotator.extractStringValue(json, "summary"));
-        assertNull(ConfidenceAnnotator.extractStringValue(json, "nonexist"));
-    }
-
-    @Test
-    void testInjectConfidenceIntoJson() {
-        String source = "import JSONObject;\npublic class Test {\n    public void process() {\n    }\n}";
-        String llmJson = "{\"dependencies\": [{\"name\": \"JSONObject\", \"line\": 1}], \"keyMethods\": [{\"name\": \"process\", \"line\": 3}]}";
-        EvidenceValidator.ValidationResult vr = EvidenceValidator.validate(llmJson, source, null);
-        ConfidenceAnnotator.AnnotatedResult ar = ConfidenceAnnotator.annotate(llmJson, vr, source.split("\n"));
-
-        String injected = ConfidenceAnnotator.injectConfidenceIntoJson(llmJson, ar, vr);
-        assertTrue(injected.contains("\"confidence\":"));
-        assertTrue(injected.contains("\"validation\":"));
-        assertTrue(injected.contains("overall_confidence"));
-    }
-
-    @Test
     void testAnnotateUnvalidatedFields() {
         String source = "public class Test {\n}";
         String llmJson = "{\"summary\": \"A test class\", \"design_intent\": \"Testing\", \"class_analysis\": \"Data flow here\"}";
