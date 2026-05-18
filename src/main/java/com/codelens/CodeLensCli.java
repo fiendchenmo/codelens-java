@@ -1,13 +1,14 @@
 package com.codelens;
 
 import com.codelens.common.utils.ColorUtil;
-import com.codelens.indexer.CodeIndexer;
-import com.codelens.indexer.CodeSearcher;
-import com.codelens.callers.CallerFinder;
+import com.codelens.CallIndex;
+
+import com.codelens.CallerFinder;
 
 import java.io.File;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.nio.file.Paths;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
@@ -256,7 +257,8 @@ public class CodeLensCli {
         System.out.println(ColorUtil.heading("━━━ 建立代码索引 ━━━"));
         System.out.println("目录: " + dirPath);
         
-        CodeIndexer indexer = new CodeIndexer();
+        Path projectRoot = JavaParserService.findProjectRoot(dir.toPath());
+        CallIndex indexer = new CallIndex(projectRoot);
         try {
             indexer.indexDirectory(dir.toPath());
             System.out.println("\n✅ 索引建立完成");
@@ -275,7 +277,7 @@ public class CodeLensCli {
         String className = args[1];
         
         // 查找项目根目录
-        Path projectRoot = JavaParserService.findProjectRoot(Path.get("").toAbsolutePath());
+        Path projectRoot = JavaParserService.findProjectRoot(Paths.get("").toAbsolutePath());
         if (projectRoot == null) {
             System.out.println("⚠️ 未找到项目根目录（需要包含 .codelens 索引目录）");
             return;
@@ -285,7 +287,8 @@ public class CodeLensCli {
         System.out.println("查找: " + className);
         System.out.println("项目根: " + projectRoot);
         
-        CodeSearcher searcher = new CodeSearcher(projectRoot);
+        CallIndex indexer = new CallIndex(projectRoot);
+        CallerFinder searcher = new CallerFinder(indexer, projectRoot);
         List<CallerFinder.CallerInfo> callers = searcher.searchCallers(className);
         
         if (callers.isEmpty()) {
@@ -339,7 +342,7 @@ public class CodeLensCli {
             System.out.println("项目根: " + projectRoot);
             
             // 1. 建立索引
-            CodeIndexer indexer = new CodeIndexer();
+            CallIndex indexer = new CallIndex(projectRoot);
             Path srcRoot = JavaParserService.findSrcRoot(sourceFile.toPath());
             if (srcRoot != null && srcRoot.toFile().exists()) {
                 System.out.println("\n" + ColorUtil.heading("━━━ Step 1: 建立索引 ━━━"));
@@ -354,7 +357,7 @@ public class CodeLensCli {
             // 3. 查找调用者
             List<CallerFinder.CallerInfo> callers = new ArrayList<>();
             if (projectRoot.toFile().exists()) {
-                CodeSearcher searcher = new CodeSearcher(projectRoot);
+                CallerFinder searcher = new CallerFinder(indexer, projectRoot);
                 callers = searcher.searchCallers(className);
                 if (callers.isEmpty()) {
                     System.out.println("未找到调用该类的代码");

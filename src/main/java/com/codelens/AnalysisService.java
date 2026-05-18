@@ -3,8 +3,7 @@ package com.codelens;
 import com.codelens.common.validators.EvidenceValidator;
 import com.codelens.common.validators.ConfidenceAnnotator;
 import com.codelens.common.prompts.SystemPrompt;
-import com.codelens.common.utils.SummaryCache;
-import com.codelens.common.utils.LLMCache;
+import com.codelens.SummaryCache;
 
 import java.io.File;
 import java.nio.file.Files;
