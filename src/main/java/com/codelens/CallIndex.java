@@ -40,6 +40,7 @@ public class CallIndex implements AutoCloseable {
     private final Path indexDir;
     private final Path dbPath;
     private Connection conn;
+    private final java.util.Set<String> indexedSrcRoots = new java.util.HashSet<>();
     
     public CallIndex(Path projectRoot) throws SQLException {
         this.indexDir = projectRoot.resolve(".codelens");
@@ -117,34 +118,114 @@ public class CallIndex implements AutoCloseable {
     /**
      * 索引指定目录
      */
-    public int indexDirectory(Path dir, boolean force) throws SQLException {
+    public int indexDirectory(Path dir) throws SQLException {
         LOGGER.info("Indexing directory: " + dir);
-
+        System.out.println("[DEBUG] indexDirectory: " + dir + " exists=" + Files.exists(dir) + " isDir=" + Files.isDirectory(dir));
         java.util.concurrent.atomic.AtomicInteger count = new java.util.concurrent.atomic.AtomicInteger(0);
-
+        java.util.concurrent.atomic.AtomicInteger walkedCount = new java.util.concurrent.atomic.AtomicInteger(0);
+        indexedSrcRoots.clear(); // 清空之前的记录
         
         try {
-            Files.walk(dir)
-                .filter(p -> p.toString().endsWith(".java"))
-                .forEach(p -> {
+            // DEBUG: walk without filter to see all entries
+            java.util.List<Path> allEntries = new java.util.ArrayList<>();
+            Files.walk(dir).forEach(p -> {
+                allEntries.add(p);
+                boolean isJava = p.toString().endsWith(".java");
+                if (allEntries.size() <= 5 || isJava) {
+                    System.out.println("[DEBUG]   entry[" + allEntries.size() + "] " + p.toString() + " endsWith(.java)=" + isJava + " isRegular=" + java.nio.file.Files.isRegularFile(p));
+                }
+            });
+            System.out.println("[DEBUG] Total files: " + allEntries.size());
+            int javaCount = 0;
+            for (Path p : allEntries) {
+                if (p.toString().endsWith(".java")) {
+                    walkedCount.incrementAndGet();
+                    javaCount++;
+                    // 记录源码根目录
+                    if (isSrcRoot(p)) {
+                        String srcRoot = findSrcRoot(p);
+                        if (!srcRoot.isEmpty() && !indexedSrcRoots.contains(srcRoot)) {
+                            indexedSrcRoots.add(srcRoot);
+                        }
+                    }
+                    if (javaCount <= 3) System.out.println("[DEBUG]   checking: " + p);
                     try {
-                        boolean should = force || shouldIndexFile(p);
+                        boolean should = shouldIndexFile(p);
+                        if (javaCount <= 3) System.out.println("[DEBUG]   shouldIndexFile=" + should);
                         if (should) {
                             indexFile(p);
                             count.incrementAndGet();
+                            if (count.get() <= 3) System.out.println("[DEBUG]   indexed OK, count=" + count.get());
                         }
                     } catch (Exception e) {
+                        System.out.println("[DEBUG]   FAILED: " + e.getMessage());
                         LOGGER.warning("Failed to index " + p + ": " + e.getMessage());
                     }
-                });
+                }
+            }
+            System.out.println("[DEBUG] java files found: " + javaCount + ", indexed: " + count.get());
         } catch (IOException e) {
             throw new SQLException("Directory walk failed", e);
         }
         
         int total = count.get();
-        LOGGER.fine("Indexed files: " + total);
+        System.out.println("[DEBUG] Walked total: " + walkedCount.get() + ", after filter: " + total);
         LOGGER.info("Indexed " + total + " files");
         return total;
+    }
+    
+    /**
+     * 索引指定目录并返回详细信息
+     * @return String数组: [文件数量, 源码根目录列表(逗号分隔)]
+     */
+    public String[] indexDirectoryWithSrcRoots(Path dir) throws SQLException {
+        indexDirectory(dir); // 先执行索引
+        int count = 0;
+        try {
+            java.sql.Statement stmt = conn.createStatement();
+            java.sql.ResultSet rs = stmt.executeQuery("SELECT COUNT(*) FROM code_index");
+            if (rs.next()) {
+                count = rs.getInt(1);
+            }
+            rs.close();
+            stmt.close();
+        } catch (java.sql.SQLException e) {
+            // 忽略
+        }
+        String srcRootsStr = String.join(",", indexedSrcRoots);
+        return new String[]{String.valueOf(count), srcRootsStr};
+    }
+    
+    /**
+     * 获取已索引的源码根目录列表
+     */
+    public List<String> getIndexedSrcRoots() {
+        return new ArrayList<>(indexedSrcRoots);
+    }
+    
+    private boolean isSrcRoot(Path javaFile) {
+        String path = javaFile.toString();
+        return path.contains("/src/main/java/") || path.contains("/src/test/java/") ||
+               path.contains("\\src\\main\\java\\") || path.contains("\\src\\test\\java\\");
+    }
+    
+    private String findSrcRoot(Path javaFile) {
+        String path = javaFile.toString();
+        int idx;
+        if ((idx = path.indexOf("/src/main/java/")) >= 0) {
+            return path.substring(0, idx + 5); // /src
+        }
+        if ((idx = path.indexOf("/src/test/java/")) >= 0) {
+            return path.substring(0, idx + 5);
+        }
+        if ((idx = path.indexOf("\\src\\main\\java\\")) >= 0) {
+            return path.substring(0, idx + 5);
+        }
+        if ((idx = path.indexOf("\\src\\test\\java\\")) >= 0) {
+            return path.substring(0, idx + 5);
+        }
+        // fallback: 返回父目录
+        return javaFile.getParent() != null ? javaFile.getParent().toString() : "";
     }
     
     private boolean shouldIndexFile(Path file) throws IOException, NoSuchAlgorithmException {

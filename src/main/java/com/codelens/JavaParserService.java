@@ -241,15 +241,59 @@ public class JavaParserService {
     /**
      * 查找项目根目录（包含 .codelens 目录）
      */
+    /**
+     * 三级确定性查找策略确定项目根目录
+     * 
+     * 查找顺序:
+     * 1. 从传入路径向上递归查找 .codelens 目录，找到则其所在目录即为项目根
+     * 2. 找不到 .codelens 时，从传入路径向上递归查找 pom.xml / build.gradle / .git，
+     *    找到其中任意一个，其所在目录即为项目根
+     * 3. 都找不到时，传入路径本身即为项目根
+     * 
+     * @param start 起始路径（文件或目录）
+     * @return 项目根目录路径
+     */
     public static Path findProjectRoot(Path start) {
-        Path current = start;
-        while (current != null) {
-            if (Files.exists(current.resolve(".codelens"))) {
-                return current;
-            }
+        Path current = start.toAbsolutePath().normalize();
+        
+        // 如果传入的是文件，获取其父目录
+        if (current.toFile().isFile()) {
             current = current.getParent();
         }
-        return null;
+        
+        Path level1Root = null;  // .codelens 所在目录
+        Path level2Root = null;  // 构建标记(pom.xml/build.gradle/.git)所在目录
+        
+        Path temp = current;
+        while (temp != null) {
+            // Level 1: 查找 .codelens 目录
+            if (level1Root == null && Files.exists(temp.resolve(".codelens"))) {
+                level1Root = temp;
+                // .codelens 找到即返回（最高优先级）
+                return level1Root;
+            }
+            
+            // Level 2: 查找构建标记文件
+            if (level2Root == null) {
+                if (Files.exists(temp.resolve("pom.xml")) ||
+                    Files.exists(temp.resolve("build.gradle")) ||
+                    Files.exists(temp.resolve("build.gradle.kts")) ||
+                    Files.exists(temp.resolve(".git"))) {
+                    level2Root = temp;
+                    // 继续向上找，看是否有更上层的构建标记
+                }
+            }
+            
+            temp = temp.getParent();
+        }
+        
+        // Level 2: 返回找到的构建标记所在目录
+        if (level2Root != null) {
+            return level2Root;
+        }
+        
+        // Level 3: 都找不到时，使用传入路径本身
+        return current;
     }
 
     /**
@@ -276,33 +320,4 @@ public class JavaParserService {
 
     /**
      * 查找 full 命令使用的项目根目录（优先 .git 根目录，其次 pom.xml 根目录）
-     */
-    public static Path findProjectRootForFull(Path start) {
-        Path current = start.toAbsolutePath().normalize();
-        
-        // 优先查找 .git 根目录
-        Path gitRoot = null;
-        Path temp = current;
-        while (temp != null) {
-            if (Files.exists(temp.resolve(".git"))) {
-                gitRoot = temp;
-                break;
-            }
-            temp = temp.getParent();
-        }
-        if (gitRoot != null) {
-            return gitRoot;
-        }
-        
-        // 其次查找最顶层 pom.xml
-        Path topmostPom = null;
-        current = start.toAbsolutePath().normalize();
-        while (current != null) {
-            if (Files.exists(current.resolve("pom.xml"))) {
-                topmostPom = current;
-            }
-            current = current.getParent();
-        }
-        return topmostPom;
-    }
-}
+     */}
