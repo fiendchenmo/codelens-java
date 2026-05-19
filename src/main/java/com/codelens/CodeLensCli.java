@@ -302,8 +302,9 @@ public class CodeLensCli {
         }
         CallIndex indexer = new CallIndex(projectRoot);
         try {
-            indexer.indexDirectory(dir.toPath(), false);
-            System.out.println("\n✅ 索引建立完成");
+            int count = indexer.indexDirectory(dir.toPath(), false);
+            System.out.println("\n✅ 索引建立完成 (索引了 " + count + " 个Java文件)");
+            System.out.println("索引位置: " + projectRoot + "/.codelens/code_index.db");
         } finally {
             indexer.close();
         }
@@ -407,7 +408,8 @@ public class CodeLensCli {
             Path srcRoot = JavaParserService.findSrcRoot(sourceFile.toPath());
             if (srcRoot != null && srcRoot.toFile().exists()) {
                 System.out.println("\n" + ColorUtil.heading("━━━ Step 1: 建立索引 ━━━"));
-                indexer.indexDirectory(srcRoot, true);  // full command always forces reindex
+                int indexCount = indexer.indexDirectory(srcRoot, true);  // full command always forces reindex
+                System.out.println("✅ 已索引 " + indexCount + " 个Java文件");
             }
             
             // 2. 提取类名
