@@ -189,11 +189,16 @@ public class CodeLensCli {
         System.out.println("");
         System.out.println("示例:");
         System.out.println("  java -jar codelens.jar analyze src/main/java/MyService.java");
-        System.out.println("  CODELENS_API_KEY=xxx java -jar codelens.jar analyze src/main/java/MyService.java");
+        System.out.println("  CODELENS_API_KEY=xxx java -jar codelens.jar \");
+        System.out.println("    analyze src/main/java/MyService.java");
         System.out.println("  java -jar codelens.jar analyze src/main/java/MyService.java YOUR_API_KEY");
-        System.out.println("  java -jar codelens.jar analyze src/main/java/MyService.java --model=gpt-4");
-        System.out.println("  java -jar codelens.jar analyze src/main/java/MyService.java --api-url=https://api.openai.com/v1/chat/completions --model=gpt-4 --temperature=0.7");
-        System.out.println("  CODELENS_API_KEY=xxx java -jar codelens.jar full src/main/java/MyService.java");
+        System.out.println("  java -jar codelens.jar analyze src/main/java/MyService.java \");
+        System.out.println("    --model=gpt-4");
+        System.out.println("  java -jar codelens.jar analyze src/main/java/MyService.java \");
+        System.out.println("    --api-url=https://api.openai.com/v1/chat/completions \");
+        System.out.println("    --model=gpt-4 --temperature=0.7");
+        System.out.println("  CODELENS_API_KEY=xxx java -jar codelens.jar \");
+        System.out.println("    full src/main/java/MyService.java");
     }
     
     private static void handleAnalyze(String[] args, boolean noValidate, boolean noCache) {
