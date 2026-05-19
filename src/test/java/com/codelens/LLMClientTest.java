@@ -1,6 +1,7 @@
 package com.codelens;
 
 import com.codelens.common.utils.StringUtil;
+import com.codelens.LLMException;
 
 import org.junit.jupiter.api.Test;
 import java.lang.reflect.Field;
