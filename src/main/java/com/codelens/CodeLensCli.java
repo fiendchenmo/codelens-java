@@ -281,12 +281,9 @@ public class CodeLensCli {
             projectRoot = dir.toPath().toAbsolutePath().normalize();
             System.out.println("⚠️ 未找到 .codelens 目录，使用传入目录作为项目根: " + projectRoot);
         }
-        CallIndex indexer = new CallIndex(projectRoot);
-        try {
+        try (CallIndex indexer = new CallIndex(projectRoot)) {
             indexer.indexDirectory(dir.toPath());
             System.out.println("\n✅ 索引建立完成");
-        } finally {
-            indexer.close();
         }
     }
     
@@ -317,8 +314,8 @@ public class CodeLensCli {
         System.out.println("查找: " + className);
         System.out.println("项目根: " + projectRoot);
         
-        CallIndex indexer = new CallIndex(projectRoot);
-        CallerFinder searcher = new CallerFinder(indexer, projectRoot);
+        try (CallIndex indexer = new CallIndex(projectRoot)) {
+            CallerFinder searcher = new CallerFinder(indexer, projectRoot);
         List<CallerFinder.CallerInfo> callers = searcher.findCallers(className);
         
         if (callers.isEmpty()) {
@@ -372,7 +369,7 @@ public class CodeLensCli {
             System.out.println("项目根: " + projectRoot);
             
             // 1. 建立索引
-            CallIndex indexer = new CallIndex(projectRoot);
+            try (CallIndex indexer = new CallIndex(projectRoot)) {
             Path srcRoot = JavaParserService.findSrcRoot(sourceFile.toPath());
             if (srcRoot != null && srcRoot.toFile().exists()) {
                 System.out.println("\n" + ColorUtil.heading("━━━ Step 1: 建立索引 ━━━"));
@@ -397,6 +394,7 @@ public class CodeLensCli {
                         System.out.println("  " + caller.filePath + ":" + caller.lineNumber);
                     }
                 }
+            }
             }
             
             // 4. 读取源代码

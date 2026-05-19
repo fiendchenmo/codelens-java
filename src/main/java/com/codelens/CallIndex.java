@@ -24,7 +24,7 @@ import com.github.javaparser.ast.ImportDeclaration;
  * 代码索引模块 - 使用 JavaParser 进行精确解析
  * 不使用正则表达式，能正确处理泛型、Lambda、Builder 链式调用等复杂语法
  */
-public class CallIndex {
+public class CallIndex implements AutoCloseable {
     
     private static final Logger LOGGER = Logger.getLogger(CallIndex.class.getName());
     
@@ -361,13 +361,23 @@ public class CallIndex {
         return results;
     }
     
+
+    /**
+     * M-P1-2 fix: Escape SQL LIKE pattern special characters
+     */
+    private String escapeLikePattern(String pattern) {
+        if (pattern == null) return "";
+        return pattern.replace("\\", "\\\\").replace("%", "\%").replace("_", "\_");
+    }
+
     public List<IndexResult> findCallers(String methodName) throws SQLException {
         List<IndexResult> results = new ArrayList<>();
         
         String sql = "SELECT term, term_type, file_path, line_number FROM code_index " +
                     "WHERE term LIKE ? AND term_type = ? ORDER BY file_path, line_number";
         try (PreparedStatement ps = conn.prepareStatement(sql)) {
-            ps.setString(1, "%." + methodName);
+            String escapedMethodName = escapeLikePattern(methodName);
+            ps.setString(1, "%." + escapedMethodName);
             ps.setString(2, TYPE_CALLEE);
             try (ResultSet rs = ps.executeQuery()) {
                 while (rs.next()) {
@@ -434,7 +444,8 @@ public class CallIndex {
         String sql = "SELECT term, term_type, file_path, line_number FROM code_index " +
                     "WHERE term LIKE ? AND term_type = ? ORDER BY term, file_path";
         try (PreparedStatement ps = conn.prepareStatement(sql)) {
-            ps.setString(1, prefix + "%");
+            String escapedPrefix = escapeLikePattern(prefix);
+            ps.setString(1, escapedPrefix + "%");
             ps.setString(2, type);
             try (ResultSet rs = ps.executeQuery()) {
                 while (rs.next()) {

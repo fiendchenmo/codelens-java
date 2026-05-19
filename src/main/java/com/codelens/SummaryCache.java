@@ -11,6 +11,7 @@ import java.io.*;
 import java.nio.file.*;
 import java.security.MessageDigest;
 import java.util.*;
+import java.util.logging.Logger;
 
 /**
  * LLM 摘要缓存
@@ -31,6 +32,7 @@ import java.util.*;
 public class SummaryCache {
 
     private static final String CACHE_DIR = "cache";
+    private static final Logger LOGGER = Logger.getLogger(SummaryCache.class.getName());
     private static final Gson GSON = new GsonBuilder().create();
     
     // TTL: 7天（毫秒）
@@ -201,7 +203,7 @@ public class SummaryCache {
                 Files.delete(cacheFile);
                 return true;
             }
-        } catch (Exception e) { /* ignore */ }
+        } catch (Exception e) { LOGGER.warning("Cache operation failed: " + e.getMessage()); }
         return false;
     }
 
@@ -218,7 +220,7 @@ public class SummaryCache {
                     if (f.delete()) count++;
                 }
             }
-        } catch (Exception e) { /* ignore */ }
+        } catch (Exception e) { LOGGER.warning("Cache operation failed: " + e.getMessage()); }
         return count;
     }
 
@@ -235,7 +237,7 @@ public class SummaryCache {
                     entries.add(f.getName());
                 }
             }
-        } catch (Exception e) { /* ignore */ }
+        } catch (Exception e) { LOGGER.warning("Cache operation failed: " + e.getMessage()); }
         return entries;
     }
 
