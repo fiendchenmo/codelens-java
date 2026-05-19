@@ -148,7 +148,10 @@ public class CodeMetaData {
             + "13. 只输出 JSON，不要 markdown 代码块包裹，不要加任何前缀/后缀说明文字\n"
             + "14. 同一类安全风险只列一条 risk，在 description 中列举所有涉及方法，只标首个入口行号\n"
             + "15. keyMethods 的 description 字段保持精简，只写关键发现，不要重复 purpose 已涵盖的内容. "
-            + "优先保证 architecture_issues 和 risks 的完整性";
+            + "优先保证 architecture_issues 和 risks 的完整性\n"
+            + "16. class_analysis 必须用箭头(->)分隔数据流步骤，格式: 输入 -> 步骤1 -> 步骤2 -> ... -> 输出. "
+            + "每个步骤应标注关键方法名或操作类型，如: DB查询(selectById) -> 缓存写入(redis.set) -> 返回结果. "
+            + "多分支用分号分隔，如: 输入 -> 分支A: ... ; 分支B: ... -> 输出";
 
     /**
      * 标签规范定义

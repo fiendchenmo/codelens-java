@@ -541,6 +541,61 @@ public class CodeLensCli {
         System.out.println();
     }
 
+
+    /**
+     * 格式化数据流展示 — 解析箭头分隔的步骤，每步单独一行带颜色
+     */
+    private static void formatDataFlow(String classAnalysis) {
+        // Split by -> or → or arrows
+        String[] steps = classAnalysis.split("\s*[-→>]+\s*");
+        if (steps.length <= 1) {
+            // No arrows found, just print as-is
+            System.out.println("  " + classAnalysis);
+            return;
+        }
+        
+        // Split by arrows while keeping delimiters
+        java.util.List<String> parts = new java.util.ArrayList<>();
+        String remaining = classAnalysis;
+        java.util.regex.Pattern arrowPattern = java.util.regex.Pattern.compile("\s*(?:->|→|->)\s*");
+        java.util.regex.Matcher matcher = arrowPattern.matcher(classAnalysis);
+        int lastEnd = 0;
+        while (matcher.find()) {
+            String step = classAnalysis.substring(lastEnd, matcher.start()).trim();
+            if (!step.isEmpty()) parts.add(step);
+            lastEnd = matcher.end();
+        }
+        String lastStep = classAnalysis.substring(lastEnd).trim();
+        if (!lastStep.isEmpty()) parts.add(lastStep);
+        
+        // Handle semicolon-separated branches
+        for (int i = 0; i < parts.size(); i++) {
+            String part = parts.get(i);
+            // Check if this part contains branches (semicolon separated)
+            if (part.contains(";") && part.contains(":")) {
+                String[] branches = part.split("\s*;\s*");
+                for (String branch : branches) {
+                    branch = branch.trim();
+                    if (branch.contains(":")) {
+                        String[] bv = branch.split(":", 2);
+                        System.out.println("  " + ColorUtil.info("├ " + bv[0].trim() + ":") + " " + bv[1].trim());
+                    } else {
+                        System.out.println("  " + ColorUtil.info("├") + " " + branch);
+                    }
+                }
+            } else {
+                // Determine if it's input/output or intermediate step
+                if (i == 0) {
+                    System.out.println("  " + ColorUtil.certain("⬇ 输入: ") + part);
+                } else if (i == parts.size() - 1) {
+                    System.out.println("  " + ColorUtil.business("⬆ 输出: ") + part);
+                } else {
+                    System.out.println("  " + ColorUtil.info("→ ") + part);
+                }
+            }
+        }
+        System.out.println();
+    }
     /**
      * 格式化分析结果为可读的分section输出
      * 
