@@ -6,6 +6,7 @@ import java.sql.*;
 import java.util.*;
 import java.util.logging.*;
 import com.codelens.common.utils.ColorUtil;
+import com.codelens.common.utils.MethodFilter;
 import java.util.regex.*;
 
 /**
@@ -262,7 +263,7 @@ public class CallerFinder {
             String detail = filePath + ":" + lineNumber + "  " + description;
             
             // 判断是否为基础设施调用（getter/setter/JDK/工具库）
-            if (isInfrastructure(description)) {
+            if (MethodFilter.isInfrastructureCall(description, null)) {
                 typeLabel = ColorUtil.framework("[" + type.label + "]");
                 detail = ColorUtil.framework(detail);
             }
@@ -290,18 +291,4 @@ public class CallerFinder {
     /**
      * 判断是否为基础设施调用（getter/setter/JDK/工具库）
      */
-    private static boolean isInfrastructure(String description) {
-        if (description == null) return false;
-        // getter/setter 模式：calls getXXX / setXXX / isXXX
-        if (description.matches(".*\\b(get|set|is)[A-Z]\\w*.*")) return true;
-        // JDK / 工具库包名
-        if (description.startsWith("import java.") || description.startsWith("import javax.")) return true;
-        if (description.startsWith("import org.apache.commons.")) return true;
-        if (description.startsWith("import com.google.common.")) return true;
-        if (description.startsWith("import org.slf4j.")) return true;
-        if (description.contains("java.lang.System.") || description.contains("java.util.")) return true;
-        if (description.contains("org.apache.commons.")) return true;
-        if (description.contains("com.google.common.")) return true;
-        return false;
-    }
 }

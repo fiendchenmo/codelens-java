@@ -1,5 +1,7 @@
 package com.codelens;
 
+
+import com.codelens.common.utils.MethodFilter;
 import com.github.javaparser.StaticJavaParser;
 import com.github.javaparser.ast.CompilationUnit;
 import com.github.javaparser.ast.body.ClassOrInterfaceDeclaration;

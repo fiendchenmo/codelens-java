@@ -1,5 +1,7 @@
 package com.codelens;
 
+import com.codelens.common.utils.MethodFilter;
+
 import com.github.javaparser.StaticJavaParser;
 import com.github.javaparser.ast.CompilationUnit;
 import com.github.javaparser.ast.body.ClassOrInterfaceDeclaration;
@@ -289,7 +291,7 @@ public class CallIndex {
                 String methodName = method.getNameAsString();
                 int lineNumber = method.getRange().map(r -> r.begin.line).orElse(0);
                 
-                if (!isTrivialMethod(methodName)) {
+                if (!MethodFilter.isTrivialCall(methodName)) {
                     entries.add(new IndexEntry(methodName, TYPE_METHOD, filePath, lineNumber));
                 }
             }
@@ -299,7 +301,7 @@ public class CallIndex {
                 int lineNumber = call.getRange().map(r -> r.begin.line).orElse(0);
                 String methodName = call.getNameAsString();
                 
-                if (!isTrivialMethod(methodName)) {
+                if (!MethodFilter.isTrivialCall(methodName)) {
                     Optional<Expression> scopeOpt = call.getScope();
                     if (scopeOpt.isPresent()) {
                         Expression scope = scopeOpt.get();
@@ -326,12 +328,6 @@ public class CallIndex {
         return entries;
     }
     
-    private boolean isTrivialMethod(String name) {
-        if (name.startsWith("get") && name.length() > 3 && Character.isUpperCase(name.charAt(3))) return true;
-        if (name.startsWith("set") && name.length() > 3 && Character.isUpperCase(name.charAt(3))) return true;
-        if (name.startsWith("is") && name.length() > 2 && Character.isUpperCase(name.charAt(2))) return true;
-        return false;
-    }
     
     private void deleteFileIndex(String filePath) throws SQLException {
         try (PreparedStatement ps = conn.prepareStatement(
