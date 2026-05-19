@@ -147,7 +147,11 @@ public class ConfidenceAnnotator {
                 ai.reason = issue.actualValue != null
                     ? "行号正确，但字段名不匹配: " + issue.actualValue
                     : issue.issue;
-                ai.lineOffset = 0;
+                if (issue.claimedLine > sourceLines.length) {
+                    ai.lineOffset = issue.claimedLine - sourceLines.length;
+                } else {
+                    ai.lineOffset = 0;
+                }
             } else {
                 String lineStr = item.get("line");
                 if (lineStr != null && sourceLines != null) {
@@ -197,7 +201,11 @@ public class ConfidenceAnnotator {
             if (issue != null) {
                 ai.confidence = issue.confidence;
                 ai.reason = issue.issue;
-                ai.lineOffset = 0;
+                if (issue.claimedLine > sourceLines.length) {
+                    ai.lineOffset = issue.claimedLine - sourceLines.length;
+                } else {
+                    ai.lineOffset = 0;
+                }
             } else {
                 ai.confidence = Confidence.HIGH;
                 ai.reason = "L1 校验通过";
@@ -228,7 +236,11 @@ public class ConfidenceAnnotator {
             if (issue != null) {
                 ai.confidence = issue.confidence;
                 ai.reason = issue.issue;
-                ai.lineOffset = 0;
+                if (issue.claimedLine > sourceLines.length) {
+                    ai.lineOffset = issue.claimedLine - sourceLines.length;
+                } else {
+                    ai.lineOffset = 0;
+                }
             } else {
                 ai.confidence = Confidence.MEDIUM;
                 ai.reason = "L1 未覆盖";
