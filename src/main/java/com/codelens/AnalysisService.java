@@ -2,6 +2,7 @@ package com.codelens;
 
 import com.codelens.common.validators.EvidenceValidator;
 import com.codelens.common.validators.ConfidenceAnnotator;
+import com.codelens.common.normalizers.OutputNormalizer;
 import com.codelens.common.prompts.SystemPrompt;
 import com.codelens.SummaryCache;
 import com.codelens.common.utils.ColorUtil;
@@ -107,11 +108,12 @@ public class AnalysisService {
                 System.out.println("📦 使用缓存摘要 (可通过 --no-cache 禁用)");
                 
                 // 格式化展示缓存的分析内容（与 LLM 新调用保持一致）
-                String prettyCached = JsonFormatter.prettyPrintJson(cachedSummary);
+                String normalized = OutputNormalizer.normalize(cachedSummary);
+                String prettyCached = JsonFormatter.prettyPrintJson(normalized);
                 System.out.println(ColorUtil.heading("LLM 分析（缓存）"));
                 System.out.println(prettyCached);
                 
-                String mergedResult = JsonFormatter.mergeCallersToJson(cachedSummary, callers);
+                String mergedResult = JsonFormatter.mergeCallersToJson(normalized, callers);
                 
                 // 验证和标注
                 if (enableValidation && !noValidate) {
@@ -144,8 +146,11 @@ public class AnalysisService {
                 return "{}";
             }
             
+            // 输出归一化（method_call 迁移等）
+            String normalized = OutputNormalizer.normalize(jsonResult);
+
             // 格式化输出
-            String prettyJson = JsonFormatter.prettyPrintJson(jsonResult);
+            String prettyJson = JsonFormatter.prettyPrintJson(normalized);
             
             // 合并 callers
             String mergedResult = JsonFormatter.mergeCallersToJson(prettyJson, callers);
