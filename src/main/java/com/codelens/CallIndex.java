@@ -367,7 +367,7 @@ public class CallIndex implements AutoCloseable {
      */
     private String escapeLikePattern(String pattern) {
         if (pattern == null) return "";
-        return pattern.replace("\\", "\\\\").replace("%", "\%").replace("_", "\_");
+        return pattern.replace("\\", "\\\\");
     }
 
     public List<IndexResult> findCallers(String methodName) throws SQLException {

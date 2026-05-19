@@ -246,7 +246,7 @@ public class CodeLensCli {
                 true // enable validation
             );
             
-            if (jsonResult != null && !jsonResult.isEmpty() && !"{}".equals(jsonResult)) {
+            if (jsonResult != null && !jsonResult.isEmpty() && !"{ }".equals(jsonResult)) {
                 System.out.println(ColorUtil.heading("━━━ 分析结果 ━━━"));
                 System.out.println(jsonResult);
             }
@@ -316,15 +316,16 @@ public class CodeLensCli {
         
         try (CallIndex indexer = new CallIndex(projectRoot)) {
             CallerFinder searcher = new CallerFinder(indexer, projectRoot);
-        List<CallerFinder.CallerInfo> callers = searcher.findCallers(className);
-        
-        if (callers.isEmpty()) {
-            System.out.println("未找到调用该类的代码");
-        } else {
-            System.out.println("找到 " + callers.size() + " 处调用:");
-            for (CallerFinder.CallerInfo caller : callers) {
-                System.out.println("  " + caller.filePath + ":" + caller.lineNumber);
-                System.out.println("    " + caller.description);
+            List<CallerFinder.CallerInfo> callers = searcher.findCallers(className);
+            
+            if (callers.isEmpty()) {
+                System.out.println("未找到调用该类的代码");
+            } else {
+                System.out.println("找到 " + callers.size() + " 处调用:");
+                for (CallerFinder.CallerInfo caller : callers) {
+                    System.out.println("  " + caller.filePath + ":" + caller.lineNumber);
+                    System.out.println("    " + caller.description);
+                }
             }
         }
     }
@@ -368,34 +369,36 @@ public class CodeLensCli {
             System.out.println("文件: " + filePath);
             System.out.println("项目根: " + projectRoot);
             
-            // 1. 建立索引
-            try (CallIndex indexer = new CallIndex(projectRoot)) {
-            Path srcRoot = JavaParserService.findSrcRoot(sourceFile.toPath());
-            if (srcRoot != null && srcRoot.toFile().exists()) {
-                System.out.println("\n" + ColorUtil.heading("━━━ Step 1: 建立索引 ━━━"));
-                indexer.indexDirectory(srcRoot);
-            }
-            
-            // 2. 提取类名
-            String className = JavaParserService.extractClassName(sourceFile);
-            System.out.println("\n" + ColorUtil.heading("━━━ Step 2: 查找调用者 ━━━"));
-            System.out.println("查找: " + className);
-            
-            // 3. 查找调用者
+            // 声明 callers 变量
             List<CallerFinder.CallerInfo> callers = new ArrayList<>();
-            if (projectRoot.toFile().exists()) {
-                CallerFinder searcher = new CallerFinder(indexer, projectRoot);
-                callers = searcher.findCallers(className);
-                if (callers.isEmpty()) {
-                    System.out.println("未找到调用该类的代码");
-                } else {
-                    System.out.println("找到 " + callers.size() + " 处调用:");
-                    for (CallerFinder.CallerInfo caller : callers) {
-                        System.out.println("  " + caller.filePath + ":" + caller.lineNumber);
+            
+            // 1. 建立索引并查找调用者
+            try (CallIndex indexer = new CallIndex(projectRoot)) {
+                Path srcRoot = JavaParserService.findSrcRoot(sourceFile.toPath());
+                if (srcRoot != null && srcRoot.toFile().exists()) {
+                    System.out.println("\n" + ColorUtil.heading("━━━ Step 1: 建立索引 ━━━"));
+                    indexer.indexDirectory(srcRoot);
+                }
+                
+                // 2. 提取类名
+                String className = JavaParserService.extractClassName(sourceFile);
+                System.out.println("\n" + ColorUtil.heading("━━━ Step 2: 查找调用者 ━━━"));
+                System.out.println("查找: " + className);
+                
+                // 3. 查找调用者
+                if (projectRoot.toFile().exists()) {
+                    CallerFinder searcher = new CallerFinder(indexer, projectRoot);
+                    callers = searcher.findCallers(className);
+                    if (callers.isEmpty()) {
+                        System.out.println("未找到调用该类的代码");
+                    } else {
+                        System.out.println("找到 " + callers.size() + " 处调用:");
+                        for (CallerFinder.CallerInfo caller : callers) {
+                            System.out.println("  " + caller.filePath + ":" + caller.lineNumber);
+                        }
                     }
                 }
-            }
-            }
+            } // try-with-resources 自动关闭 indexer
             
             // 4. 读取源代码
             System.out.println("\n" + ColorUtil.heading("━━━ Step 3: LLM 分析 ━━━"));
@@ -415,12 +418,11 @@ public class CodeLensCli {
                 true // enable validation
             );
             
-            if (jsonResult != null && !jsonResult.isEmpty() && !"{}".equals(jsonResult)) {
+            if (jsonResult != null && !jsonResult.isEmpty() && !"{ }".equals(jsonResult)) {
                 System.out.println("\n" + ColorUtil.heading("━━━ 分析结果 ━━━"));
                 System.out.println(jsonResult);
             }
             
-            indexer.close();
         } catch (Exception e) {
             System.out.println("⚠️ JavaParser 解析或 LLM 分析失败: " + e.getMessage());
             LOGGER.log(Level.SEVERE, "分析失败", e);
