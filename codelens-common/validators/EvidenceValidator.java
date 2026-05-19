@@ -29,7 +29,7 @@ public class EvidenceValidator {
     private static final Gson GSON = new GsonBuilder().create();
 
     public enum Confidence {
-        CERTAIN, HIGH, MEDIUM, LOW
+        CERTAIN, HIGH, MEDIUM, LOW, UNKNOWN
     }
 
     public static class ValidationIssue {
@@ -60,7 +60,7 @@ public class EvidenceValidator {
         public int passedCount = 0;
 
         public Confidence overallConfidence() {
-            if (totalChecked == 0) return Confidence.CERTAIN;
+            if (totalChecked == 0) return Confidence.UNKNOWN;
             double passRate = (double) passedCount / totalChecked;
             if (passRate >= 1.0) return Confidence.CERTAIN;
             if (passRate >= 0.8) return Confidence.HIGH;
@@ -76,7 +76,8 @@ public class EvidenceValidator {
                 case CERTAIN: label = "[OK] CERTAIN"; break;
                 case HIGH:    label = "[!!] HIGH";    break;
                 case MEDIUM:  label = "[!] MEDIUM";  break;
-                default:      label = "[XX] LOW";     break;
+                case LOW:     label = "[XX] LOW";     break;
+                default:      label = "[??] UNKNOWN"; break;
             }
             sb.append("校验结果: ").append(label)
               .append(" (").append(passedCount).append("/").append(totalChecked).append(" 通过)\n");
@@ -84,8 +85,9 @@ public class EvidenceValidator {
                 for (ValidationIssue issue : issues) {
                     String prefix;
                     switch (issue.confidence) {
-                        case LOW:    prefix = "[XX]"; break;
-                        case MEDIUM: prefix = "[!]"; break;
+                        case LOW:     prefix = "[XX]"; break;
+                        case UNKNOWN: prefix = "[??]"; break;
+                        case MEDIUM:  prefix = "[!]"; break;
                         default:     prefix = "[!!]"; break;
                     }
                     sb.append(prefix).append(" ").append(issue.toString()).append("\n");
