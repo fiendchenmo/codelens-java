@@ -23,11 +23,20 @@ import java.util.*;
  * - model: 使用的模型名
  * - timestamp: 缓存时间
  * - result: LLM 返回的 JSON 结果
+ * 
+ * 淘汰机制：
+ * - TTL: 7天（过期自动删除）
+ * - maxEntries: 1000（超出时删除最旧的缓存文件）
  */
 public class SummaryCache {
 
     private static final String CACHE_DIR = "cache";
     private static final Gson GSON = new GsonBuilder().create();
+    
+    // TTL: 7天（毫秒）
+    private static final long TTL_MILLIS = 7 * 24 * 60 * 60 * 1000L;
+    // 最大缓存条目数
+    private static final int MAX_ENTRIES = 1000;
 
     private final Path cacheRoot;
     private final boolean enabled;
@@ -83,6 +92,16 @@ public class SummaryCache {
             
             // 校验 prompt hash (P1-5 修复)
             if (!currentPromptHash.equals(entry.promptHash)) return null;
+            
+            // 检查 TTL 是否过期 (P1-6 修复)
+            if (isExpired(entry.timestamp)) {
+                // 过期，删除缓存文件
+                Files.deleteIfExists(cacheFile);
+                return null;
+            }
+
+            // 更新 lastModified 时间，实现 LRU
+            Files.setLastModifiedTime(cacheFile, java.nio.file.attribute.FileTime.fromMillis(System.currentTimeMillis()));
 
             return entry;
         } catch (Exception e) {
@@ -128,8 +147,43 @@ public class SummaryCache {
 
             String cacheContent = GSON.toJson(cacheData);
             Files.write(cacheFile, cacheContent.getBytes("UTF-8"));
+            
+            // P1-6: 检查并执行淘汰
+            enforceMaxEntries();
         } catch (Exception e) {
             // 缓存写入失败不影响流程
+        }
+    }
+    
+    /**
+     * 检查缓存是否过期
+     * @param timestamp 缓存时间戳
+     * @return true 表示过期
+     */
+    private boolean isExpired(long timestamp) {
+        return (System.currentTimeMillis() - timestamp) > TTL_MILLIS;
+    }
+    
+    /**
+     * 强制执行最大条目数限制（LRU 淘汰）
+     */
+    private void enforceMaxEntries() {
+        try {
+            File[] files = cacheRoot.toFile().listFiles((dir, name) -> name.endsWith(".json"));
+            if (files == null || files.length <= MAX_ENTRIES) {
+                return;
+            }
+            
+            // 按 lastModified 时间排序（最旧的在前）
+            Arrays.sort(files, (f1, f2) -> Long.compare(f1.lastModified(), f2.lastModified()));
+            
+            // 删除超出部分的旧缓存
+            int toDelete = files.length - MAX_ENTRIES;
+            for (int i = 0; i < toDelete; i++) {
+                files[i].delete();
+            }
+        } catch (Exception e) {
+            // 忽略错误
         }
     }
 
