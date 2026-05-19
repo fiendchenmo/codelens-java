@@ -239,14 +239,14 @@ public class CodeLensCli {
             
             // 解析文件结构概览
             List<JavaParserService.ClassInfo> classInfos = JavaParserService.parseFile(sourceFile);
+            String packageName = JavaParserService.getPackageName(sourceFile);
             if (!classInfos.isEmpty()) {
-                printStructOverview(classInfos);
+                printStructOverview(packageName, classInfos);
             }
             
             System.out.println(ColorUtil.heading("━━━ CodeLens 分析中 ━━━"));
             System.out.println("文件: " + filePath);
-            System.out.println("模型: " + (model != null ? model : "deepseek-v4-flash"));
-            System.out.println();
+            printLlmConfig(apiUrl, model, temperature);
             
             // 调用分析服务
             String jsonResult = AnalysisService.analyzeFile(
@@ -433,9 +433,10 @@ public class CodeLensCli {
             
             // 4. 解析结构 + 读取源代码
             List<JavaParserService.ClassInfo> classInfos = JavaParserService.parseFile(sourceFile);
+            String packageName = JavaParserService.getPackageName(sourceFile);
             if (!classInfos.isEmpty()) {
                 System.out.println();
-                printStructOverview(classInfos);
+                printStructOverview(packageName, classInfos);
             }
             
             System.out.println("\n" + ColorUtil.heading("━━━ Step 3: LLM 分析 ━━━"));
@@ -475,39 +476,71 @@ public class CodeLensCli {
 
 
     /**
-     * 打印结构概览：类的方法列表，区分业务方法和框架方法
+     * 打印结构概览：包名 + 字段 + 方法 + 业务调用，区分业务和框架
      */
-    private static void printStructOverview(List<JavaParserService.ClassInfo> classInfos) {
+    private static void printStructOverview(String packageName, List<JavaParserService.ClassInfo> classInfos) {
+        System.out.println("包名: " + ColorUtil.info(packageName));
+        
         for (JavaParserService.ClassInfo ci : classInfos) {
-            System.out.println(ColorUtil.heading("━━━ 结构概览: " + ci.name + " ━━━"));
+            System.out.println("\n" + ColorUtil.heading((ci.isInterface ? "接口" : "类") + ": " + ci.name));
             
-            int totalMethods = ci.methods.size();
+            // 字段
+            if (!ci.fields.isEmpty()) {
+                System.out.println("  字段:");
+                for (JavaParserService.FieldInfo f : ci.fields) {
+                    System.out.println("    L" + f.line + " | " + f.name + ": " + ColorUtil.framework(f.type));
+                }
+            }
+            
+            // 方法（区分业务/框架）
             int businessCount = 0;
             int trivialCount = 0;
-            
-            for (JavaParserService.MethodInfo m : ci.methods) {
-                boolean trivial = MethodFilter.isTrivialCall(m.name);
-                if (trivial) {
-                    trivialCount++;
-                } else {
-                    businessCount++;
+            if (!ci.methods.isEmpty()) {
+                System.out.println("  方法:");
+                for (JavaParserService.MethodInfo m : ci.methods) {
+                    boolean trivial = MethodFilter.isTrivialCall(m.name);
+                    if (trivial) {
+                        trivialCount++;
+                        System.out.println("    L" + m.line + " | " + ColorUtil.framework(m.name + "(" + m.params + ")"));
+                    } else {
+                        businessCount++;
+                        String annot = (m.annotations != null && !m.annotations.isEmpty()) ? m.annotations + " " : "";
+                        System.out.println("    L" + m.line + " | " + ColorUtil.business(annot + m.name + "(" + m.params + ")"));
+                    }
                 }
-                
-                String lineInfo = "L" + m.line;
-                String vis = m.visibility != null ? m.visibility : "";
-                String annot = (m.annotations != null && !m.annotations.isEmpty()) ? m.annotations + " " : "";
-                
-                if (trivial) {
-                    System.out.println("  " + ColorUtil.framework(lineInfo + " " + vis + " " + m.name + "(" + m.params + ")"));
-                } else {
-                    System.out.println("  " + ColorUtil.business(lineInfo + " " + vis + " " + annot + m.name + "(" + m.params + ")"));
+            }
+            
+            // 业务调用（过滤getter/setter，区分业务/框架调用）
+            if (!ci.calls.isEmpty()) {
+                System.out.println("  业务调用（已过滤getter/setter/框架调用）:");
+                for (JavaParserService.CallInfo c : ci.calls) {
+                    String prefix = c.caller != null ? c.caller + "." : "";
+                    String callDisplay = prefix + c.methodName + "()";
+                    if (MethodFilter.isInfrastructureCall(c.methodName, c.caller)) {
+                        System.out.println("    L" + c.line + " | " + ColorUtil.framework("→ " + callDisplay));
+                    } else {
+                        System.out.println("    L" + c.line + " | " + ColorUtil.business("→ " + callDisplay));
+                    }
                 }
             }
             
             System.out.println();
-            System.out.println("  方法统计: " + ColorUtil.business(businessCount + " 业务") + " / " + ColorUtil.framework(trivialCount + " 框架") + " (共 " + totalMethods + " 个)");
+            System.out.println("  方法统计: " + ColorUtil.business(businessCount + " 业务") + " / " + ColorUtil.framework(trivialCount + " 框架") + " (共 " + ci.methods.size() + " 个)");
             System.out.println();
         }
+    }
+    
+    /**
+     * 打印 LLM 配置信息
+     */
+    private static void printLlmConfig(String apiUrl, String model, double temperature) {
+        String url = apiUrl != null ? apiUrl : LLMClient.getDefaultApiUrl();
+        String mdl = model != null ? model : LLMClient.getDefaultModel();
+        double temp = Double.isNaN(temperature) ? LLMClient.getDefaultTemperature() : temperature;
+        System.out.println(ColorUtil.info("API 地址: ") + url);
+        System.out.println(ColorUtil.info("模型: ") + mdl);
+        System.out.println(ColorUtil.info("温度: ") + temp);
+        System.out.println();
     }
 
     /**
