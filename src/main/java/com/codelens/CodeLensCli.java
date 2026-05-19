@@ -34,6 +34,24 @@ import java.util.logging.Logger;
 public class CodeLensCli {
     
     private static final Logger LOGGER = Logger.getLogger(CodeLensCli.class.getName());
+    
+    /**
+     * 在当前目录及其子目录中查找 .codelens 目录
+     * 返回 .codelens 目录所在的父目录
+     */
+    private static Path findCodelensDirInSubtree(Path startPath) {
+        try {
+            return Files.walk(startPath, 10)
+                .filter(p -> p.getFileName() != null && p.getFileName().toString().equals(".codelens"))
+                .filter(Files::isDirectory)
+                .map(Path::getParent)
+                .findFirst()
+                .orElse(null);
+        } catch (Exception e) {
+            LOGGER.warning("搜索 .codelens 目录失败: " + e.getMessage());
+            return null;
+        }
+    }
 
     public static void main(String[] args) throws Exception {
         // 检测 --no-color 和 --no-validate 参数
@@ -258,6 +276,11 @@ public class CodeLensCli {
         System.out.println("目录: " + dirPath);
         
         Path projectRoot = JavaParserService.findProjectRoot(dir.toPath());
+        if (projectRoot == null) {
+            // 如果没有 .codelens 目录，使用当前目录作为项目根
+            projectRoot = dir.toPath().toAbsolutePath().normalize();
+            System.out.println("⚠️ 未找到 .codelens 目录，使用传入目录作为项目根: " + projectRoot);
+        }
         CallIndex indexer = new CallIndex(projectRoot);
         try {
             indexer.indexDirectory(dir.toPath());
@@ -276,10 +299,17 @@ public class CodeLensCli {
         
         String className = args[1];
         
-        // 查找项目根目录
-        Path projectRoot = JavaParserService.findProjectRoot(Paths.get("").toAbsolutePath());
+        // 查找项目根目录（支持嵌套的 .codelens 目录）
+        Path startPath = Paths.get("").toAbsolutePath();
+        Path projectRoot = JavaParserService.findProjectRoot(startPath);
+        
+        // 如果没找到，尝试在子目录中搜索 .codelens
         if (projectRoot == null) {
-            System.out.println("⚠️ 未找到项目根目录（需要包含 .codelens 索引目录）");
+            projectRoot = findCodelensDirInSubtree(startPath);
+        }
+        
+        if (projectRoot == null) {
+            System.out.println("⚠️ 未找到 .codelens 索引目录");
             return;
         }
         
