@@ -1,5 +1,6 @@
 package com.codelens;
 
+import com.codelens.common.prompts.SystemPrompt;
 import com.google.gson.Gson;
 import com.google.gson.GsonBuilder;
 import com.google.gson.JsonObject;
@@ -18,6 +19,7 @@ import java.util.*;
  * 缓存结构：{projectRoot}/.codelens/cache/{fileHash}.json
  * 每个缓存文件包含：
  * - source_hash: 源文件内容 MD5
+ * - prompt_hash: SystemPrompt.build() 的 MD5（版本号，用于 prompt 更新后失效缓存）
  * - model: 使用的模型名
  * - timestamp: 缓存时间
  * - result: LLM 返回的 JSON 结果
@@ -29,6 +31,9 @@ public class SummaryCache {
 
     private final Path cacheRoot;
     private final boolean enabled;
+    
+    // SystemPrompt.build() 的 MD5 缓存，避免重复计算
+    private static String promptHash = null;
 
     public SummaryCache(Path projectRoot, boolean enabled) {
         this.enabled = enabled;
@@ -37,6 +42,16 @@ public class SummaryCache {
         } else {
             this.cacheRoot = null;
         }
+    }
+    
+    /**
+     * 获取 SystemPrompt.build() 的 MD5 哈希值
+     */
+    private synchronized String getPromptHash() {
+        if (promptHash == null) {
+            promptHash = md5(SystemPrompt.build());
+        }
+        return promptHash;
     }
 
     /**
@@ -51,9 +66,10 @@ public class SummaryCache {
 
         try {
             String sourceHash = md5(sourceCode);
+            String currentPromptHash = getPromptHash();
             String fileName = Paths.get(filePath).getFileName().toString();
-            // 缓存文件名：{sourceHash}_{fileName}.json
-            Path cacheFile = cacheRoot.resolve(sourceHash + "_" + fileName.replace(".java", "") + ".json");
+            // 缓存文件名：{sourceHash}_{promptHash}_{fileName}.json (P1-5 修复)
+            Path cacheFile = cacheRoot.resolve(sourceHash + "_" + currentPromptHash + "_" + fileName.replace(".java", "") + ".json");
             if (!Files.exists(cacheFile)) return null;
 
             // 读取缓存
@@ -64,6 +80,9 @@ public class SummaryCache {
             // 校验 source hash 和 model
             if (!sourceHash.equals(entry.sourceHash)) return null;
             if (model != null && !model.equals(entry.model)) return null;
+            
+            // 校验 prompt hash (P1-5 修复)
+            if (!currentPromptHash.equals(entry.promptHash)) return null;
 
             return entry;
         } catch (Exception e) {
@@ -85,14 +104,16 @@ public class SummaryCache {
         try {
             Files.createDirectories(cacheRoot);
             String sourceHash = md5(sourceCode);
+            String currentPromptHash = getPromptHash();
             String fileName = Paths.get(filePath).getFileName().toString();
-            Path cacheFile = cacheRoot.resolve(sourceHash + "_" + fileName.replace(".java", "") + ".json");
+            Path cacheFile = cacheRoot.resolve(sourceHash + "_" + currentPromptHash + "_" + fileName.replace(".java", "") + ".json");
 
             long timestamp = System.currentTimeMillis();
 
             // 用 Gson 序列化为 JSON
             Map<String, Object> cacheData = new LinkedHashMap<>();
             cacheData.put("source_hash", sourceHash);
+            cacheData.put("prompt_hash", currentPromptHash); // P1-5: 保存 prompt hash
             cacheData.put("file", filePath);
             cacheData.put("model", model != null ? model : "unknown");
             cacheData.put("timestamp", timestamp);
@@ -119,8 +140,9 @@ public class SummaryCache {
         if (!enabled || cacheRoot == null) return false;
         try {
             String sourceHash = md5(sourceCode);
+            String currentPromptHash = getPromptHash();
             String fileName = Paths.get(filePath).getFileName().toString();
-            Path cacheFile = cacheRoot.resolve(sourceHash + "_" + fileName.replace(".java", "") + ".json");
+            Path cacheFile = cacheRoot.resolve(sourceHash + "_" + currentPromptHash + "_" + fileName.replace(".java", "") + ".json");
             if (Files.exists(cacheFile)) {
                 Files.delete(cacheFile);
                 return true;
@@ -167,6 +189,7 @@ public class SummaryCache {
 
     public static class CacheEntry {
         public String sourceHash;
+        public String promptHash; // P1-5: 新增字段
         public String file;
         public String model;
         public long timestamp;
@@ -181,6 +204,7 @@ public class SummaryCache {
 
             CacheEntry entry = new CacheEntry();
             entry.sourceHash = getStringField(obj, "source_hash");
+            entry.promptHash = getStringField(obj, "prompt_hash"); // P1-5: 解析 prompt_hash
             entry.file = getStringField(obj, "file");
             entry.model = getStringField(obj, "model");
 
