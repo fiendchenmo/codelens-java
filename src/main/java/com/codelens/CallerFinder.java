@@ -7,7 +7,9 @@ import java.util.*;
 import java.util.logging.*;
 import com.codelens.common.utils.ColorUtil;
 import com.codelens.common.utils.MethodFilter;
-import java.util.regex.*;
+import com.github.javaparser.StaticJavaParser;
+import com.github.javaparser.ast.CompilationUnit;
+import com.github.javaparser.ast.body.ClassOrInterfaceDeclaration;
 
 /**
  * 反向依赖查询 - findCallers
@@ -113,44 +115,40 @@ public class CallerFinder {
     }
     
     /**
-     * 检查类是否实现了指定接口
+     * 检查类是否实现了指定接口（使用 JavaParser）
      */
     private boolean implementsInterface(String filePath, String className, String interfaceName) 
             throws IOException {
         
-        // 使用正则快速检查
         try {
-            List<String> lines = Files.readAllLines(Paths.get(filePath));
-            String content = String.join("\n", lines);
+            String content = Files.readString(Paths.get(filePath));
+            CompilationUnit cu = StaticJavaParser.parse(content);
             
-            // 查找 implements 语句
-            Pattern implPattern = Pattern.compile(
-                "class\\s+" + className + "\\s+implements\\s+([^\\{]+)");
-            Matcher m = implPattern.matcher(content);
-            
-            while (m.find()) {
-                String interfaces = m.group(1);
-                if (interfaces.contains(interfaceName)) {
-                    return true;
-                }
-            }
-            
-            // 查找 extends 语句（接口继承）
-            Pattern extPattern = Pattern.compile(
-                "interface\\s+" + className + "\\s+extends\\s+([^\\{]+)");
-            Matcher m2 = extPattern.matcher(content);
-            
-            while (m2.find()) {
-                String interfaces = m2.group(1);
-                if (interfaces.contains(interfaceName)) {
-                    return true;
-                }
-            }
-        } catch (IOException e) {
-            LOGGER.warning("Failed to read file: " + filePath);
+            // 查找匹配的类/接口声明
+            return cu.findAll(ClassOrInterfaceDeclaration.class).stream()
+                .filter(cid -> {
+                    String declarationName = cid.getNameAsString();
+                    // 匹配类名或内部类路径（如 OuterClass.InnerClass）
+                    return declarationName.equals(className) || 
+                           declarationName.replace("$", ".").equals(className);
+                })
+                .anyMatch(cid -> {
+                    if (cid.isInterface()) {
+                        // 接口继承：检查 extends 列表
+                        return cid.getExtendedTypes().stream()
+                            .anyMatch(t -> t.getNameAsString().equals(interfaceName));
+                    } else {
+                        // 类实现：检查 implements 列表
+                        return cid.getImplementedTypes().stream()
+                            .anyMatch(t -> t.getNameAsString().equals(interfaceName));
+                    }
+                });
+                
+        } catch (Exception e) {
+            // 解析失败时跳过，静默处理
+            LOGGER.fine(() -> "Failed to parse file with JavaParser: " + filePath + " - " + e.getMessage());
+            return false;
         }
-        
-        return false;
     }
     
     /**
@@ -192,18 +190,26 @@ public class CallerFinder {
     }
     
     /**
-     * 检查是否为接口
+     * 检查是否为接口（使用 JavaParser）
      */
     private boolean isInterface(String className) throws SQLException {
         List<CallIndex.IndexResult> classes = callIndex.findAllClasses();
         for (CallIndex.IndexResult cls : classes) {
             if (cls.term.equals(className)) {
                 try {
-                    List<String> lines = Files.readAllLines(Paths.get(cls.filePath));
-                    String content = String.join("\n", lines);
-                    return content.contains("interface " + className);
-                } catch (IOException e) {
-                    return false;
+                    String content = Files.readString(Paths.get(cls.filePath));
+                    CompilationUnit cu = StaticJavaParser.parse(content);
+                    
+                    return cu.findAll(ClassOrInterfaceDeclaration.class).stream()
+                        .anyMatch(cid -> {
+                            String declarationName = cid.getNameAsString();
+                            return (declarationName.equals(className) || 
+                                   declarationName.replace("$", ".").equals(className)) 
+                                   && cid.isInterface();
+                        });
+                } catch (Exception e) {
+                    // 解析失败时跳过，静默处理
+                    LOGGER.fine(() -> "Failed to parse file: " + cls.filePath + " - " + e.getMessage());
                 }
             }
         }
@@ -249,7 +255,6 @@ public class CallerFinder {
         return sb.toString();
     }
     
-    // 内部类：调用方信息
     // 内部类：调用方信息
     public static class CallerInfo {
         public String filePath;
