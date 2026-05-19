@@ -122,7 +122,8 @@ public class AnalysisService {
                         System.out.println(ColorUtil.heading("━━━ L2 置信度标注 ━━━") + "\n");
                         System.out.println(ar.formatReport());
                     } catch (Exception e) {
-                        // 校验失败不影响主流程
+                        LOGGER.log(Level.WARNING, "验证/标注失败: " + e.getMessage(), e);
+                        System.out.println("⚠️ 验证/标注失败: " + e.getMessage());
                     }
                 }
                 
