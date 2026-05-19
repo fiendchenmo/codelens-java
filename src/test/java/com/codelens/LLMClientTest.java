@@ -99,8 +99,11 @@ class LLMClientTest {
         try {
             invokePrivate("extractContentField", String.class, json);
             fail("Expected LLMException for missing content field");
-        } catch (LLMException e) {
-            assertEquals(LLMException.ErrorType.PARSE_ERROR, e.getErrorType());
+        } catch (InvocationTargetException e) {
+            Throwable cause = e.getCause();
+            assertTrue(cause instanceof LLMException, "Expected LLMException but got: " + cause.getClass().getName());
+            LLMException llmEx = (LLMException) cause;
+            assertEquals(LLMException.ErrorType.PARSE_ERROR, llmEx.getErrorType());
         }
     }
     
