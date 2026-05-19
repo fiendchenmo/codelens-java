@@ -197,20 +197,16 @@ public class LLMClient {
      */
     private static String readResponseBody(HttpURLConnection conn, int statusCode) throws LLMException {
         try {
-            BufferedReader br;
-            if (statusCode >= 400) {
-                br = new BufferedReader(new InputStreamReader(conn.getErrorStream(), "UTF-8"));
-            } else {
-                br = new BufferedReader(new InputStreamReader(conn.getInputStream(), "UTF-8"));
+            java.io.InputStream inputStream = (statusCode >= 400) ? conn.getErrorStream() : conn.getInputStream();
+            if (inputStream == null) return "";
+            try (BufferedReader br = new BufferedReader(new InputStreamReader(inputStream, "UTF-8"))) {
+                StringBuilder sb = new StringBuilder();
+                String line;
+                while ((line = br.readLine()) != null) {
+                    sb.append(line);
+                }
+                return sb.toString();
             }
-            
-            StringBuilder sb = new StringBuilder();
-            String line;
-            while ((line = br.readLine()) != null) {
-                sb.append(line);
-            }
-            br.close();
-            return sb.toString();
         } catch (IOException e) {
             throw new LLMException(LLMException.ErrorType.NETWORK_ERROR, 
                 "读取响应失败", e);

@@ -169,10 +169,10 @@ public class CodeLensCli {
         System.out.println("用法:");
         System.out.println("  java -jar codelens.jar analyze <Java文件路径> [API_KEY] [--api-url=URL] [--model=MODEL] [--temperature=TEMP]");
         System.out.println("                              - 分析 Java 文件（使用 LLM）");
-        System.out.println("  java -jar codelens.jar index <目录路径>");
-        System.out.println("                              - 建立代码索引");
-        System.out.println("  java -jar codelens.jar callers <类名>");
-        System.out.println("                              - 查询反向依赖关系");
+        System.out.println("  java -jar codelens.jar index <目录路径> [--force]");
+        System.out.println("                              - 建立代码索引（--force 强制重建）");
+        System.out.println("  java -jar codelens.jar callers <类名> [--dir=<项目目录>]");
+        System.out.println("                              - 查询反向依赖关系（--dir 指定项目目录）");
         System.out.println("  java -jar codelens.jar full <Java文件路径> [API_KEY] [--api-url=URL] [--model=MODEL] [--temperature=TEMP]");
         System.out.println("                              - 一键完成 index + callers + analyze");
         System.out.println("  java -jar codelens.jar --help");
@@ -296,7 +296,7 @@ public class CodeLensCli {
         }
         CallIndex indexer = new CallIndex(projectRoot);
         try {
-            indexer.indexDirectory(dir.toPath());
+            indexer.indexDirectory(dir.toPath(), force);
             System.out.println("\n✅ 索引建立完成");
         } finally {
             indexer.close();
@@ -306,14 +306,25 @@ public class CodeLensCli {
     private static void handleCallers(String[] args) throws Exception {
         if (args.length < 2) {
             System.out.println("⚠️ 请提供类名");
-            System.out.println("用法: java -jar codelens.jar callers <类名>");
+            System.out.println("用法: java -jar codelens.jar callers <类名> [--dir=<项目目录>]");
             return;
         }
         
         String className = args[1];
+        String dirPath = null;
+        for (String arg : args) {
+            if (arg.startsWith("--dir=")) {
+                dirPath = arg.substring("--dir=".length());
+            }
+        }
         
-        // 查找项目根目录（支持嵌套的 .codelens 目录）
-        Path startPath = Paths.get("").toAbsolutePath();
+        // 查找项目根目录
+        Path startPath;
+        if (dirPath != null && !dirPath.isEmpty()) {
+            startPath = Paths.get(dirPath).toAbsolutePath().normalize();
+        } else {
+            startPath = Paths.get("").toAbsolutePath();
+        }
         Path projectRoot = JavaParserService.findProjectRoot(startPath);
         
         // 如果没找到，尝试在子目录中搜索 .codelens
@@ -323,6 +334,7 @@ public class CodeLensCli {
         
         if (projectRoot == null) {
             System.out.println("⚠️ 未找到 .codelens 索引目录");
+            System.out.println("请先使用 index 命令建立索引，或使用 --dir 指定项目目录");
             return;
         }
         
@@ -389,7 +401,7 @@ public class CodeLensCli {
             Path srcRoot = JavaParserService.findSrcRoot(sourceFile.toPath());
             if (srcRoot != null && srcRoot.toFile().exists()) {
                 System.out.println("\n" + ColorUtil.heading("━━━ Step 1: 建立索引 ━━━"));
-                indexer.indexDirectory(srcRoot);
+                indexer.indexDirectory(srcRoot, true);  // full command always forces reindex
             }
             
             // 2. 提取类名
