@@ -272,9 +272,15 @@ public class CodeLensCli {
         String dirPath = args[1];
         File dir = new File(dirPath);
         
-        if (!dir.exists() || !dir.isDirectory()) {
-            System.out.println("⚠️ 目录不存在: " + dirPath);
+        if (!dir.exists()) {
+            System.out.println("⚠️ 路径不存在: " + dirPath);
             return;
+        }
+
+        // 如果传入的是文件而非目录，自动取其父目录
+        if (dir.isFile()) {
+            dir = dir.getParentFile();
+            System.out.println("ℹ️ 传入的是文件，自动使用其所在目录: " + dir.getAbsolutePath());
         }
         
         System.out.println(ColorUtil.heading("━━━ 建立代码索引 ━━━"));
