@@ -129,7 +129,7 @@ public class AnalysisService {
                 return mergedResult;
             }
             
-            // 调用 LLM 分析
+            // 调用 LLM 分析（现在会抛出 LLMException）
             String jsonResult = callLLM(sourceCode, structContext, mainClass, apiKey, apiUrl, model, temperature);
             
             if (jsonResult == null || jsonResult.isEmpty()) {
@@ -169,6 +169,20 @@ public class AnalysisService {
             
             return mergedResult;
             
+        } catch (LLMException e) {
+            // LLM 异常：给用户明确提示，不让异常冒泡
+            LOGGER.log(Level.SEVERE, "LLM 调用失败: " + e.getErrorType(), e);
+            System.out.println("\n❌ LLM 调用失败");
+            System.out.println("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━");
+            System.out.println("错误类型: " + e.getErrorType().getDescription());
+            System.out.println("提示: " + e.getUserFriendlyMessage());
+            if (e.getStatusCode() > 0) {
+                System.out.println("状态码: " + e.getStatusCode());
+            }
+            System.out.println("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━");
+            System.out.println("\n请根据上述提示解决问题后重试。");
+            System.out.println("提示: 使用 --no-cache 可跳过缓存，强制重新分析。");
+            return "{}";
         } catch (Exception e) {
             LOGGER.log(Level.SEVERE, "分析失败", e);
             System.out.println("⚠️ 分析失败: " + e.getMessage());
@@ -202,125 +216,22 @@ public class AnalysisService {
             userPrompt.append(sourceCode);
             userPrompt.append("\n```\n");
             
-            // 调用 LLM
-            return callDeepSeekApi(
-                userPrompt.toString(),
-                systemPrompt,
+            // 调用 LLM（现在会抛出 LLMException）
+            return LLMClient.analyze(
                 apiKey,
+                systemPrompt,
+                userPrompt.toString(),
                 apiUrl,
                 model,
                 temperature
             );
             
+        } catch (LLMException e) {
+            // 重新抛出 LLMException，让上层处理
+            throw e;
         } catch (Exception e) {
             LOGGER.log(Level.SEVERE, "LLM 调用失败", e);
-            return null;
+            throw new LLMException(LLMException.ErrorType.UNKNOWN, "LLM 调用准备失败: " + e.getMessage(), e);
         }
-    }
-
-    /**
-     * 调用 DeepSeek API
-     */
-    private static String callDeepSeekApi(
-            String userMessage,
-            String systemPrompt,
-            String apiKey,
-            String apiUrl,
-            String model,
-            double temperature
-    ) {
-        try {
-            // 构建请求
-            Map<String, Object> requestBody = new HashMap<>();
-            requestBody.put("model", model != null ? model : "deepseek-v4-flash");
-            
-            List<Map<String, String>> messages = new ArrayList<>();
-            
-            // 系统消息
-            Map<String, String> systemMsg = new HashMap<>();
-            systemMsg.put("role", "system");
-            systemMsg.put("content", systemPrompt);
-            messages.add(systemMsg);
-            
-            // 用户消息
-            Map<String, String> userMsg = new HashMap<>();
-            userMsg.put("role", "user");
-            userMsg.put("content", userMessage);
-            messages.add(userMsg);
-            
-            requestBody.put("messages", messages);
-            
-            // 温度参数
-            if (!Double.isNaN(temperature)) {
-                requestBody.put("temperature", temperature);
-            } else {
-                requestBody.put("temperature", 0.1);
-            }
-            
-            // 构建 HTTP 请求
-            String actualApiUrl = apiUrl;
-            if (actualApiUrl == null || actualApiUrl.isEmpty()) {
-                actualApiUrl = "https://api.deepseek.com/v1/chat/completions";
-            }
-            
-            java.net.URL url = new java.net.URL(actualApiUrl);
-            java.net.HttpURLConnection conn = (java.net.HttpURLConnection) url.openConnection();
-            conn.setRequestMethod("POST");
-            conn.setRequestProperty("Content-Type", "application/json");
-            conn.setRequestProperty("Authorization", "Bearer " + apiKey);
-            conn.setDoOutput(true);
-            conn.setConnectTimeout(60000);
-            conn.setReadTimeout(120000);
-            
-            // 发送请求
-            Gson gson = new Gson();
-            try (java.io.OutputStream os = conn.getOutputStream()) {
-                byte[] input = gson.toJson(requestBody).getBytes("utf-8");
-                os.write(input, 0, input.length);
-            }
-            
-            // 读取响应
-            int responseCode = conn.getResponseCode();
-            if (responseCode == 200) {
-                try (java.io.BufferedReader br = new java.io.BufferedReader(
-                        new java.io.InputStreamReader(conn.getInputStream(), "utf-8"))) {
-                    StringBuilder response = new StringBuilder();
-                    String responseLine;
-                    while ((responseLine = br.readLine()) != null) {
-                        response.append(responseLine.trim());
-                    }
-                    
-                    // 解析响应
-                    Map<String, Object> respMap = gson.fromJson(response.toString(), Map.class);
-                    List<Map<String, Object>> choices = (List<Map<String, Object>>) respMap.get("choices");
-                    if (choices != null && !choices.isEmpty()) {
-                        Map<String, Object> message = (Map<String, Object>) choices.get(0).get("message");
-                        if (message != null) {
-                            return (String) message.get("content");
-                        }
-                    }
-                }
-            } else if (responseCode == 401) {
-                System.out.println("⚠️ API Key 无效或已过期");
-            } else if (responseCode == 429) {
-                System.out.println("⚠️ 请求过于频繁，请稍后重试");
-            } else {
-                System.out.println("⚠️ API 请求失败: " + responseCode);
-                try (java.io.BufferedReader br = new java.io.BufferedReader(
-                        new java.io.InputStreamReader(conn.getErrorStream(), "utf-8"))) {
-                    StringBuilder errorResponse = new StringBuilder();
-                    String line;
-                    while ((line = br.readLine()) != null) {
-                        errorResponse.append(line);
-                    }
-                    System.out.println("错误详情: " + errorResponse);
-                }
-            }
-            
-        } catch (Exception e) {
-            LOGGER.log(Level.SEVERE, "API 调用失败", e);
-            System.out.println("⚠️ API 调用失败: " + e.getMessage());
-        }
-        return null;
     }
 }
