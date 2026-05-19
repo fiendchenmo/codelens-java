@@ -22,8 +22,8 @@ public class SystemPrompt {
 
     /**
      * 构建两端共用的基础系统提示词
-     * 包含：角色定义 + JSON Schema + 核心分析规则(1-16)
-     * 
+     * 包含：角色定义 + JSON Schema + 核心分析规则(1-17)
+     *
      * 两端必须使用此方法作为 prompt 基础，在此基础上追加各自的特有规则
      */
     public static String buildBase() {
@@ -35,16 +35,17 @@ public class SystemPrompt {
 
     /**
      * 构建 CLI 端 LLM 分析用的完整系统提示词
-     * = buildBase() + CLI 特有规则(17-20)
+     * = buildBase() + CLI 特有规则(18-22)
      */
     public static String build() {
         return buildBase()
             + "CLI 端特有要求：\n"
-            + "17. 同一安全风险只列一条risk，在 description 中列举所有涉及方法，只标首个入口行号\n"
-            + "18. class_analysis 只写数据流路径，不要重复其他字段内容\n"
-            + "19. 架构改进建议必须包含 trade-off 分析：每个 suggestion 需说明解决了什么问题/"
+            + "18. 同一安全风险只列一条risk，在 description 中列举所有涉及方法，只标首个入口行号\n"
+            + "19. class_analysis 只写数据流路径，不要重复其他字段内容\n"
+            + "20. 架构改进建议必须包含 trade-off 分析：每个 suggestion 需说明解决了什么问题/"
             + "引入了什么新问题/适用前提条件\n"
-            + "20. keyMethods 必须包含方法上的关键注解（特别是 @Transactional、@Async、@Scheduled 等影响行为的注解）和可见性\n"
-            + "21. 只输出 JSON，不要 markdown 代码块包裹";
+            + "21. keyMethods 必须包含方法上的关键注解（特别是 @Transactional、@Async、@Scheduled 等影响行为的注解）和可见性\n"
+            + "22. 只输出 JSON，不要 markdown 代码块包裹";
     }
 }
+

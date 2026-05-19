@@ -152,7 +152,8 @@ public class CodeMetaData {
             + "优先保证 architecture_issues 和 risks 的完整性\n"
             + "16. class_analysis 必须用箭头(->)分隔数据流步骤，格式: 输入 -> 步骤1 -> 步骤2 -> ... -> 输出. "
             + "每个步骤应标注关键方法名或操作类型，如: DB查询(selectById) -> 缓存写入(redis.set) -> 返回结果. "
-            + "多分支用分号分隔，如: 输入 -> 分支A: ... ; 分支B: ... -> 输出";
+            + "多分支用分号分隔，如: 输入 -> 分支A: ... ; 分支B: ... -> 输出\n"
++ "17. dependencies 仅包含字段级别的依赖（字段注入/构造注入/静态方法调用），方法级别的调用关系放入 keyMethods.calls 数组。不要在 dependencies 中出现 type 为 \"method_call\" 或类似方法调用的条目";
 
     /**
      * 标签规范定义
