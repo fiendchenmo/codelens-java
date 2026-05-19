@@ -1,5 +1,7 @@
 package com.codelens;
 
+import com.codelens.common.utils.StringUtil;
+
 import org.junit.jupiter.api.Test;
 import java.lang.reflect.Field;
 import java.lang.reflect.Method;
@@ -21,41 +23,52 @@ class LLMClientTest {
         return f.get(null);
     }
     
+    // ========== StringUtil.escapeJson() 测试（直接调用） ==========
+    
     @Test
-    void testEscapeJson_quotes() throws Exception {
-        String result = (String) invokePrivate("escapeJson", String.class, "hello \"world\"");
+    void testEscapeJson_quotes() {
+        String result = StringUtil.escapeJson("hello \"world\"");
         assertEquals("hello \\\"world\\\"", result);
     }
     
     @Test
-    void testEscapeJson_backslash() throws Exception {
-        String result = (String) invokePrivate("escapeJson", String.class, "path\\to\\file");
+    void testEscapeJson_backslash() {
+        String result = StringUtil.escapeJson("path\\to\\file");
         assertEquals("path\\\\to\\\\file", result);
     }
     
     @Test
-    void testEscapeJson_newline() throws Exception {
-        String result = (String) invokePrivate("escapeJson", String.class, "line1\nline2");
+    void testEscapeJson_newline() {
+        String result = StringUtil.escapeJson("line1\nline2");
         assertEquals("line1\\nline2", result);
     }
     
     @Test
-    void testEscapeJson_tab() throws Exception {
-        String result = (String) invokePrivate("escapeJson", String.class, "col1\tcol2");
+    void testEscapeJson_tab() {
+        String result = StringUtil.escapeJson("col1\tcol2");
         assertEquals("col1\\tcol2", result);
     }
     
     @Test
-    void testEscapeJson_mixed() throws Exception {
-        String result = (String) invokePrivate("escapeJson", String.class, "a\"b\\c\nd");
+    void testEscapeJson_mixed() {
+        String result = StringUtil.escapeJson("a\"b\\c\nd");
         assertEquals("a\\\"b\\\\c\\nd", result);
     }
     
     @Test
-    void testEscapeJson_empty() throws Exception {
-        String result = (String) invokePrivate("escapeJson", String.class, "");
+    void testEscapeJson_empty() {
+        String result = StringUtil.escapeJson("");
         assertEquals("", result);
     }
+    
+    @Test
+    void testEscapeJson_null() {
+        // StringUtil.escapeJson 对 null 返回空字符串
+        String result = StringUtil.escapeJson(null);
+        assertEquals("", result);
+    }
+    
+    // ========== extractContentField 测试（仍需反射） ==========
     
     @Test
     void testExtractContentField_simple() throws Exception {
@@ -81,11 +94,15 @@ class LLMClientTest {
     @Test
     void testExtractContentField_noContentKey() throws Exception {
         String json = "{\"error\":\"something\"}";
-        String result = (String) invokePrivate("extractContentField", String.class, json);
-        assertEquals(json, result); // 返回原文
+        try {
+            invokePrivate("extractContentField", String.class, json);
+            fail("Expected LLMException for missing content field");
+        } catch (LLMException e) {
+            assertEquals(LLMException.ErrorType.PARSE_ERROR, e.getErrorType());
+        }
     }
     
-    // ========== 新增测试：默认值和参数回退 ==========
+    // ========== 默认值和参数回退测试 ==========
     
     @Test
     void testDefaultConstants() throws Exception {
