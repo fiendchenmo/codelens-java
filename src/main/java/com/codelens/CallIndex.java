@@ -142,7 +142,7 @@ public class CallIndex implements AutoCloseable {
         }
         
         int total = count.get();
-        LOGGER.fine("Walked total: " + walkedCount.get() + ", after filter: " + total);
+        LOGGER.fine("Indexed files: " + total);
         LOGGER.info("Indexed " + total + " files");
         return total;
     }

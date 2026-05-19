@@ -1,6 +1,7 @@
 package com.codelens;
 
 import com.codelens.common.utils.ColorUtil;
+import com.codelens.common.utils.MethodFilter;
 import com.codelens.CallIndex;
 import com.codelens.CallerFinder;
 import com.google.gson.Gson;
@@ -236,6 +237,12 @@ public class CodeLensCli {
             // 读取源代码
             String sourceCode = Files.readString(sourceFile.toPath());
             
+            // 解析文件结构概览
+            List<JavaParserService.ClassInfo> classInfos = JavaParserService.parseFile(sourceFile);
+            if (!classInfos.isEmpty()) {
+                printStructOverview(classInfos);
+            }
+            
             System.out.println(ColorUtil.heading("━━━ CodeLens 分析中 ━━━"));
             System.out.println("文件: " + filePath);
             System.out.println("模型: " + (model != null ? model : "deepseek-v4-flash"));
@@ -296,7 +303,7 @@ public class CodeLensCli {
         }
         CallIndex indexer = new CallIndex(projectRoot);
         try {
-            indexer.indexDirectory(dir.toPath(), force);
+            indexer.indexDirectory(dir.toPath(), false);
             System.out.println("\n✅ 索引建立完成");
         } finally {
             indexer.close();
@@ -424,7 +431,13 @@ public class CodeLensCli {
                 }
             }
             
-            // 4. 读取源代码
+            // 4. 解析结构 + 读取源代码
+            List<JavaParserService.ClassInfo> classInfos = JavaParserService.parseFile(sourceFile);
+            if (!classInfos.isEmpty()) {
+                System.out.println();
+                printStructOverview(classInfos);
+            }
+            
             System.out.println("\n" + ColorUtil.heading("━━━ Step 3: LLM 分析 ━━━"));
             String sourceCode = Files.readString(sourceFile.toPath());
             
@@ -458,6 +471,43 @@ public class CodeLensCli {
         }
         
         System.out.println("\n" + ColorUtil.heading("━━━ full 命令执行完成 ━━━"));
+    }
+
+
+    /**
+     * 打印结构概览：类的方法列表，区分业务方法和框架方法
+     */
+    private static void printStructOverview(List<JavaParserService.ClassInfo> classInfos) {
+        for (JavaParserService.ClassInfo ci : classInfos) {
+            System.out.println(ColorUtil.heading("━━━ 结构概览: " + ci.name + " ━━━"));
+            
+            int totalMethods = ci.methods.size();
+            int businessCount = 0;
+            int trivialCount = 0;
+            
+            for (JavaParserService.MethodInfo m : ci.methods) {
+                boolean trivial = MethodFilter.isTrivialCall(m.name);
+                if (trivial) {
+                    trivialCount++;
+                } else {
+                    businessCount++;
+                }
+                
+                String lineInfo = "L" + m.line;
+                String vis = m.visibility != null ? m.visibility : "";
+                String annot = (m.annotations != null && !m.annotations.isEmpty()) ? m.annotations + " " : "";
+                
+                if (trivial) {
+                    System.out.println("  " + ColorUtil.framework(lineInfo + " " + vis + " " + m.name + "(" + m.params + ")"));
+                } else {
+                    System.out.println("  " + ColorUtil.business(lineInfo + " " + vis + " " + annot + m.name + "(" + m.params + ")"));
+                }
+            }
+            
+            System.out.println();
+            System.out.println("  方法统计: " + ColorUtil.business(businessCount + " 业务") + " / " + ColorUtil.framework(trivialCount + " 框架") + " (共 " + totalMethods + " 个)");
+            System.out.println();
+        }
     }
 
     /**
@@ -644,23 +694,23 @@ public class CodeLensCli {
      * 格式化风险等级
      */
     private static String formatSeverity(String severity) {
-        return switch (severity.toUpperCase()) {
-            case "HIGH" -> ColorUtil.high("[" + severity + "]");
-            case "MEDIUM" -> ColorUtil.medium("[" + severity + "]");
-            case "LOW" -> ColorUtil.low("[" + severity + "]");
-            default -> ColorUtil.info("[" + severity + "]");
-        };
+        switch (severity.toUpperCase()) {
+            case "HIGH": return ColorUtil.high("[" + severity + "]");
+            case "MEDIUM": return ColorUtil.medium("[" + severity + "]");
+            case "LOW": return ColorUtil.low("[" + severity + "]");
+            default: return ColorUtil.info("[" + severity + "]");
+        }
     }
     
     /**
      * 格式化复杂度
      */
     private static String formatComplexity(String complexity) {
-        return switch (complexity.toUpperCase()) {
-            case "HIGH" -> ColorUtil.high(complexity);
-            case "MEDIUM" -> ColorUtil.medium(complexity);
-            case "LOW" -> ColorUtil.low(complexity);
-            default -> complexity;
-        };
+        switch (complexity.toUpperCase()) {
+            case "HIGH": return ColorUtil.high(complexity);
+            case "MEDIUM": return ColorUtil.medium(complexity);
+            case "LOW": return ColorUtil.low(complexity);
+            default: return complexity;
+        }
     }
 }
