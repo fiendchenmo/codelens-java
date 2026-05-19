@@ -1,5 +1,7 @@
 package com.codelens;
 
+import com.codelens.common.utils.StringUtil;
+
 import java.io.BufferedReader;
 import java.io.InputStreamReader;
 import java.io.OutputStream;
@@ -54,10 +56,10 @@ public class LLMClient {
         }
 
         String body = "{"
-            + "\"model\": \"" + escapeJson(model) + "\","
+            + "\"model\": \"" + StringUtil.escapeJson(model) + "\","
             + "\"messages\": ["
-            + "  {\"role\": \"system\", \"content\": \"" + escapeJson(systemPrompt) + "\"},"
-            + "  {\"role\": \"user\", \"content\": \"" + escapeJson(userPrompt) + "\"}"
+            + "  {\"role\": \"system\", \"content\": \"" + StringUtil.escapeJson(systemPrompt) + "\"},"
+            + "  {\"role\": \"user\", \"content\": \"" + StringUtil.escapeJson(userPrompt) + "\"}"
             + "],"
             + "\"temperature\": " + temperature + ","
             + "\"max_tokens\": 8192"
@@ -173,20 +175,4 @@ public class LLMClient {
         return sb.toString();
     }
 
-    static String escapeJson(String s) {
-        StringBuilder sb = new StringBuilder();
-        for (char c : s.toCharArray()) {
-            switch (c) {
-                case '"':  sb.append("\\\""); break;
-                case '\\': sb.append("\\\\"); break;
-                case '\n': sb.append("\\n");  break;
-                case '\r': sb.append("\\r");  break;
-                case '\t': sb.append("\\t");  break;
-                default:
-                    if (c < 32) sb.append(String.format("\\u%04x", (int) c));
-                    else sb.append(c);
-            }
-        }
-        return sb.toString();
-    }
 }

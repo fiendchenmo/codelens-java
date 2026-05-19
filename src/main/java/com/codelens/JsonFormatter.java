@@ -1,5 +1,7 @@
 package com.codelens;
 
+import com.codelens.common.utils.StringUtil;
+
 import com.google.gson.Gson;
 import com.google.gson.GsonBuilder;
 import com.google.gson.JsonArray;
@@ -102,14 +104,6 @@ public class JsonFormatter {
     /**
      * 转义 JSON 字符串
      */
-    public static String escapeJson(String s) {
-        if (s == null) return "";
-        return s.replace("\\", "\\\\")
-                 .replace("\"", "\\\"")
-                 .replace("\n", "\\n")
-                 .replace("\r", "\\r")
-                 .replace("\t", "\\t");
-    }
 
     /**
      * CallerInfo 到 JsonObject 的转换接口
