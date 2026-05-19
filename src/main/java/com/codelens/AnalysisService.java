@@ -104,8 +104,14 @@ public class AnalysisService {
             String cachedSummary = (cachedEntry != null) ? cachedEntry.result : null;
             
             if (cachedSummary != null && !cachedSummary.isEmpty()) {
-                String mergedResult = JsonFormatter.mergeCallersToJson(cachedSummary, callers);
                 System.out.println("📦 使用缓存摘要 (可通过 --no-cache 禁用)");
+                
+                // 格式化展示缓存的分析内容（与 LLM 新调用保持一致）
+                String prettyCached = JsonFormatter.prettyPrintJson(cachedSummary);
+                System.out.println(ColorUtil.heading("LLM 分析（缓存）"));
+                System.out.println(prettyCached);
+                
+                String mergedResult = JsonFormatter.mergeCallersToJson(cachedSummary, callers);
                 
                 // 验证和标注
                 if (enableValidation && !noValidate) {
@@ -127,7 +133,7 @@ public class AnalysisService {
                     }
                 }
                 
-                return mergedResult;
+                return "CACHED_DISPLAYED:" + mergedResult;
             }
             
             // 调用 LLM 分析（现在会抛出 LLMException）

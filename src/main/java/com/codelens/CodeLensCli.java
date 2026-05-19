@@ -229,8 +229,11 @@ public class CodeLensCli {
             );
             
             if (jsonResult != null && !jsonResult.isEmpty() && !"{ }".equals(jsonResult)) {
-                System.out.println(ColorUtil.heading("━━━ 分析结果 ━━━"));
-                System.out.println(jsonResult);
+                // 缓存命中时 AnalysisService 已完整展示，不重复打印
+                if (!jsonResult.startsWith("CACHED_DISPLAYED:")) {
+                    System.out.println(ColorUtil.heading("━━━ 分析结果 ━━━"));
+                    System.out.println(jsonResult);
+                }
             }
             
         } catch (Exception e) {
@@ -384,8 +387,11 @@ public class CodeLensCli {
                 
                 // 3. 输出分析结果
                 if (jsonResult != null && !jsonResult.isEmpty() && !"{ }".equals(jsonResult)) {
-                    System.out.println("\n" + ColorUtil.heading("━━━ 分析结果 ━━━"));
-                    System.out.println(jsonResult);
+                    // 缓存命中时 AnalysisService 已完整展示，不重复打印
+                    if (!jsonResult.startsWith("CACHED_DISPLAYED:")) {
+                        System.out.println("\n" + ColorUtil.heading("━━━ 分析结果 ━━━"));
+                        System.out.println(jsonResult);
+                    }
                 }
                 
                 // 4. Callers 反向依赖（基于索引，独立 section）
