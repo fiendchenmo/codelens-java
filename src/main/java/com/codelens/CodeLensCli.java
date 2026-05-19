@@ -263,7 +263,6 @@ public class CodeLensCli {
             );
             
             if (jsonResult != null && !jsonResult.isEmpty() && !"{}".equals(jsonResult)) {
-                System.out.println(ColorUtil.heading("━━━ 分析结果 ━━━"));
                 if (rawJson) {
                     System.out.println(jsonResult);
                 } else {
@@ -457,7 +456,6 @@ public class CodeLensCli {
             );
             
             if (jsonResult != null && !jsonResult.isEmpty() && !"{}".equals(jsonResult)) {
-                System.out.println("\n" + ColorUtil.heading("━━━ 分析结果 ━━━"));
                 if (rawJson) {
                     System.out.println(jsonResult);
                 } else {
