@@ -130,19 +130,13 @@ java -jar codelens-cli/target/codelens-0.1.0.jar full <java_file>
 
 ---
 
-## 6. 当前待办
+## 6. 任务来源
 
-> 这部分由喵呜维护，Claude Code 按此执行
+任务由 Owner（默默）或 CLI端负责人（喵呜）通过对话下达，Claude Code 不自行决定做什么。
 
-详细需求文档：`CodeLens/管理/Claude-Code需求-CLI端评审修复Batch2.md`
-
-当前优先级：
-1. JitPack 发布配置（pom.xml groupId 改为 com.github.fiendchenmo）
-2. EvidenceValidator 运算符优先级 bug
-3. 删 openai-gpt3-java 死依赖
-4. architecture_issues Schema 统一（删枚举值）
-5. Schema 越界校验
-6. 正则 + Gson 双路解析
-7. 重复代码提取
-8. Cache 实例复用
-9. LLMClient Gson 化
+每次收到任务时：
+1. 先 `git pull --rebase origin main` 拉取最新代码
+2. 按任务描述执行，有疑问停下来问
+3. 完成后 `mvn compile && mvn test` 验证
+4. 验证通过后 commit + push（push 前再次 pull --rebase）
+5. 汇报执行结果
