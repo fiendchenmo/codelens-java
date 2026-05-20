@@ -91,7 +91,7 @@ public class EvidenceValidatorTest {
         String source = "line1\nline2";
         EvidenceValidator.ValidationResult r1 = EvidenceValidator.validate("{}", source, null);
         assertEquals(0, r1.totalChecked);
-        assertEquals(EvidenceValidator.Confidence.CERTAIN, r1.overallConfidence());
+        assertEquals(EvidenceValidator.Confidence.UNKNOWN, r1.overallConfidence());
         EvidenceValidator.ValidationResult r2 = EvidenceValidator.validate("{\"summary\": \"test\"}", source, null);
         assertEquals(0, r2.totalChecked);
     }
