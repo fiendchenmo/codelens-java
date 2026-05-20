@@ -87,7 +87,7 @@ public class AnalysisService {
             String packageName = JavaParserService.getPackageName(sourceFile);
             
             if (classInfos.isEmpty()) {
-                System.out.println("⚠️  未找到类定义，跳过分析: " + filePath);
+                System.out.println("[!] 未找到类定义，跳过分析: " + filePath);
                 return "{}";
             }
             
@@ -105,7 +105,7 @@ public class AnalysisService {
             String cachedSummary = (cachedEntry != null) ? cachedEntry.result : null;
             
             if (cachedSummary != null && !cachedSummary.isEmpty()) {
-                System.out.println("📦 使用缓存摘要 (可通过 --no-cache 禁用)");
+                System.out.println("[=] 使用缓存摘要 (可通过 --no-cache 禁用)");
                 
                 // 格式化展示缓存的分析内容（与 LLM 新调用保持一致）
                 String normalized = OutputNormalizer.normalize(cachedSummary);
@@ -131,7 +131,7 @@ public class AnalysisService {
                         System.out.println(ar.formatReport());
                     } catch (Exception e) {
                         LOGGER.log(Level.WARNING, "验证/标注失败: " + e.getMessage(), e);
-                        System.out.println("⚠️ 验证/标注失败: " + e.getMessage());
+                        System.out.println("[!] 验证/标注失败: " + e.getMessage());
                     }
                 }
                 
@@ -142,7 +142,7 @@ public class AnalysisService {
             String jsonResult = callLLM(sourceCode, structContext, mainClass, apiKey, apiUrl, model, temperature);
             
             if (jsonResult == null || jsonResult.isEmpty()) {
-                System.out.println("⚠️ LLM 调用返回空结果");
+                System.out.println("[!] LLM 调用返回空结果");
                 return "{}";
             }
             
@@ -184,7 +184,7 @@ public class AnalysisService {
         } catch (LLMException e) {
             // LLM 异常：给用户明确提示，不让异常冒泡
             LOGGER.log(Level.SEVERE, "LLM 调用失败: " + e.getErrorType(), e);
-            System.out.println("\n❌ LLM 调用失败");
+            System.out.println("\n[FAIL] LLM 调用失败");
             System.out.println("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━");
             System.out.println("错误类型: " + e.getErrorType().getDescription());
             System.out.println("提示: " + e.getUserFriendlyMessage());
@@ -197,7 +197,7 @@ public class AnalysisService {
             return "{}";
         } catch (Exception e) {
             LOGGER.log(Level.SEVERE, "分析失败", e);
-            System.out.println("⚠️ 分析失败: " + e.getMessage());
+            System.out.println("[!] 分析失败: " + e.getMessage());
             return "{}";
         }
     }

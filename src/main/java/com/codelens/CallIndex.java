@@ -109,7 +109,6 @@ public class CallIndex implements AutoCloseable {
                     "last_indexed TEXT)");
             }
             conn.commit();
-            LOGGER.info("Database initialized: " + dbPath);
         } catch (ClassNotFoundException e) {
             throw new SQLException("SQLite JDBC driver not found", e);
         }
@@ -119,7 +118,6 @@ public class CallIndex implements AutoCloseable {
      * 索引指定目录
      */
     public int indexDirectory(Path dir) throws SQLException {
-        LOGGER.info("Indexing directory: " + dir);
         java.util.concurrent.atomic.AtomicInteger count = new java.util.concurrent.atomic.AtomicInteger(0);
         indexedSrcRoots.clear();
 
@@ -147,7 +145,6 @@ public class CallIndex implements AutoCloseable {
         }
 
         int total = count.get();
-        LOGGER.info("Indexed " + total + " files");
         return total;
     }
     
@@ -173,6 +170,13 @@ public class CallIndex implements AutoCloseable {
         return new String[]{String.valueOf(count), srcRootsStr};
     }
     
+    /**
+     * 获取索引数据库路径
+     */
+    public Path getDbPath() {
+        return dbPath;
+    }
+
     /**
      * 获取已索引的源码根目录列表
      */
