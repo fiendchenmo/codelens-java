@@ -19,10 +19,27 @@ public class ValidatorUtils {
     private ValidatorUtils() {}
 
     /**
-     * 从 JSON 字符串中提取指定数组的内容（返回逗号分隔的对象字符串列表）。
-     * 使用状态机手动解析，不依赖 Gson。
+     * 从 JSON 字符串中提取指定数组的内容（返回不含外层 [] 的逗号分隔字符串）。
+     * 优先使用 Gson 解析，失败时回退到手写状态机。
      */
     public static String extractJsonArray(String json, String arrayName) {
+        // 1. 优先用 Gson 解析
+        try {
+            JsonObject root = JsonParser.parseString(json).getAsJsonObject();
+            if (root.has(arrayName) && root.get(arrayName).isJsonArray()) {
+                JsonArray arr = root.getAsJsonArray(arrayName);
+                String arrStr = arr.toString();
+                // 去掉外层 []，与调用方 parseJsonObjects 的约定保持一致
+                if (arrStr.length() >= 2) {
+                    return arrStr.substring(1, arrStr.length() - 1);
+                }
+                return "";
+            }
+        } catch (Exception e) {
+            // Gson 失败，走状态机兜底
+        }
+
+        // 2. 状态机兜底
         String search = "\"" + arrayName + "\"";
         int idx = json.indexOf(search);
         if (idx < 0) return null;
