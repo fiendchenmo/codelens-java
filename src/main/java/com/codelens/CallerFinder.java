@@ -5,7 +5,7 @@ import java.nio.file.*;
 import java.sql.*;
 import java.util.*;
 import java.util.logging.*;
-import com.codelens.common.utils.ColorUtil;
+import com.codelens.ColorUtil;
 import com.codelens.common.utils.MethodFilter;
 import com.github.javaparser.StaticJavaParser;
 import com.github.javaparser.ast.CompilationUnit;
