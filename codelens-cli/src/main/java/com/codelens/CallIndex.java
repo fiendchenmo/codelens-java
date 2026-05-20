@@ -178,6 +178,19 @@ public class CallIndex implements AutoCloseable {
     }
 
     /**
+     * 获取数据库中的索引总条数（累计）
+     */
+    public int getTotalIndexedCount() throws SQLException {
+        try (Statement stmt = conn.createStatement();
+             ResultSet rs = stmt.executeQuery("SELECT COUNT(*) FROM code_index")) {
+            if (rs.next()) {
+                return rs.getInt(1);
+            }
+        }
+        return 0;
+    }
+
+    /**
      * 获取已索引的源码根目录列表
      */
     public List<String> getIndexedSrcRoots() {
