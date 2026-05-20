@@ -153,9 +153,9 @@ public class CodeMetaData {
             + "每个步骤应标注关键方法名或操作类型，如: DB查询(selectById) -> 缓存写入(redis.set) -> 返回结果. "
             + "多分支用分号分隔，如: 输入 -> 分支A: ... ; 分支B: ... -> 输出\n"
 + "17. dependencies 仅包含字段级别的依赖（字段注入/构造注入/静态方法调用），方法级别的调用关系放入 keyMethods.calls 数组。不要在 dependencies 中出现 type 为 \"method_call\" 或类似方法调用的条目\n"
-+ "21. dependencies[].name 必须是字段名（如 \"queryRefBillService\"），不能写全限定类名（如 \"com.stream.ecs.bill.service.IEcsBillMainService\"）、接口全名（如 \"IEcsBillMainService\"）或方法调用（如 \"billInfoCmd.queryBillInfoById()\"）。字段名 = 源码中 @Autowired/@Resource 注入的变量名\n"
-+ "22. dependencies[] 只列核心业务依赖（Service/Handler/Manager/Cmd 等业务组件），不列工具类（StringUtil/BeanUtil/BigDecimalUtil/DateUtils/JSONUtil/ListUtil/MapUtil/CollectionUtils/Arrays/Collections 等）、不列 JDK 标准库（Map/List/String/BigDecimal/Integer 等）、不列框架基类（IBaseService/BaseMapper 等）。每个类的业务依赖建议控制在 15-30 个\n"
-+ "23. [代码结构底图] 中的字段和行号是代码真实提取的，你的分析必须以此为基准。dependencies[].name 必须使用底图中的字段名，dependencies[].line 必须使用底图中的行号。如果底图中没有某个字段，不要在 dependencies 中编造";
++ "18. dependencies[].name 必须是字段名（如 \"queryRefBillService\"），不能写全限定类名（如 \"com.stream.ecs.bill.service.IEcsBillMainService\"）、接口全名（如 \"IEcsBillMainService\"）或方法调用（如 \"billInfoCmd.queryBillInfoById()\"）。字段名 = 源码中 @Autowired/@Resource 注入的变量名\n"
++ "19. dependencies[] 只列核心业务依赖（Service/Handler/Manager/Cmd 等业务组件），不列工具类（StringUtil/BeanUtil/BigDecimalUtil/DateUtils/JSONUtil/ListUtil/MapUtil/CollectionUtils/Arrays/Collections 等）、不列 JDK 标准库（Map/List/String/BigDecimal/Integer 等）、不列框架基类（IBaseService/BaseMapper 等）。每个类的业务依赖建议控制在 15-30 个\n"
++ "20. [代码结构底图] 中的字段和行号是代码真实提取的，你的分析必须以此为基准。dependencies[].name 必须使用底图中的字段名，dependencies[].line 必须使用底图中的行号。如果底图中没有某个字段，不要在 dependencies 中编造";
 
     /**
      * 标签规范定义
