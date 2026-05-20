@@ -139,7 +139,7 @@ public class AnalysisService {
             }
             
             // 调用 LLM 分析（现在会抛出 LLMException）
-            String jsonResult = callLLM(sourceCode, structContext, mainClass, apiKey, apiUrl, model, temperature);
+            String jsonResult = callLLM(sourceCode, structContext, mainClass, apiKey, apiUrl, model, temperature, filePath);
             
             if (jsonResult == null || jsonResult.isEmpty()) {
                 System.out.println("[!] LLM 调用返回空结果");
@@ -212,12 +212,22 @@ public class AnalysisService {
             String apiKey,
             String apiUrl,
             String model,
-            double temperature
+            double temperature,
+            Path filePath
     ) {
         try {
-            // 读取系统提示词（SystemPrompt.build() 已包含完整提示词）
-            String systemPrompt = SystemPrompt.build();
-            
+            // Layer 1 底图提取
+            String structPromptContext = null;
+            try {
+                com.codelens.common.normalizers.StructContext structCtx = JavaParserStructExtractor.extract(filePath);
+                structPromptContext = structCtx.toPromptContext();
+            } catch (Exception e) {
+                LOGGER.log(Level.WARNING, "底图提取失败，跳过", e);
+            }
+
+            // 构建系统提示词（含底图）
+            String systemPrompt = SystemPrompt.build(structPromptContext);
+
             // 构建用户提示
             StringBuilder userPrompt = new StringBuilder();
             userPrompt.append("请分析以下 Java 代码，返回 JSON 格式结果：\n\n");
@@ -227,7 +237,7 @@ public class AnalysisService {
             userPrompt.append("```java\n");
             userPrompt.append(sourceCode);
             userPrompt.append("\n```\n");
-            
+
             // 调用 LLM（现在会抛出 LLMException）
             return LLMClient.analyze(
                 apiKey,
@@ -237,7 +247,7 @@ public class AnalysisService {
                 model,
                 temperature
             );
-            
+
         } catch (LLMException e) {
             // 重新抛出 LLMException，让上层处理
             throw e;
