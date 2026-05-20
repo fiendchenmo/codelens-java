@@ -155,7 +155,7 @@ public class ConfidenceAnnotator {
                 if (issue.claimedLine > sourceLines.length) {
                     ai.lineOffset = issue.claimedLine - sourceLines.length;
                 } else {
-                    ai.lineOffset = 0;
+                    ai.lineOffset = calculateLineOffset(issue.claimedLine, issue.fieldName, sourceLines);
                 }
             } else {
                 String lineStr = item.get("line");
@@ -209,7 +209,7 @@ public class ConfidenceAnnotator {
                 if (issue.claimedLine > sourceLines.length) {
                     ai.lineOffset = issue.claimedLine - sourceLines.length;
                 } else {
-                    ai.lineOffset = 0;
+                    ai.lineOffset = calculateLineOffset(issue.claimedLine, null, sourceLines);
                 }
             } else {
                 ai.confidence = Confidence.HIGH;
@@ -225,6 +225,7 @@ public class ConfidenceAnnotator {
                                            AnnotatedResult result) {
         String arrayContent = extractJsonArray(json, "keyMethods");
         if (arrayContent == null) arrayContent = extractJsonArray(json, "methods");
+        // 即使从 "methods" 提取，category 仍统一为 "keyMethods"，与 L1 issue key 对齐
         if (arrayContent == null) return;
 
         List<Map<String, String>> items = parseJsonObjects(arrayContent);
@@ -244,7 +245,7 @@ public class ConfidenceAnnotator {
                 if (issue.claimedLine > sourceLines.length) {
                     ai.lineOffset = issue.claimedLine - sourceLines.length;
                 } else {
-                    ai.lineOffset = 0;
+                    ai.lineOffset = calculateLineOffset(issue.claimedLine, issue.fieldName, sourceLines);
                 }
             } else {
                 ai.confidence = Confidence.MEDIUM;
@@ -356,6 +357,35 @@ public class ConfidenceAnnotator {
             result.put(key, value);
         }
         return result;
+    }
+
+    /**
+     * 计算行号偏差：在 claimedLine 附近搜索实际匹配行，返回偏差值
+     * 正数=LLM报的行号比实际偏后，负数=偏前，0=精确，-1=无法计算
+     */
+    private static int calculateLineOffset(int claimedLine, String name, String[] sourceLines) {
+        if (name == null || sourceLines == null) return -1;
+        int searchRange = 5;
+        for (int offset = 0; offset <= searchRange; offset++) {
+            if (offset == 0) {
+                if (claimedLine >= 1 && claimedLine <= sourceLines.length
+                        && sourceLines[claimedLine - 1].contains(name)) {
+                    return 0;
+                }
+            } else {
+                int before = claimedLine - offset;
+                if (before >= 1 && before <= sourceLines.length
+                        && sourceLines[before - 1].contains(name)) {
+                    return -offset;
+                }
+                int after = claimedLine + offset;
+                if (after >= 1 && after <= sourceLines.length
+                        && sourceLines[after - 1].contains(name)) {
+                    return offset;
+                }
+            }
+        }
+        return -1;
     }
 
     private static Map<String, String> parseJsonObject(String json) {
