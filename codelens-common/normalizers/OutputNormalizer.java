@@ -25,6 +25,13 @@ public class OutputNormalizer {
 
     private static final Gson GSON = new GsonBuilder().create();
 
+    private static final String[] TOOL_CLASS_PATTERNS = {
+        "StringUtil", "BeanUtil", "BigDecimalUtil", "DateUtils",
+        "JSONUtil", "ListUtil", "MapUtil", "CollectionUtils",
+        "Arrays", "Collections", "IBaseService", "BaseMapper",
+        "ServiceImpl", "MapperImpl"
+    };
+
     private OutputNormalizer() {}
 
     /**
@@ -92,6 +99,12 @@ public class OutputNormalizer {
             if (risks != null) {
                 sortJsonArrayByLine(risks);
             }
+
+            // 归一化 dependencies name（全限定类名 → 字段名）+ 过滤工具类
+            normalizeDepNames(remainingDeps);
+            filterToolClassDeps(remainingDeps);
+            // 过滤后重新排序
+            sortJsonArrayByLine(remainingDeps);
 
             return GSON.toJson(root);
 
@@ -241,6 +254,95 @@ public class OutputNormalizer {
         String aLine = a.has("line") ? a.get("line").getAsString() : "";
         String bLine = b.has("line") ? b.get("line").getAsString() : "";
         return aName.equals(bName) && aLine.equals(bLine);
+    }
+
+    /**
+     * 归一化 dependencies[].name：全限定类名/方法调用 → 字段名
+     */
+    static void normalizeDepNames(JsonArray deps) {
+        if (deps == null || deps.size() == 0) return;
+        for (int i = 0; i < deps.size(); i++) {
+            JsonElement elem = deps.get(i);
+            if (!elem.isJsonObject()) continue;
+            JsonObject dep = elem.getAsJsonObject();
+            if (!dep.has("name") || dep.get("name").isJsonNull()) continue;
+            String original = dep.get("name").getAsString();
+            String normalized = normalizeDepName(original);
+            if (!normalized.equals(original)) {
+                dep.addProperty("name", normalized);
+            }
+        }
+    }
+
+    /**
+     * 过滤工具类 / JDK 标准库 / 框架基类 dependencies
+     */
+    static void filterToolClassDeps(JsonArray deps) {
+        if (deps == null || deps.size() == 0) return;
+        for (int i = deps.size() - 1; i >= 0; i--) {
+            JsonElement elem = deps.get(i);
+            if (!elem.isJsonObject()) continue;
+            JsonObject dep = elem.getAsJsonObject();
+            if (!dep.has("name") || dep.get("name").isJsonNull()) continue;
+            String name = dep.get("name").getAsString();
+            if (isToolClassDep(name)) {
+                deps.remove(i);
+            }
+        }
+    }
+
+    /**
+     * 全限定类名/方法调用 → 简化为字段名
+     *
+     * 示例：
+     *   "com.stream.ecs.bill.service.IEcsBillMainService" → "ecsBillMainService"
+     *   "IEcsBillMainService" → "ecsBillMainService"
+     *   "com.stream.bill.api.IBillInfoCmd.queryBillInfoById()" → "billInfoCmd"
+     *   "queryRefBillService" → "queryRefBillService"（不变）
+     */
+    static String normalizeDepName(String name) {
+        if (name == null || name.isEmpty()) return name;
+
+        // 1. 去掉方法调用部分（如 "xxx.queryBillInfoById()" → "xxx"），并去除方法名段
+        int parenIdx = name.indexOf('(');
+        if (parenIdx >= 0) {
+            name = name.substring(0, parenIdx);
+            int lastDot = name.lastIndexOf('.');
+            if (lastDot >= 0) {
+                name = name.substring(0, lastDot);
+            }
+        }
+
+        // 2. 取最后一段（全限定类名 → 短名）
+        if (name.contains(".")) {
+            name = name.substring(name.lastIndexOf('.') + 1);
+        }
+
+        // 3. 接口名去 "I" 前缀
+        if (name.length() >= 2 && name.charAt(0) == 'I' && Character.isUpperCase(name.charAt(1))) {
+            name = name.substring(1);
+        }
+
+        // 4. 首字母小写
+        if (name.length() >= 1) {
+            name = Character.toLowerCase(name.charAt(0)) + name.substring(1);
+        }
+
+        return name;
+    }
+
+    /**
+     * 判断是否为工具类/JDK标准库/框架基类依赖
+     */
+    static boolean isToolClassDep(String name) {
+        if (name == null) return false;
+        for (String pattern : TOOL_CLASS_PATTERNS) {
+            if (name.contains(pattern)) return true;
+        }
+        // 工具包全限定名
+        if (name.startsWith("com.stream.core.util.")) return true;
+        if (name.startsWith("org.apache.commons.")) return true;
+        return false;
     }
 
     /**

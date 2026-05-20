@@ -128,13 +128,31 @@ public class EvidenceValidator {
                     if (actualLine.contains(name) || name.contains("Mapper") && actualLine.contains("@Mapper")) {
                         result.passedCount++;
                     } else {
-                        // 尝试模糊匹配（检查行首非空字符）
-                        String trimmed = actualLine.trim();
-                        if (!trimmed.startsWith("//") && !trimmed.startsWith("*")) {
-                            addIssue(result, "dependencies", i, claimedLine, "name", name, actualLine.trim(),
-                                    "行内容中未找到字段名 '" + name + "'", Confidence.MEDIUM);
-                        } else {
+                        // @Autowired 容错：向前查找最多 2 行，跳过注解行
+                        boolean foundNearby = false;
+                        for (int offset = 1; offset <= 2; offset++) {
+                            int checkLine = claimedLine + offset;
+                            if (checkLine > sourceLines.length) break;
+                            String lineContent = sourceLines[checkLine - 1].trim();
+                            if (lineContent.startsWith("@Autowired") || lineContent.startsWith("@Resource") || lineContent.startsWith("@Inject")) {
+                                continue;
+                            }
+                            if (lineContent.contains(name)) {
+                                foundNearby = true;
+                                break;
+                            }
+                        }
+                        if (foundNearby) {
                             result.passedCount++;
+                        } else {
+                            // 尝试模糊匹配（检查行首非空字符）
+                            String trimmed = actualLine.trim();
+                            if (!trimmed.startsWith("//") && !trimmed.startsWith("*")) {
+                                addIssue(result, "dependencies", i, claimedLine, "name", name, actualLine.trim(),
+                                        "行内容中未找到字段名 '" + name + "'", Confidence.MEDIUM);
+                            } else {
+                                result.passedCount++;
+                            }
                         }
                     }
                 }
