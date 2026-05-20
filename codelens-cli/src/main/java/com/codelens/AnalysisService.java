@@ -37,6 +37,21 @@ public class AnalysisService {
         // 工具类，禁止实例化
     }
 
+    /** 缓存复用：相同 projectRoot 的缓存实例重用 */
+    private static FileSystemCache cachedCache;
+    private static String cachedProjectRoot;
+
+    private static FileSystemCache getCache(Path projectRoot, boolean noCache) {
+        String root = projectRoot.toString();
+        if (cachedCache != null && root.equals(cachedProjectRoot)) {
+            return cachedCache;
+        }
+        CacheConfig cacheConfig = !noCache ? CacheConfig.defaults(root) : CacheConfig.disabled();
+        cachedCache = new FileSystemCache(cacheConfig);
+        cachedProjectRoot = root;
+        return cachedCache;
+    }
+
     /**
      * 分析结果包装类
      */
@@ -102,8 +117,7 @@ public class AnalysisService {
             // 检查缓存
             Path projectRoot = JavaParserService.findProjectRoot(filePath);
             if (projectRoot == null) projectRoot = filePath.getParent();
-            CacheConfig cacheConfig = !noCache ? CacheConfig.defaults(projectRoot.toString()) : CacheConfig.disabled();
-            FileSystemCache cache = new FileSystemCache(cacheConfig);
+            FileSystemCache cache = getCache(projectRoot, noCache);
             CacheEntry cachedEntry = cache.lookup(filePath.toString(), sourceCode, model);
             String cachedSummary = (cachedEntry != null) ? cachedEntry.getResult() : null;
             
