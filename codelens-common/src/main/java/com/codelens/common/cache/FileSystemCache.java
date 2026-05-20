@@ -1,5 +1,6 @@
 package com.codelens.common.cache;
 
+import com.codelens.common.prompts.SystemPrompt;
 import com.google.gson.Gson;
 import com.google.gson.GsonBuilder;
 import com.google.gson.JsonElement;
@@ -12,6 +13,8 @@ import java.util.logging.Logger;
 import java.nio.file.*;
 import java.nio.file.attribute.BasicFileAttributes;
 import java.nio.file.attribute.FileTime;
+import java.security.MessageDigest;
+import java.security.NoSuchAlgorithmException;
 import java.util.*;
 
 /**
@@ -21,6 +24,8 @@ import java.util.*;
  * <p>
  * 特性：
  * <ul>
+ *   <li>promptHash：prompt 规则变更后缓存自动失效
+ *   <li>model 维度：不同模型不会命中同一缓存
  *   <li>TTL：lookup 时检查，过期自动驱逐
  *   <li>maxEntries：save 时检查，超出按最后访问时间淘汰最旧条目
  *   <li>基于 Gson 序列化，日志友好的 JSON 格式
@@ -29,11 +34,16 @@ import java.util.*;
  */
 public class FileSystemCache implements Cache {
 
-    private static final java.util.logging.Logger LOG = java.util.logging.Logger.getLogger(FileSystemCache.class.getName());
+    private static final Logger LOG = Logger.getLogger(FileSystemCache.class.getName());
     private static final String CACHE_SUBDIR = ".codelens/cache";
+    private static final String HASH_ALGO = "MD5";
+
     private final Path cacheRoot;
     private final CacheConfig config;
     private final Gson gson;
+
+    /** 缓存的 prompt hash（延迟计算） */
+    private String promptHash;
 
     /**
      * @param config 缓存配置（包含 root、TTL、maxEntries、enabled）
@@ -48,6 +58,27 @@ public class FileSystemCache implements Cache {
         }
     }
 
+    /**
+     * 获取 SystemPrompt.build() 的 MD5 hash。
+     * prompt 规则变更后 hash 会变，缓存的 key 随之改变 → 自然失效。
+     */
+    private String getPromptHash() {
+        if (promptHash == null) {
+            try {
+                MessageDigest md = MessageDigest.getInstance(HASH_ALGO);
+                byte[] digest = md.digest(SystemPrompt.build().getBytes(StandardCharsets.UTF_8));
+                StringBuilder sb = new StringBuilder(32);
+                for (byte b : digest) {
+                    sb.append(String.format("%02x", b & 0xff));
+                }
+                promptHash = sb.toString();
+            } catch (NoSuchAlgorithmException e) {
+                promptHash = "";
+            }
+        }
+        return promptHash;
+    }
+
     @Override
     public synchronized CacheEntry lookup(String filePath, String sourceCode, String model) {
         if (!config.isEnabled() || cacheRoot == null) return null;
@@ -55,7 +86,8 @@ public class FileSystemCache implements Cache {
 
         try {
             String sourceHash = CacheKeyGenerator.generateHash(sourceCode);
-            String fileName = CacheKeyGenerator.generateFileName(sourceCode, filePath);
+            String ph = getPromptHash();
+            String fileName = CacheKeyGenerator.generateFileName(sourceCode, ph, filePath, model);
             Path cacheFile = cacheRoot.resolve(fileName);
             if (!Files.exists(cacheFile)) return null;
 
@@ -66,6 +98,9 @@ public class FileSystemCache implements Cache {
 
             // hash 校验 — 内容未变
             if (!sourceHash.equals(entry.getSourceHash())) return null;
+
+            // prompt hash 校验 — prompt 规则未变
+            if (!ph.equals(entry.getPromptHash())) return null;
 
             // 模型校验 — 模型未变
             if (model != null && !model.equals(entry.getModel())) return null;
@@ -94,18 +129,18 @@ public class FileSystemCache implements Cache {
             Files.createDirectories(cacheRoot);
 
             String sourceHash = CacheKeyGenerator.generateHash(sourceCode);
-            String fileName = CacheKeyGenerator.generateFileName(sourceCode, filePath);
+            String ph = getPromptHash();
+            String fileName = CacheKeyGenerator.generateFileName(sourceCode, ph, filePath, model);
             Path cacheFile = cacheRoot.resolve(fileName);
             long timestamp = System.currentTimeMillis();
 
-            // 构建 JSON 存储，result 作为 raw JSON 嵌入
+            // 构建 JSON 存储
             JsonObject obj = new JsonObject();
             obj.addProperty("source_hash", sourceHash);
+            obj.addProperty("prompt_hash", ph);
             obj.addProperty("file", filePath);
             obj.addProperty("model", model != null ? model : "unknown");
             obj.addProperty("timestamp", timestamp);
-
-            // result 作为原始字符串存储（避免 Gson pretty-printing 改变格式）
             obj.addProperty("result", result);
 
             Files.write(cacheFile, gson.toJson(obj).getBytes(StandardCharsets.UTF_8));
@@ -123,9 +158,16 @@ public class FileSystemCache implements Cache {
     public synchronized void evict(String filePath, String sourceCode) {
         if (cacheRoot == null || sourceCode == null) return;
         try {
-            String fileName = CacheKeyGenerator.generateFileName(sourceCode, filePath);
-            Path cacheFile = cacheRoot.resolve(fileName);
-            Files.deleteIfExists(cacheFile);
+            // evict 时 model 未知，遍历匹配
+            String ph = getPromptHash();
+            String combined = CacheKeyGenerator.generateCombinedHash(sourceCode, ph);
+            String baseName = extractFileName(filePath);
+            String prefix = combined + "_" + baseName + "_";
+            try (DirectoryStream<Path> stream = Files.newDirectoryStream(cacheRoot, prefix + "*.json")) {
+                for (Path p : stream) {
+                    Files.deleteIfExists(p);
+                }
+            }
         } catch (Exception e) {
             LOG.warning("Failed to evict cache file: " + e.getMessage());
         }
@@ -200,8 +242,8 @@ public class FileSystemCache implements Cache {
             JsonObject obj = JsonParser.parseString(json).getAsJsonObject();
 
             String sourceHash = getString(obj, "source_hash");
+            String promptHash = getString(obj, "prompt_hash");
             String file = getString(obj, "file");
-            // 如果 json 里没有 file 字段（旧格式可能没有），就用入参
             if (file == null) file = filePath;
             String model = getString(obj, "model");
             long timestamp = getLong(obj, "timestamp", 0L);
@@ -209,10 +251,21 @@ public class FileSystemCache implements Cache {
 
             if (sourceHash == null || result == null) return null;
 
-            return new CacheEntry(sourceHash, file, model, timestamp, result);
+            return new CacheEntry(sourceHash, promptHash, file, model, timestamp, result);
         } catch (Exception e) {
             return null;
         }
+    }
+
+    private static String extractFileName(String filePath) {
+        String name = filePath;
+        int sep = name.lastIndexOf('/');
+        if (sep < 0) sep = name.lastIndexOf('\\');
+        if (sep >= 0) name = name.substring(sep + 1);
+        if (name.endsWith(".java")) {
+            name = name.substring(0, name.length() - 5);
+        }
+        return name;
     }
 
     private static String getString(JsonObject obj, String key) {

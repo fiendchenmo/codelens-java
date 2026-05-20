@@ -36,9 +36,9 @@ public class CacheConfig {
     public int getMaxEntries() { return maxEntries; }
     public boolean isEnabled() { return enabled; }
 
-    /** 永不过期、上限 1000 条、启用 */
+    /** 7 天 TTL、上限 1000 条、启用 */
     public static CacheConfig defaults(String cacheRoot) {
-        return new CacheConfig(cacheRoot, 0, 1000, true);
+        return new CacheConfig(cacheRoot, 7 * 24 * 60 * 60 * 1000L, 1000, true);
     }
 
     /** 禁用缓存 */
