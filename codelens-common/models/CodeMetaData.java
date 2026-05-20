@@ -28,6 +28,7 @@ public class CodeMetaData {
         public String severity;   // 严重程度:HIGH|MEDIUM|LOW
         public String description; // 风险描述
         public String line;       // 所在行号
+        public String impact;     // 对系统的影响
         public String suggestion;  // 修复建议
     }
 
@@ -39,8 +40,6 @@ public class CodeMetaData {
         public String line;       // 所在行号
         public String signature;  // 方法签名
         public String visibility; // 可见性:public|private|protected
-        public String complexity; // 复杂度:LOW|MEDIUM|HIGH
-        public String calls;      // 调用次数
         public String description; // 方法功能描述(合并 notes -> description)
     }
 
