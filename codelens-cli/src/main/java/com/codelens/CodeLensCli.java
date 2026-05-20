@@ -42,6 +42,8 @@ public class CodeLensCli {
     private static final Gson gson = new Gson();
     
     public static void main(String[] args) throws Exception {
+        // 抑制 SLF4J 无绑定警告
+        System.setProperty("slf4j.internal.verbosity", "WARN");
         // 抑制 java.util.logging 输出到终端
         java.util.logging.Logger rootLogger = java.util.logging.Logger.getLogger("");
         for (java.util.logging.Handler handler : rootLogger.getHandlers()) {
@@ -301,13 +303,15 @@ public class CodeLensCli {
         long startTime = System.currentTimeMillis();
         try (CallIndex indexer = new CallIndex(projectRoot)) {
             int fileCount = indexer.indexDirectory(dir.toPath());
+            int totalEntries = indexer.getTotalIndexedCount();
             long elapsed = System.currentTimeMillis() - startTime;
 
             Path dbPath = indexer.getDbPath();
             String dbSize = dbPath.toFile().exists() ? formatFileSize(dbPath.toFile().length()) : "N/A";
 
             System.out.println("\n[OK] 索引建立完成");
-            System.out.println("  索引文件数: " + fileCount);
+            System.out.println("  本次新增: " + fileCount + " 个文件");
+            System.out.println("  数据库累计: " + totalEntries + " 条索引");
             System.out.println("  数据库: " + dbPath);
             System.out.println("  数据库大小: " + dbSize);
             System.out.println("  耗时: " + elapsed + "ms");
