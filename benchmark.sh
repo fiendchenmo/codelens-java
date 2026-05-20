@@ -2,8 +2,9 @@
 # CodeLens 生产级基准测试脚本 v2
 set -e
 
-JAR="/c/workspace/codelens-java/target/codelens-0.1.0.jar"
-API_KEY="sk-f92c46cac0c14d7380258ad82b4f9fb7"
+JAR="/c/workspace/codelens-java/codelens-cli/target/codelens-0.1.0.jar"
+API_KEY="${CODELENS_API_KEY:-}"
+if [ -z "$API_KEY" ]; then echo "ERROR: CODELENS_API_KEY not set"; exit 1; fi
 OUTDIR="/c/workspace/codelens-java/target/benchmark"
 mkdir -p "$OUTDIR"
 
