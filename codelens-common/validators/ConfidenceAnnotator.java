@@ -61,18 +61,20 @@ public class ConfidenceAnnotator {
                 case CERTAIN: sb.append("[OK] CERTAIN"); break;
                 case HIGH:    sb.append("[!!] HIGH"); break;
                 case MEDIUM:  sb.append("[!] MEDIUM"); break;
-                default:      sb.append("[XX] LOW"); break;
+                case LOW:     sb.append("[XX] LOW"); break;
+                case UNKNOWN: sb.append("[??] UNKNOWN"); break;
             }
             sb.append(" (验证 ").append(validatedItems).append("/").append(totalItems)
               .append(", 通过率 ").append(String.format("%.0f%%", passRate * 100)).append(")\n");
 
             for (AnnotatedItem item : items) {
-                String prefix;
+                String prefix = "[XX]";
                 switch (item.confidence) {
                     case CERTAIN: prefix = "[OK]"; break;
                     case HIGH:    prefix = "[!!]"; break;
                     case MEDIUM:  prefix = "[!]"; break;
-                    default:      prefix = "[XX]"; break;
+                    case LOW:     prefix = "[XX]"; break;
+                    case UNKNOWN: prefix = "[??]"; break;
                 }
                 sb.append(prefix).append(" ").append(item.category).append("[")
                   .append(item.index).append("] ");
