@@ -42,6 +42,14 @@ public class CodeLensCli {
     private static final Gson gson = new Gson();
     
     public static void main(String[] args) throws Exception {
+        // 抑制 java.util.logging 输出到终端
+        java.util.logging.Logger rootLogger = java.util.logging.Logger.getLogger("");
+        for (java.util.logging.Handler handler : rootLogger.getHandlers()) {
+            rootLogger.removeHandler(handler);
+        }
+        java.util.logging.Logger codelensLogger = java.util.logging.Logger.getLogger("com.codelens");
+        codelensLogger.setUseParentHandlers(false);
+
         // 检测 --no-color、--no-validate、--no-cache、--json 参数
         boolean noValidate = false;
         boolean noCache = false;
@@ -104,6 +112,8 @@ public class CodeLensCli {
                 options.put("model", arg.substring("--model=".length()));
             } else if (arg.startsWith("--temperature=")) {
                 options.put("temperature", arg.substring("--temperature=".length()));
+            } else if (arg.startsWith("--dir=")) {
+                options.put("dir", arg.substring("--dir=".length()));
             }
         }
         return options;
@@ -155,7 +165,7 @@ public class CodeLensCli {
         System.out.println("                              - 分析 Java 文件（使用 LLM）");
         System.out.println("  java -jar codelens.jar index <目录路径>");
         System.out.println("                              - 建立代码索引");
-        System.out.println("  java -jar codelens.jar callers <类名>");
+        System.out.println("  java -jar codelens.jar callers <类名> [--dir=<目录>]");
         System.out.println("                              - 查询反向依赖关系");
         System.out.println("  java -jar codelens.jar full <Java文件路径> [API_KEY] [--api-url=URL] [--model=MODEL] [--temperature=TEMP]");
         System.out.println("                              - 一键完成 index + callers + analyze");
@@ -164,11 +174,13 @@ public class CodeLensCli {
         System.out.println("  --no-color                   禁用颜色输出");
         System.out.println("  --no-validate                跳过L1+L2证据校验");
         System.out.println("  --no-cache                   禁用LLM摘要缓存，强制重新分析");
+        System.out.println("  --json                       JSON 格式输出（raw JSON，不格式化）");
         System.out.println("");
         System.out.println("选项:");
         System.out.println("  --api-url=URL                API 地址（默认 https://api.deepseek.com/v1/chat/completions）");
         System.out.println("  --model=MODEL                模型名（默认 deepseek-v4-flash）");
         System.out.println("  --temperature=TEMP           温度参数（默认 0.1）");
+        System.out.println("  --dir=<目录>                  callers 命令指定搜索目录");
         System.out.println("");
         System.out.println("环境变量:");
         System.out.println("  CODELENS_API_KEY     - API Key（优先级低于命令行参数）");
@@ -185,11 +197,12 @@ public class CodeLensCli {
         System.out.println("  java -jar codelens.jar analyze src/main/java/MyService.java --model=gpt-4");
         System.out.println("  java -jar codelens.jar analyze src/main/java/MyService.java --api-url=https://api.openai.com/v1/chat/completions --model=gpt-4 --temperature=0.7");
         System.out.println("  CODELENS_API_KEY=xxx java -jar codelens.jar full src/main/java/MyService.java");
+        System.out.println("  java -jar codelens.jar callers MyService --dir=/path/to/project");
     }
     
     private static void handleAnalyze(String[] args, boolean noValidate, boolean noCache, boolean rawJson) {
         if (args.length < 2) {
-            System.out.println("⚠️ 请提供 Java 文件路径");
+            System.out.println("[!] 请提供 Java 文件路径");
             System.out.println("用法: java -jar codelens.jar analyze <Java文件路径> [API_KEY]");
             return;
         }
@@ -198,7 +211,7 @@ public class CodeLensCli {
         File sourceFile = new File(filePath);
 
         if (!sourceFile.exists() || !sourceFile.isFile()) {
-            System.out.println("⚠️ 文件不存在: " + filePath);
+            System.out.println("[!] 文件不存在: " + filePath);
             return;
         }
 
@@ -206,7 +219,7 @@ public class CodeLensCli {
             // 获取 API 配置
             String apiKey = args.length > 2 ? args[2] : System.getenv("CODELENS_API_KEY");
             if (apiKey == null || apiKey.isEmpty()) {
-                System.out.println("⚠️ 请设置 CODELENS_API_KEY 环境变量或提供 API_KEY 参数");
+                System.out.println("[!] 请设置 CODELENS_API_KEY 环境变量或提供 API_KEY 参数");
                 return;
             }
 
@@ -256,14 +269,14 @@ public class CodeLensCli {
             }
             
         } catch (Exception e) {
-            System.out.println("⚠️ JavaParser 解析或 LLM 分析失败: " + e.getMessage());
+            System.out.println("[!] JavaParser 解析或 LLM 分析失败: " + e.getMessage());
             LOGGER.log(Level.SEVERE, "分析失败", e);
         }
     }
     
     private static void handleIndex(String[] args) throws Exception {
         if (args.length < 2) {
-            System.out.println("⚠️ 请提供目录路径");
+            System.out.println("[!] 请提供目录路径");
             System.out.println("用法: java -jar codelens.jar index <目录路径>");
             return;
         }
@@ -272,42 +285,56 @@ public class CodeLensCli {
         File dir = new File(dirPath);
         
         if (!dir.exists() || !dir.isDirectory()) {
-            System.out.println("⚠️ 目录不存在: " + dirPath);
+            System.out.println("[!] 目录不存在: " + dirPath);
             return;
         }
         
         System.out.println(ColorUtil.heading("━━━ 建立代码索引 ━━━"));
         System.out.println("目录: " + dirPath);
-        
+
         Path projectRoot = JavaParserService.findProjectRoot(dir.toPath());
         if (projectRoot == null) {
-            // 如果没有 .codelens 目录，使用当前目录作为项目根
             projectRoot = dir.toPath().toAbsolutePath().normalize();
-            System.out.println("⚠️ 未找到 .codelens 目录，使用传入目录作为项目根: " + projectRoot);
+            System.out.println("[!] 未找到 .codelens 目录，使用传入目录作为项目根: " + projectRoot);
         }
+
+        long startTime = System.currentTimeMillis();
         try (CallIndex indexer = new CallIndex(projectRoot)) {
-            indexer.indexDirectory(dir.toPath());
-            System.out.println("\n✅ 索引建立完成");
+            int fileCount = indexer.indexDirectory(dir.toPath());
+            long elapsed = System.currentTimeMillis() - startTime;
+
+            Path dbPath = indexer.getDbPath();
+            String dbSize = dbPath.toFile().exists() ? formatFileSize(dbPath.toFile().length()) : "N/A";
+
+            System.out.println("\n[OK] 索引建立完成");
+            System.out.println("  索引文件数: " + fileCount);
+            System.out.println("  数据库: " + dbPath);
+            System.out.println("  数据库大小: " + dbSize);
+            System.out.println("  耗时: " + elapsed + "ms");
         }
     }
     
     private static void handleCallers(String[] args) throws Exception {
         if (args.length < 2) {
-            System.out.println("⚠️ 请提供类名");
+            System.out.println("[!] 请提供类名");
             System.out.println("用法: java -jar codelens.jar callers <类名>");
             return;
         }
         
         String className = args[1];
-        
+
+        // 解析 --dir 选项
+        Map<String, String> options = parseOptions(args);
+        String dir = options.get("dir");
+        Path startPath = dir != null ? Paths.get(dir).toAbsolutePath() : Paths.get("").toAbsolutePath();
+
         // 使用三级查找策略定位项目根目录
-        Path startPath = Paths.get("").toAbsolutePath();
         Path projectRoot = JavaParserService.findProjectRoot(startPath);
         
         // callers 命令依赖索引，找不到 .codelens 时直接报错退出（不使用第三级兜底）
         Path codelensDir = projectRoot.resolve(".codelens");
         if (!codelensDir.toFile().exists()) {
-            System.out.println("❌ 未找到 .codelens 目录，请先执行 `java -jar codelens.jar index <项目路径>` 创建索引");
+            System.out.println("[FAIL] 未找到 .codelens 目录，请先执行 `java -jar codelens.jar index <项目路径>` 创建索引");
             return;
         }
         
@@ -338,7 +365,7 @@ public class CodeLensCli {
     
     private static void handleFull(String[] args, boolean noValidate, boolean noCache, boolean rawJson) {
         if (args.length < 2) {
-            System.out.println("⚠️ 请提供 Java 文件路径");
+            System.out.println("[!] 请提供 Java 文件路径");
             System.out.println("用法: java -jar codelens.jar full <Java文件路径> [API_KEY]");
             return;
         }
@@ -347,7 +374,7 @@ public class CodeLensCli {
         File sourceFile = new File(filePath);
 
         if (!sourceFile.exists() || !sourceFile.isFile()) {
-            System.out.println("⚠️ 文件不存在: " + filePath);
+            System.out.println("[!] 文件不存在: " + filePath);
             return;
         }
 
@@ -357,7 +384,7 @@ public class CodeLensCli {
             // 获取 API 配置
             String apiKey = args.length > 2 ? args[2] : System.getenv("CODELENS_API_KEY");
             if (apiKey == null || apiKey.isEmpty()) {
-                System.out.println("⚠️ 请设置 CODELENS_API_KEY 环境变量或提供 API_KEY 参数");
+                System.out.println("[!] 请设置 CODELENS_API_KEY 环境变量或提供 API_KEY 参数");
                 return;
             }
 
@@ -449,7 +476,7 @@ public class CodeLensCli {
             } // try-with-resources 自动关闭 indexer
             
         } catch (Exception e) {
-            System.out.println("⚠️ JavaParser 解析或 LLM 分析失败: " + e.getMessage());
+            System.out.println("[!] JavaParser 解析或 LLM 分析失败: " + e.getMessage());
             LOGGER.log(Level.SEVERE, "分析失败", e);
         }
         
@@ -710,5 +737,11 @@ public class CodeLensCli {
             case "protected": return ColorUtil.info(visibility);
             default: return visibility;
         }
+    }
+
+    private static String formatFileSize(long bytes) {
+        if (bytes < 1024) return bytes + " B";
+        if (bytes < 1024 * 1024) return String.format("%.1f KB", bytes / 1024.0);
+        return String.format("%.1f MB", bytes / (1024.0 * 1024.0));
     }
 }
