@@ -79,8 +79,9 @@ public class SummaryCache {
             String sourceHash = md5(sourceCode);
             String currentPromptHash = getPromptHash();
             String fileName = Paths.get(filePath).getFileName().toString();
-            // 缓存文件名：{sourceHash}_{promptHash}_{fileName}.json (P1-5 修复)
-            Path cacheFile = cacheRoot.resolve(sourceHash + "_" + currentPromptHash + "_" + fileName.replace(".java", "") + ".json");
+            // 缓存文件名：{combinedHash}_{fileName}_{model}.json
+            String combinedKey = md5(sourceCode + currentPromptHash);
+            Path cacheFile = cacheRoot.resolve(combinedKey + "_" + fileName.replace(".java", "") + "_" + (model != null ? model : "unknown") + ".json");
             if (!Files.exists(cacheFile)) return null;
 
             // 读取缓存
@@ -91,10 +92,10 @@ public class SummaryCache {
             // 校验 source hash 和 model
             if (!sourceHash.equals(entry.sourceHash)) return null;
             if (model != null && !model.equals(entry.model)) return null;
-            
+
             // 校验 prompt hash (P1-5 修复)
             if (!currentPromptHash.equals(entry.promptHash)) return null;
-            
+
             // 检查 TTL 是否过期 (P1-6 修复)
             if (isExpired(entry.timestamp)) {
                 // 过期，删除缓存文件
@@ -127,7 +128,8 @@ public class SummaryCache {
             String sourceHash = md5(sourceCode);
             String currentPromptHash = getPromptHash();
             String fileName = Paths.get(filePath).getFileName().toString();
-            Path cacheFile = cacheRoot.resolve(sourceHash + "_" + currentPromptHash + "_" + fileName.replace(".java", "") + ".json");
+            String combinedKey = md5(sourceCode + currentPromptHash);
+            Path cacheFile = cacheRoot.resolve(combinedKey + "_" + fileName.replace(".java", "") + "_" + (model != null ? model : "unknown") + ".json");
 
             long timestamp = System.currentTimeMillis();
 
@@ -198,10 +200,16 @@ public class SummaryCache {
             String sourceHash = md5(sourceCode);
             String currentPromptHash = getPromptHash();
             String fileName = Paths.get(filePath).getFileName().toString();
-            Path cacheFile = cacheRoot.resolve(sourceHash + "_" + currentPromptHash + "_" + fileName.replace(".java", "") + ".json");
-            if (Files.exists(cacheFile)) {
-                Files.delete(cacheFile);
-                return true;
+            String combinedKey = md5(sourceCode + currentPromptHash);
+            String prefix = combinedKey + "_" + fileName.replace(".java", "");
+            // model 未知时匹配所有模型
+            File[] matches = cacheRoot.toFile().listFiles((dir, name) -> name.startsWith(prefix));
+            if (matches != null) {
+                boolean deleted = false;
+                for (File f : matches) {
+                    if (f.delete()) deleted = true;
+                }
+                return deleted;
             }
         } catch (Exception e) { LOGGER.warning("Cache operation failed: " + e.getMessage()); }
         return false;
