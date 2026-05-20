@@ -1,10 +1,12 @@
 package com.codelens;
 
+import com.codelens.common.cache.CacheConfig;
+import com.codelens.common.cache.CacheEntry;
+import com.codelens.common.cache.FileSystemCache;
 import com.codelens.common.validators.EvidenceValidator;
 import com.codelens.common.validators.ConfidenceAnnotator;
 import com.codelens.common.normalizers.OutputNormalizer;
 import com.codelens.common.prompts.SystemPrompt;
-import com.codelens.SummaryCache;
 import com.codelens.ColorUtil;
 
 import java.io.File;
@@ -23,7 +25,7 @@ import java.util.logging.Logger;
  * 
  * 职责：
  * - 编排 LLM 调用
- * - 集成 SummaryCache 缓存
+ * - 集成 FileSystemCache 缓存
  * - 调用 EvidenceValidator 和 ConfidenceAnnotator 进行校验
  * - 返回分析结果
  */
@@ -100,9 +102,10 @@ public class AnalysisService {
             // 检查缓存
             Path projectRoot = JavaParserService.findProjectRoot(filePath);
             if (projectRoot == null) projectRoot = filePath.getParent();
-            SummaryCache cache = new SummaryCache(projectRoot, !noCache);
-            SummaryCache.CacheEntry cachedEntry = cache.lookup(filePath.toString(), sourceCode, model);
-            String cachedSummary = (cachedEntry != null) ? cachedEntry.result : null;
+            CacheConfig cacheConfig = !noCache ? CacheConfig.defaults(projectRoot.toString()) : CacheConfig.disabled();
+            FileSystemCache cache = new FileSystemCache(cacheConfig);
+            CacheEntry cachedEntry = cache.lookup(filePath.toString(), sourceCode, model);
+            String cachedSummary = (cachedEntry != null) ? cachedEntry.getResult() : null;
             
             if (cachedSummary != null && !cachedSummary.isEmpty()) {
                 System.out.println("[=] 使用缓存摘要 (可通过 --no-cache 禁用)");

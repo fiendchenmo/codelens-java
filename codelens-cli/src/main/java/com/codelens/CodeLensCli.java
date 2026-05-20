@@ -42,8 +42,6 @@ public class CodeLensCli {
     private static final Gson gson = new Gson();
     
     public static void main(String[] args) throws Exception {
-        // 抑制 SLF4J 无绑定警告
-        System.setProperty("slf4j.internal.verbosity", "WARN");
         // 抑制 java.util.logging 输出到终端
         java.util.logging.Logger rootLogger = java.util.logging.Logger.getLogger("");
         for (java.util.logging.Handler handler : rootLogger.getHandlers()) {

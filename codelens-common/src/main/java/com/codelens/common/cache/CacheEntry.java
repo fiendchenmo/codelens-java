@@ -3,18 +3,20 @@ package com.codelens.common.cache;
 /**
  * LLM 分析缓存条目。
  * <p>
- * 不可变数据类，记录一次 LLM 调用的缓存：源文件 hash、模型、时间戳、分析结果。
+ * 不可变数据类，记录一次 LLM 调用的缓存：源文件 hash、prompt hash、模型、时间戳、分析结果。
  */
 public class CacheEntry {
 
     private final String sourceHash;
+    private final String promptHash;
     private final String file;
     private final String model;
     private final long timestamp;
     private final String result;
 
-    public CacheEntry(String sourceHash, String file, String model, long timestamp, String result) {
+    public CacheEntry(String sourceHash, String promptHash, String file, String model, long timestamp, String result) {
         this.sourceHash = sourceHash;
+        this.promptHash = promptHash;
         this.file = file;
         this.model = model;
         this.timestamp = timestamp;
@@ -23,6 +25,9 @@ public class CacheEntry {
 
     /** 源文件内容 hash */
     public String getSourceHash() { return sourceHash; }
+
+    /** Prompt 规则 hash（用于 prompt 变更后缓存自动失效） */
+    public String getPromptHash() { return promptHash; }
 
     /** 源文件路径 */
     public String getFile() { return file; }
