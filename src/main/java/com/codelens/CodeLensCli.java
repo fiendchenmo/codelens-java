@@ -1,6 +1,6 @@
 package com.codelens;
 
-import com.codelens.common.utils.ColorUtil;
+import com.codelens.ColorUtil;
 import com.codelens.CallIndex;
 
 import com.codelens.CallerFinder;

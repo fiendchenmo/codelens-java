@@ -5,7 +5,7 @@ import com.codelens.common.validators.ConfidenceAnnotator;
 import com.codelens.common.normalizers.OutputNormalizer;
 import com.codelens.common.prompts.SystemPrompt;
 import com.codelens.SummaryCache;
-import com.codelens.common.utils.ColorUtil;
+import com.codelens.ColorUtil;
 
 import java.io.File;
 import java.nio.file.Files;
