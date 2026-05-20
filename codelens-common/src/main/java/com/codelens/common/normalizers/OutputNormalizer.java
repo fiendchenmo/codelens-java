@@ -39,6 +39,10 @@ public class OutputNormalizer {
 
     private static final Set<String> VALID_DEP_TYPES = new HashSet<>(Arrays.asList("field", "method_call"));
 
+    private static final Set<String> VALID_RISK_TYPES = new HashSet<>(
+        Arrays.asList("SECURITY", "PERFORMANCE", "MAINTAINABILITY")
+    );
+
     private OutputNormalizer() {}
 
     /**
@@ -100,9 +104,10 @@ public class OutputNormalizer {
                 sortJsonArrayByLine(keyMethods);
             }
 
-            // 排序 risks
+            // 归一化 risks（type 枚举校验）
             JsonArray risks = root.has("risks") ? root.getAsJsonArray("risks") : null;
             if (risks != null) {
+                normalizeRiskTypes(risks);
                 sortJsonArrayByLine(risks);
             }
 
@@ -379,6 +384,38 @@ public class OutputNormalizer {
     static String normalizeDepType(String type) {
         if (type == null || !VALID_DEP_TYPES.contains(type)) {
             return "field";
+        }
+        return type;
+    }
+
+    /**
+     * 归一化 risks[].type：非标值 → "MAINTAINABILITY"
+     */
+    static void normalizeRiskTypes(JsonArray risks) {
+        if (risks == null) return;
+        for (int i = 0; i < risks.size(); i++) {
+            JsonElement elem = risks.get(i);
+            if (!elem.isJsonObject()) continue;
+            JsonObject risk = elem.getAsJsonObject();
+            if (!risk.has("type") || risk.get("type").isJsonNull()) {
+                risk.addProperty("type", "MAINTAINABILITY");
+                continue;
+            }
+            String type = risk.get("type").getAsString();
+            String normalized = normalizeRiskType(type);
+            if (!normalized.equals(type)) {
+                risk.addProperty("type", normalized);
+            }
+        }
+    }
+
+    /**
+     * risks[].type 枚举值归一化
+     * 已知映射：非 SECURITY/PERFORMANCE/MAINTAINABILITY 的值统一降级为 MAINTAINABILITY
+     */
+    static String normalizeRiskType(String type) {
+        if (type == null || !VALID_RISK_TYPES.contains(type)) {
+            return "MAINTAINABILITY";
         }
         return type;
     }

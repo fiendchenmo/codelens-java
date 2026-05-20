@@ -5,28 +5,18 @@
 
 package com.codelens.common.validators;
 
-import com.google.gson.Gson;
-import com.google.gson.GsonBuilder;
-import com.google.gson.JsonArray;
-import com.google.gson.JsonElement;
-import com.google.gson.JsonObject;
-import com.google.gson.JsonParser;
-
 import java.util.*;
-import java.util.regex.*;
 
 /**
  * L1 证据校验器
  * 验证 LLM 生成的 JSON 分析结果中引用的行号、字段名是否与源码匹配。
- * 
+ *
  * 使用方式：
  * 1. 调用 validate() 获取校验结果
  * 2. 检查 result.issues 列表
  * 3. 调用 result.formatReport() 生成可读报告
  */
 public class EvidenceValidator {
-
-    private static final Gson GSON = new GsonBuilder().create();
 
     public enum Confidence {
         CERTAIN, HIGH, MEDIUM, LOW, UNKNOWN
@@ -125,7 +115,7 @@ public class EvidenceValidator {
                             "行号超出源码范围（源码共 " + sourceLines.length + " 行）", Confidence.LOW);
                 } else {
                     String actualLine = sourceLines[claimedLine - 1];
-                    if (actualLine.contains(name) || name.contains("Mapper") && actualLine.contains("@Mapper")) {
+                    if (actualLine.contains(name) || name.endsWith("Mapper") && actualLine.contains("@Mapper")) {
                         result.passedCount++;
                     } else {
                         // @Autowired 容错：向前查找最多 2 行，跳过注解行
@@ -229,133 +219,10 @@ public class EvidenceValidator {
     }
 
     public static String extractJsonArray(String json, String arrayName) {
-        String search = "\"" + arrayName + "\"";
-        int idx = json.indexOf(search);
-        if (idx < 0) return null;
-        int colon = json.indexOf(':', idx);
-        if (colon < 0) return null;
-        // 找第一个 '['
-        int start = json.indexOf('[', colon);
-        if (start < 0) return null;
-        // 找匹配的 ']'
-        int depth = 0;
-        int i = start;
-        boolean inString = false;
-        while (i < json.length()) {
-            char c = json.charAt(i);
-            if (c == '"' && (i == 0 || json.charAt(i - 1) != '\\')) {
-                inString = !inString;
-            } else if (!inString) {
-                if (c == '[') depth++;
-                else if (c == ']') {
-                    depth--;
-                    if (depth == 0) {
-                        return json.substring(start + 1, i);
-                    }
-                }
-            }
-            i++;
-        }
-        return null;
+        return ValidatorUtils.extractJsonArray(json, arrayName);
     }
 
     public static List<Map<String, String>> parseJsonObjects(String arrayContent) {
-        List<Map<String, String>> result = new ArrayList<>();
-        if (arrayContent == null || arrayContent.trim().isEmpty()) return result;
-
-        try {
-            // 用 Gson 解析 JSON 数组
-            JsonArray arr = JsonParser.parseString("[" + arrayContent + "]").getAsJsonArray();
-            for (JsonElement element : arr) {
-                if (element.isJsonObject()) {
-                    Map<String, String> map = parseJsonObject(element.getAsJsonObject());
-                    if (!map.isEmpty()) {
-                        result.add(map);
-                    }
-                }
-            }
-        } catch (Exception e) {
-            // 备用：原始手写解析
-            int i = 0;
-            while (i < arrayContent.length()) {
-                while (i < arrayContent.length() && Character.isWhitespace(arrayContent.charAt(i))) i++;
-                if (i >= arrayContent.length()) break;
-
-                if (arrayContent.charAt(i) == '{') {
-                    int end = findMatchingBrace(arrayContent, i);
-                    if (end > i) {
-                        String obj = arrayContent.substring(i, end + 1);
-                        Map<String, String> map = parseJsonObject(obj);
-                        if (!map.isEmpty()) {
-                            result.add(map);
-                        }
-                        i = end + 1;
-                    } else {
-                        i++;
-                    }
-                } else {
-                    i++;
-                }
-            }
-        }
-        return result;
-    }
-
-    private static int findMatchingBrace(String s, int start) {
-        int depth = 0;
-        boolean inString = false;
-        for (int i = start; i < s.length(); i++) {
-            char c = s.charAt(i);
-            if (c == '"' && (i == 0 || s.charAt(i - 1) != '\\')) {
-                inString = !inString;
-            } else if (!inString) {
-                if (c == '{') depth++;
-                else if (c == '}') {
-                    depth--;
-                    if (depth == 0) return i;
-                }
-            }
-        }
-        return -1;
-    }
-
-    private static Map<String, String> parseJsonObject(JsonObject obj) {
-        Map<String, String> result = new LinkedHashMap<>();
-        if (obj == null) return result;
-        for (String key : obj.keySet()) {
-            JsonElement element = obj.get(key);
-            String value;
-            if (element.isJsonPrimitive()) {
-                value = element.getAsString();
-            } else {
-                // 嵌套对象或数组，转为字符串
-                value = element.toString();
-            }
-            result.put(key, value);
-        }
-        return result;
-    }
-
-    private static Map<String, String> parseJsonObject(String json) {
-        Map<String, String> result = new LinkedHashMap<>();
-        if (json == null || !json.startsWith("{")) return result;
-        try {
-            // 优先用 Gson 解析
-            JsonObject obj = JsonParser.parseString(json).getAsJsonObject();
-            return parseJsonObject(obj);
-        } catch (Exception e) {
-            // 备用：正则解析（不支持布尔/嵌套/转义）
-            Pattern keyValue = Pattern.compile("\"([^\"]+)\"\\s*:\\s*(\"[^\"]*\"|\\d+)");
-            Matcher m = keyValue.matcher(json);
-            while (m.find()) {
-                String key = m.group(1);
-                String value = m.group(2);
-                if (value.startsWith("\"") && value.endsWith("\"")) {
-                    value = value.substring(1, value.length() - 1);
-                }
-                result.put(key, value);
-            }
-        }
-        return result;
+        return ValidatorUtils.parseJsonObjects(arrayContent);
     }
 }

@@ -1,6 +1,9 @@
 package com.codelens;
 
-import com.codelens.common.utils.StringUtil;
+import com.google.gson.Gson;
+import com.google.gson.GsonBuilder;
+import com.google.gson.JsonArray;
+import com.google.gson.JsonObject;
 
 import java.io.BufferedReader;
 import java.io.IOException;
@@ -22,6 +25,7 @@ import java.util.logging.Logger;
 public class LLMClient {
 
     private static final Logger LOGGER = Logger.getLogger(LLMClient.class.getName());
+    private static final Gson GSON = new GsonBuilder().disableHtmlEscaping().create();
 
     // 默认配置常量
     private static final String DEFAULT_API_URL = "https://api.deepseek.com/v1/chat/completions";
@@ -68,18 +72,28 @@ public class LLMClient {
             temperature = DEFAULT_TEMPERATURE;
         }
 
-        String body = "{"
-            + "\"model\": \"" + StringUtil.escapeJson(model) + "\","
-            + "\"messages\": ["
-            + "  {\"role\": \"system\", \"content\": \"" + StringUtil.escapeJson(systemPrompt) + "\"},"
-            + "  {\"role\": \"user\", \"content\": \"" + StringUtil.escapeJson(userPrompt) + "\"}\n"
-            + "],"
-            + "\"temperature\": " + temperature + ","
-            + "\"max_tokens\": 8192"
-            + "}";
+        JsonObject body = new JsonObject();
+        body.addProperty("model", model);
+
+        JsonArray messages = new JsonArray();
+        JsonObject systemMsg = new JsonObject();
+        systemMsg.addProperty("role", "system");
+        systemMsg.addProperty("content", systemPrompt);
+        messages.add(systemMsg);
+
+        JsonObject userMsg = new JsonObject();
+        userMsg.addProperty("role", "user");
+        userMsg.addProperty("content", userPrompt);
+        messages.add(userMsg);
+
+        body.add("messages", messages);
+        body.addProperty("temperature", temperature);
+        body.addProperty("max_tokens", 8192);
+
+        String bodyStr = GSON.toJson(body);
 
         // 带重试的请求
-        return executeWithRetry(apiUrl, apiKey, body);
+        return executeWithRetry(apiUrl, apiKey, bodyStr);
     }
 
     /**
