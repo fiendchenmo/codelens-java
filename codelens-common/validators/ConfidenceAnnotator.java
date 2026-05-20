@@ -64,8 +64,11 @@ public class ConfidenceAnnotator {
                 case LOW:     sb.append("[XX] LOW"); break;
                 case UNKNOWN: sb.append("[??] UNKNOWN"); break;
             }
-            sb.append(" (验证 ").append(validatedItems).append("/").append(totalItems)
-              .append(", 通过率 ").append(String.format("%.0f%%", passRate * 100)).append(")\n");
+            sb.append(" (验证 ").append(validatedItems).append("/").append(totalItems);
+            if (totalItems > 0) {
+                sb.append(", 通过率 ").append(String.format("%.0f%%", passRate * 100));
+            }
+            sb.append(")\n");
 
             for (AnnotatedItem item : items) {
                 String prefix = "[XX]";
@@ -107,7 +110,7 @@ public class ConfidenceAnnotator {
         result.overallConfidence = validationResult.overallConfidence();
         result.validatedItems = validationResult.totalChecked;
         result.passRate = validationResult.totalChecked > 0
-                ? (double) validationResult.passedCount / validationResult.totalChecked : 1.0;
+                ? (double) validationResult.passedCount / validationResult.totalChecked : 0.0;
 
         // 构建 L1 issues 索引：category+index -> issue
         Map<String, ValidationIssue> issueMap = new LinkedHashMap<>();
