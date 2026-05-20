@@ -83,6 +83,16 @@ public class OutputNormalizer {
             // 更新 dependencies 数组
             root.add("dependencies", remainingDeps);
 
+            // 按 line 升序排序各数组
+            sortJsonArrayByLine(remainingDeps);
+            if (keyMethods != null) {
+                sortJsonArrayByLine(keyMethods);
+            }
+            JsonArray risks = root.has("risks") ? root.getAsJsonArray("risks") : null;
+            if (risks != null) {
+                sortJsonArrayByLine(risks);
+            }
+
             return GSON.toJson(root);
 
         } catch (Exception e) {
@@ -231,5 +241,34 @@ public class OutputNormalizer {
         String aLine = a.has("line") ? a.get("line").getAsString() : "";
         String bLine = b.has("line") ? b.get("line").getAsString() : "";
         return aName.equals(bName) && aLine.equals(bLine);
+    }
+
+    /**
+     * 按 line 字段升序排序 JsonArray（原地修改）
+     */
+    private static void sortJsonArrayByLine(JsonArray arr) {
+        if (arr == null || arr.size() <= 1) return;
+        java.util.List<JsonElement> list = new java.util.ArrayList<>();
+        for (JsonElement e : arr) list.add(e);
+        java.util.Collections.sort(list, (a, b) -> {
+            int lineA = extractLine(a);
+            int lineB = extractLine(b);
+            return Integer.compare(lineA, lineB);
+        });
+        for (int i = arr.size() - 1; i >= 0; i--) {
+            arr.remove(i);
+        }
+        for (JsonElement e : list) arr.add(e);
+    }
+
+    private static int extractLine(JsonElement elem) {
+        if (!elem.isJsonObject()) return Integer.MAX_VALUE;
+        JsonObject obj = elem.getAsJsonObject();
+        if (!obj.has("line") || obj.get("line").isJsonNull()) return Integer.MAX_VALUE;
+        try {
+            return Integer.parseInt(obj.get("line").getAsString().trim());
+        } catch (NumberFormatException e) {
+            return Integer.MAX_VALUE;
+        }
     }
 }
