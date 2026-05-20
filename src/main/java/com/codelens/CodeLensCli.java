@@ -673,35 +673,6 @@ public class CodeLensCli {
                 }
             }
 
-            // 架构问题
-            if (root.has("architecture_issues") && root.get("architecture_issues").isJsonArray()) {
-                JsonArray issues = root.getAsJsonArray("architecture_issues");
-                if (issues.size() > 0) {
-                    System.out.println();
-                    System.out.println(ColorUtil.heading("━━━ 架构问题 ━━━"));
-                    for (JsonElement elem : issues) {
-                        JsonObject issue = elem.getAsJsonObject();
-                        String category = getStringField(issue, "category", "");
-                        String issueText = getStringField(issue, "issue", "");
-                        String impact = getStringField(issue, "impact", "");
-                        String suggestion = getStringField(issue, "suggestion", "");
-
-                        if (!category.isEmpty()) {
-                            System.out.println("  " + ColorUtil.warning("! ") + "[" + category + "] " + issueText);
-                        } else {
-                            System.out.println("  " + ColorUtil.warning("! ") + issueText);
-                        }
-
-                        if (!impact.isEmpty()) {
-                            System.out.println("    影响: " + impact);
-                        }
-                        if (!suggestion.isEmpty()) {
-                            System.out.println("    建议: " + suggestion);
-                        }
-                    }
-                }
-            }
-
             System.out.println();
 
         } catch (Exception e) {

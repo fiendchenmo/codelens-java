@@ -155,7 +155,9 @@ public class CodeMetaData {
 + "17. dependencies 仅包含字段级别的依赖（字段注入/构造注入/静态方法调用），方法级别的调用关系放入 keyMethods.calls 数组。不要在 dependencies 中出现 type 为 \"method_call\" 或类似方法调用的条目\n"
 + "18. dependencies[].name 必须是字段名（如 \"queryRefBillService\"），不能写全限定类名（如 \"com.stream.ecs.bill.service.IEcsBillMainService\"）、接口全名（如 \"IEcsBillMainService\"）或方法调用（如 \"billInfoCmd.queryBillInfoById()\"）。字段名 = 源码中 @Autowired/@Resource 注入的变量名\n"
 + "19. dependencies[] 只列核心业务依赖（Service/Handler/Manager/Cmd 等业务组件），不列工具类（StringUtil/BeanUtil/BigDecimalUtil/DateUtils/JSONUtil/ListUtil/MapUtil/CollectionUtils/Arrays/Collections 等）、不列 JDK 标准库（Map/List/String/BigDecimal/Integer 等）、不列框架基类（IBaseService/BaseMapper 等）。每个类的业务依赖建议控制在 15-30 个\n"
-+ "20. [代码结构底图] 中的字段和行号是代码真实提取的，你的分析必须以此为基准。dependencies[].name 必须使用底图中的字段名，dependencies[].line 必须使用底图中的行号。如果底图中没有某个字段，不要在 dependencies 中编造";
++ "20. [代码结构底图] 中的字段和行号是代码真实提取的，你的分析必须以此为基准。dependencies[].name 必须使用底图中的字段名，dependencies[].line 必须使用底图中的行号。如果底图中没有某个字段，不要在 dependencies 中编造\n"
++ "21. keyMethods[].calls 必须是对象数组，每个对象包含 method(方法名,不含括号)、line(调用行号)、type(调用类型: same_file/cross_file)。不能写成字符串数组如 [\"selectById()\"]，必须写 [{\"method\":\"selectById\",\"line\":100,\"type\":\"cross_file\"}]\n"
++ "22. dependencies[].type 只能是以下枚举值之一：\"field\"（依赖注入字段，如 @Autowired 注入的 service）或 \"method_call\"（方法调用，如 obj.method()）。不能写 injection/dependency/service/cross_file/internal 等非标值";
 
     /**
      * 标签规范定义

@@ -35,7 +35,7 @@ public class SystemPrompt {
 
     /**
      * 构建 CLI 端 LLM 分析用的完整系统提示词
-     * = buildBase() + CLI 特有规则(21-25)
+     * = buildBase() + CLI 特有规则(23-27)
      */
     public static String build() {
         return build(null);
@@ -51,12 +51,12 @@ public class SystemPrompt {
     public static String build(String structContext) {
         String base = buildBase()
             + "CLI 端特有要求：\n"
-            + "21. 同一安全风险只列一条risk，在 description 中列举所有涉及方法，只标首个入口行号\n"
-            + "22. class_analysis 只写数据流路径，不要重复其他字段内容\n"
-            + "23. 架构改进建议必须包含 trade-off 分析：每个 suggestion 需说明解决了什么问题/"
+            + "23. 同一安全风险只列一条risk，在 description 中列举所有涉及方法，只标首个入口行号\n"
+            + "24. class_analysis 只写数据流路径，不要重复其他字段内容\n"
+            + "25. 架构改进建议必须包含 trade-off 分析：每个 suggestion 需说明解决了什么问题/"
             + "引入了什么新问题/适用前提条件\n"
-            + "24. keyMethods 必须包含方法上的关键注解（特别是 @Transactional、@Async、@Scheduled 等影响行为的注解）和可见性\n"
-            + "25. 只输出 JSON，不要 markdown 代码块包裹";
+            + "26. keyMethods 必须包含方法上的关键注解（特别是 @Transactional、@Async、@Scheduled 等影响行为的注解）和可见性\n"
+            + "27. 只输出 JSON，不要 markdown 代码块包裹";
 
         if (structContext != null && !structContext.isEmpty()) {
             base += "\n\n" + structContext;
