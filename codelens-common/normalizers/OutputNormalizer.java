@@ -10,6 +10,11 @@ import com.google.gson.JsonArray;
 import com.google.gson.JsonElement;
 import com.google.gson.JsonObject;
 import com.google.gson.JsonParser;
+import com.google.gson.JsonPrimitive;
+
+import java.util.Arrays;
+import java.util.HashSet;
+import java.util.Set;
 
 /**
  * LLM 输出归一化层
@@ -32,6 +37,8 @@ public class OutputNormalizer {
         "ServiceImpl", "MapperImpl"
     };
 
+    private static final Set<String> VALID_DEP_TYPES = new HashSet<>(Arrays.asList("field", "method_call"));
+
     private OutputNormalizer() {}
 
     /**
@@ -51,65 +58,62 @@ public class OutputNormalizer {
             JsonArray dependencies = root.has("dependencies") ? root.getAsJsonArray("dependencies") : null;
             JsonArray keyMethods = root.has("keyMethods") ? root.getAsJsonArray("keyMethods") : null;
 
-            // 没有 dependencies 或 keyMethods 时无需处理
-            if (dependencies == null || dependencies.size() == 0) {
-                return rawJson;
-            }
+            // 归一化 dependencies（method_call 迁移 + type + name + 工具类过滤）
+            if (dependencies != null && dependencies.size() > 0) {
+                // 构建 keyMethod 行号范围
+                java.util.List<KeyMethodRange> ranges = buildKeyMethodRanges(keyMethods);
 
-            // 构建 keyMethod 行号范围: [startLine, endLine)
-            // 按行号从小到大排序，相邻 method 之间形成范围
-            java.util.List<KeyMethodRange> ranges = buildKeyMethodRanges(keyMethods);
+                // 筛选需要迁移的 method_call 条目
+                JsonArray remainingDeps = new JsonArray();
+                for (int i = 0; i < dependencies.size(); i++) {
+                    JsonElement depElem = dependencies.get(i);
+                    if (!depElem.isJsonObject()) {
+                        remainingDeps.add(depElem);
+                        continue;
+                    }
+                    JsonObject dep = depElem.getAsJsonObject();
 
-            // 筛选需要迁移的 method_call 条目
-            JsonArray remainingDeps = new JsonArray();
-            for (int i = 0; i < dependencies.size(); i++) {
-                JsonElement depElem = dependencies.get(i);
-                if (!depElem.isJsonObject()) {
-                    remainingDeps.add(depElem);
-                    continue;
-                }
-                JsonObject dep = depElem.getAsJsonObject();
-
-                if (isMethodCall(dep)) {
-                    // 尝试匹配 keyMethod 行号范围
-                    KeyMethodRange matched = findMatchingRange(dep, ranges);
-                    if (matched != null) {
-                        // 追加到对应 keyMethod 的 calls 数组
-                        appendCall(matched.methodObj, dep);
-                        // 不加入 remainingDeps（已迁移）
+                    if (isMethodCall(dep)) {
+                        KeyMethodRange matched = findMatchingRange(dep, ranges);
+                        if (matched != null) {
+                            appendCall(matched.methodObj, dep);
+                        } else {
+                            remainingDeps.add(dep);
+                        }
                     } else {
-                        // 无匹配范围，在 dependencies 中保留
                         remainingDeps.add(dep);
                     }
-                } else {
-                    // 非 method_call 条目保留
-                    remainingDeps.add(dep);
                 }
+
+                root.add("dependencies", remainingDeps);
+
+                // 归一化 type + name + 工具类过滤
+                normalizeDepTypes(remainingDeps);
+                normalizeDepNames(remainingDeps);
+                filterToolClassDeps(remainingDeps);
+                sortJsonArrayByLine(remainingDeps);
             }
 
-            // 更新 dependencies 数组
-            root.add("dependencies", remainingDeps);
-
-            // 按 line 升序排序各数组
-            sortJsonArrayByLine(remainingDeps);
+            // 归一化 keyMethods[].calls（字符串→对象）
             if (keyMethods != null) {
+                normalizeAllCalls(keyMethods);
                 sortJsonArrayByLine(keyMethods);
             }
+
+            // 排序 risks
             JsonArray risks = root.has("risks") ? root.getAsJsonArray("risks") : null;
             if (risks != null) {
                 sortJsonArrayByLine(risks);
             }
 
-            // 归一化 dependencies name（全限定类名 → 字段名）+ 过滤工具类
-            normalizeDepNames(remainingDeps);
-            filterToolClassDeps(remainingDeps);
-            // 过滤后重新排序
-            sortJsonArrayByLine(remainingDeps);
+            // 移除 architecture_issues（不在 Schema v2 中）
+            if (root.has("architecture_issues")) {
+                root.remove("architecture_issues");
+            }
 
             return GSON.toJson(root);
 
         } catch (Exception e) {
-            // 解析失败时返回原始 JSON，不破坏下游流程
             return rawJson;
         }
     }
@@ -343,6 +347,99 @@ public class OutputNormalizer {
         if (name.startsWith("com.stream.core.util.")) return true;
         if (name.startsWith("org.apache.commons.")) return true;
         return false;
+    }
+
+    /**
+     * 归一化 dependencies[].type：非标值 → "field" / "method_call"
+     */
+    static void normalizeDepTypes(JsonArray deps) {
+        if (deps == null) return;
+        for (int i = 0; i < deps.size(); i++) {
+            JsonElement elem = deps.get(i);
+            if (!elem.isJsonObject()) continue;
+            JsonObject dep = elem.getAsJsonObject();
+            if (!dep.has("type") || dep.get("type").isJsonNull()) {
+                dep.addProperty("type", "field");
+                continue;
+            }
+            String type = dep.get("type").getAsString();
+            String normalized = normalizeDepType(type);
+            if (!normalized.equals(type)) {
+                dep.addProperty("type", normalized);
+            }
+        }
+    }
+
+    /**
+     * dependencies[].type 枚举值归一化
+     * 已知映射：injection/dependency/service/autowired → field
+     *          cross_file/internal/external/same_file → 默认为 field
+     *          field/method_call → 不变
+     */
+    static String normalizeDepType(String type) {
+        if (type == null || !VALID_DEP_TYPES.contains(type)) {
+            return "field";
+        }
+        return type;
+    }
+
+    /**
+     * 遍历所有 keyMethod，归一化其 calls 数组
+     */
+    static void normalizeAllCalls(JsonArray keyMethods) {
+        if (keyMethods == null) return;
+        for (int i = 0; i < keyMethods.size(); i++) {
+            JsonElement elem = keyMethods.get(i);
+            if (!elem.isJsonObject()) continue;
+            JsonObject method = elem.getAsJsonObject();
+            if (!method.has("calls") || !method.get("calls").isJsonArray()) continue;
+            JsonArray calls = method.getAsJsonArray("calls");
+            normalizeCalls(calls);
+        }
+    }
+
+    /**
+     * 将 keyMethods[].calls 中的字符串元素归一化为对象
+     *
+     * 输入：["selectById()", "mergeBillMain()"]
+     * 输出：[{"method":"selectById","line":-1,"type":"unknown"}, ...]
+     */
+    static void normalizeCalls(JsonArray calls) {
+        if (calls == null || calls.size() == 0) return;
+        for (int i = 0; i < calls.size(); i++) {
+            JsonElement elem = calls.get(i);
+            if (elem.isJsonPrimitive()) {
+                String callStr = elem.getAsString();
+                // 去掉括号及参数
+                int parenIdx = callStr.indexOf('(');
+                if (parenIdx >= 0) {
+                    callStr = callStr.substring(0, parenIdx);
+                }
+                JsonObject obj = new JsonObject();
+                obj.addProperty("method", callStr);
+                obj.addProperty("line", -1);
+                obj.addProperty("type", "unknown");
+                calls.set(i, obj);
+            } else if (elem.isJsonObject()) {
+                JsonObject obj = elem.getAsJsonObject();
+                // 确保 method 不含括号
+                if (obj.has("method") && !obj.get("method").isJsonNull()) {
+                    String m = obj.get("method").getAsString();
+                    int parenIdx = m.indexOf('(');
+                    if (parenIdx >= 0) {
+                        obj.addProperty("method", m.substring(0, parenIdx));
+                    }
+                }
+                // 确保 line 字段存在
+                if (!obj.has("line") || obj.get("line").isJsonNull()) {
+                    obj.addProperty("line", -1);
+                }
+                // 确保 type 字段存在
+                if (!obj.has("type") || obj.get("type").isJsonNull()) {
+                    obj.addProperty("type", "unknown");
+                }
+            }
+        }
     }
 
     /**
