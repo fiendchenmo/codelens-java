@@ -229,7 +229,7 @@ public class CodeLensCli {
             double temperature = getTemperature(options);
 
             // 读取源代码
-            String sourceCode = Files.readString(sourceFile.toPath());
+            String sourceCode = new String(Files.readAllBytes(sourceFile.toPath()));
 
             // 解析文件结构概览
             List<JavaParserService.ClassInfo> classInfos = JavaParserService.parseFile(sourceFile);
@@ -403,7 +403,7 @@ public class CodeLensCli {
 
             // 声明变量
             List<CallerFinder.CallerInfo> callers = new ArrayList<>();
-            String sourceCode = Files.readString(sourceFile.toPath());
+            String sourceCode = new String(Files.readAllBytes(sourceFile.toPath()));
 
             // 1. 建立索引
             try (CallIndex indexer = new CallIndex(projectRoot)) {

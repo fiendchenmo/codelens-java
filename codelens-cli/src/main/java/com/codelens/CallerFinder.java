@@ -121,7 +121,7 @@ public class CallerFinder {
             throws IOException {
         
         try {
-            String content = Files.readString(Paths.get(filePath));
+            String content = new String(Files.readAllBytes(Paths.get(filePath)));
             CompilationUnit cu = StaticJavaParser.parse(content);
             
             // 查找匹配的类/接口声明
@@ -197,7 +197,7 @@ public class CallerFinder {
         for (CallIndex.IndexResult cls : classes) {
             if (cls.term.equals(className)) {
                 try {
-                    String content = Files.readString(Paths.get(cls.filePath));
+                    String content = new String(Files.readAllBytes(Paths.get(cls.filePath)));
                     CompilationUnit cu = StaticJavaParser.parse(content);
                     
                     return cu.findAll(ClassOrInterfaceDeclaration.class).stream()
