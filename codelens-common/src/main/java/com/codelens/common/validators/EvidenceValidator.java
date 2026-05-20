@@ -115,7 +115,7 @@ public class EvidenceValidator {
                             "行号超出源码范围（源码共 " + sourceLines.length + " 行）", Confidence.LOW);
                 } else {
                     String actualLine = sourceLines[claimedLine - 1];
-                    if (actualLine.contains(name) || name.endsWith("Mapper") && actualLine.contains("@Mapper")) {
+                    if (actualLine.contains(name) || (name.endsWith("Mapper") && actualLine.contains("@Mapper"))) {
                         result.passedCount++;
                     } else {
                         // @Autowired 容错：向前查找最多 2 行，跳过注解行
