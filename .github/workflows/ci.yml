@@ -1,0 +1,47 @@
+name: CI
+
+on:
+  push:
+    branches: [ main, master ]
+    tags: [ 'v*' ]
+  pull_request:
+    branches: [ main, master ]
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up JDK 8
+        uses: actions/setup-java@v4
+        with:
+          java-version: '8'
+          distribution: 'temurin'
+          cache: maven
+
+      - name: Run tests
+        run: mvn test -B -V
+
+      - name: Build JAR
+        run: mvn package -DskipTests -B
+
+      - name: Upload JAR artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: codelens-cli
+          path: target/codelens-*.jar
+
+  notify-on-failure:
+    needs: build
+    if: failure() && github.event_name == 'push'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Notify via Feishu
+        run: |
+          echo "Build failed for ${{ github.repository }} on ${{ github.ref }}"
+          echo "Commit: ${{ github.sha }}"
+          echo "Author: ${{ github.actor }}"
+          # TODO: Add Feishu webhook notification when ready
