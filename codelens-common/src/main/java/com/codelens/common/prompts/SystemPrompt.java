@@ -1,5 +1,5 @@
 // SYNC_SOURCE: codelens-common/models/CodeMetaData.java (JSON_SCHEMA + CORE_RULES)
-// SYNC_VERSION: 2026-05-21-v3
+// SYNC_VERSION: 2026-05-21-v4
 // 维护方：喵呜（CLI端），prompt/校验器相关由喵呜拍板
 // 说明：共享 prompt 模板，buildBase() 提供两端共用的基础 prompt
 // CLI 端用 build()，插件端用 buildBase() + 自行追加 PSI 标签上下文
@@ -71,10 +71,11 @@ public class SystemPrompt {
      */
     private static String buildFewShotSection() {
         return "=== Few-shot 示例 ===\n"
-            + "--- 规则23: dependencies 字段名精确匹配 ---\n"
+            + "--- 规则23: dependencies 字段名精确匹配 + 完整列举 ---\n"
             + "源码字段：@Autowired private ILoginManager loginManager;\n"
             + "正确：{\"name\": \"loginManager\", \"type\": \"field\", \"line\": 26}\n"
-            + "错误：{\"name\": \"LoginManager\", \"type\": \"field\", \"line\": 26}\n\n"
+            + "错误：{\"name\": \"LoginManager\", \"type\": \"field\", \"line\": 26}\n"
+            + "⚠️ deps数量不做限制：源码有多少个@Autowired字段就列多少个deps，不要因为本示例只展示了1个字段就压缩deps列表\n\n"
 
             + "--- 规则24: keyMethods.calls 精简 ---\n"
             + "{\n"
