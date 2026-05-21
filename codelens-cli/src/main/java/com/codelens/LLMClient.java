@@ -36,6 +36,9 @@ public class LLMClient {
     private static final int MAX_RETRIES = 2;  // 最多重试2次
     private static final int BASE_DELAY_MS = 2000;  // 基础延迟2秒
 
+    // 输出配置
+    private static final int MAX_TOKENS = 16384;  // 最大输出 token 数
+
     /**
      * 分析接口（使用默认配置）
      * @param apiKey API Key
@@ -88,7 +91,7 @@ public class LLMClient {
 
         body.add("messages", messages);
         body.addProperty("temperature", temperature);
-        body.addProperty("max_tokens", 8192);
+        body.addProperty("max_tokens", MAX_TOKENS);
 
         String bodyStr = GSON.toJson(body);
 
