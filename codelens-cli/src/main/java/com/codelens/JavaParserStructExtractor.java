@@ -11,6 +11,7 @@ import com.github.javaparser.ast.type.ClassOrInterfaceType;
 
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.nio.file.Paths;
 import java.util.Optional;
 
 /**
@@ -152,7 +153,7 @@ public class JavaParserStructExtractor {
             String sourceRoot = absPath.substring(0, pkgIndex);
             String parentRelPath = parentPkg.replace('.', '/') + "/" + parentName + ".java";
 
-            return Path.of(sourceRoot + parentRelPath).normalize();
+            return Paths.get(sourceRoot + parentRelPath).normalize();
         } catch (Exception e) {
             return null;
         }
