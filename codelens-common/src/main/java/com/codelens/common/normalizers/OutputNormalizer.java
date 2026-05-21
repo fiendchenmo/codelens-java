@@ -81,9 +81,11 @@ public class OutputNormalizer {
                         KeyMethodRange matched = findMatchingRange(dep, ranges);
                         if (matched != null) {
                             appendCall(matched.methodObj, dep);
-                        } else {
-                            remainingDeps.add(dep);
+                        } else if (keyMethods != null && keyMethods.size() > 0) {
+                            // 无精确 range 匹配时，按行号最近的关键方法追加
+                            appendToClosestKeyMethod(dep, keyMethods);
                         }
+                        // method_call 不加入 dependencies
                     } else {
                         remainingDeps.add(dep);
                     }
@@ -213,6 +215,53 @@ public class OutputNormalizer {
             }
         }
         return null;
+    }
+
+    /**
+     * 按行号距离追加到最近的关键方法；无行号时追加到第一个
+     */
+    private static void appendToClosestKeyMethod(JsonObject dep, JsonArray keyMethods) {
+        int depLine = -1;
+        if (dep.has("line") && !dep.get("line").isJsonNull()) {
+            try {
+                depLine = Integer.parseInt(dep.get("line").getAsString().trim());
+            } catch (NumberFormatException e) {
+                depLine = -1;
+            }
+        }
+
+        if (depLine < 0) {
+            // 无有效行号：追加到第一个关键方法
+            appendCall(keyMethods.get(0).getAsJsonObject(), dep);
+            return;
+        }
+
+        // 找行号最近的关键方法
+        JsonObject closest = null;
+        int minDiff = Integer.MAX_VALUE;
+        for (int i = 0; i < keyMethods.size(); i++) {
+            JsonElement elem = keyMethods.get(i);
+            if (!elem.isJsonObject()) continue;
+            JsonObject km = elem.getAsJsonObject();
+            if (!km.has("line") || km.get("line").isJsonNull()) continue;
+            try {
+                int kmLine = Integer.parseInt(km.get("line").getAsString().trim());
+                int diff = Math.abs(depLine - kmLine);
+                if (diff < minDiff) {
+                    minDiff = diff;
+                    closest = km;
+                }
+            } catch (NumberFormatException e) {
+                // 跳过无效行号
+            }
+        }
+
+        if (closest != null) {
+            appendCall(closest, dep);
+        } else {
+            // 降级：追加到第一个
+            appendCall(keyMethods.get(0).getAsJsonObject(), dep);
+        }
     }
 
     /**
