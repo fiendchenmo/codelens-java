@@ -5,6 +5,7 @@ import static org.junit.jupiter.api.Assertions.*;
 
 import com.google.gson.JsonArray;
 import com.google.gson.JsonObject;
+import com.google.gson.JsonParser;
 
 public class OutputNormalizerTest {
 
@@ -244,5 +245,59 @@ public class OutputNormalizerTest {
         assertFalse(result.contains("architecture_issues"), "architecture_issues should be removed");
         assertTrue(result.contains("doSomething"), "calls should still be normalized");
         assertFalse(result.contains("doSomething()"), "parentheses should be stripped");
+    }
+
+    @Test
+    void testNormalizeMethodCallDepsRemovedFromDeps() {
+        // method_call 类型 deps 应从 dependencies 中移除，并追加到对应 keyMethods 的 calls
+        String json = "{" +
+            "\"dependencies\": [" +
+            "  {\"name\": \"userMapper\", \"type\": \"field\", \"line\": \"1\"}," +
+            "  {\"name\": \"base64Util\", \"type\": \"method_call\", \"line\": \"5\"}," +
+            "  {\"name\": \"ltpaTokenManager\", \"type\": \"method_call\", \"line\": \"15\"}," +
+            "  {\"name\": \"billService\", \"type\": \"field\", \"line\": \"20\"}" +
+            "]," +
+            "\"keyMethods\": [" +
+            "  {\"name\": \"login\", \"line\": \"5\"}," +
+            "  {\"name\": \"validateToken\", \"line\": \"15\"}" +
+            "]" +
+            "}";
+        String result = OutputNormalizer.normalize(json);
+
+        // 解析 JSON 验证 dependencies 数组
+        JsonObject root = JsonParser.parseString(result).getAsJsonObject();
+        JsonArray deps = root.getAsJsonArray("dependencies");
+        assertEquals(2, deps.size(), "dependencies should only contain field types");
+        assertEquals("userMapper", deps.get(0).getAsJsonObject().get("name").getAsString());
+        assertEquals("billService", deps.get(1).getAsJsonObject().get("name").getAsString());
+
+        // keyMethods.calls 应包含迁移的 method_call
+        JsonArray kms = root.getAsJsonArray("keyMethods");
+        assertTrue(kms.get(0).getAsJsonObject().has("calls"), "login should have calls");
+        JsonArray loginCalls = kms.get(0).getAsJsonObject().getAsJsonArray("calls");
+        assertTrue(loginCalls.size() >= 1, "login should have migrated calls");
+        assertEquals("base64Util", loginCalls.get(0).getAsJsonObject().get("name").getAsString());
+
+        assertTrue(kms.get(1).getAsJsonObject().has("calls"), "validateToken should have calls");
+        JsonArray vtCalls = kms.get(1).getAsJsonObject().getAsJsonArray("calls");
+        assertTrue(vtCalls.size() >= 1, "validateToken should have migrated calls");
+        assertEquals("ltpaTokenManager", vtCalls.get(0).getAsJsonObject().get("name").getAsString());
+    }
+
+    @Test
+    void testNormalizeUnmatchedMethodCallDropped() {
+        // 无匹配 keyMethod 的 method_call 应被丢弃（不留在 deps 中）
+        String json = "{" +
+            "\"dependencies\": [" +
+            "  {\"name\": \"userMapper\", \"type\": \"field\", \"line\": \"1\"}," +
+            "  {\"name\": \"orphanCall\", \"type\": \"method_call\", \"line\": \"99\"}" +
+            "]" +
+            "}";
+        String result = OutputNormalizer.normalize(json);
+
+        JsonObject root = JsonParser.parseString(result).getAsJsonObject();
+        JsonArray deps = root.getAsJsonArray("dependencies");
+        assertEquals(1, deps.size(), "orphan method_call should be dropped");
+        assertEquals("userMapper", deps.get(0).getAsJsonObject().get("name").getAsString());
     }
 }
