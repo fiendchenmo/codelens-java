@@ -1,5 +1,5 @@
 // SYNC_SOURCE: codelens-common/models/CodeMetaData.java (JSON_SCHEMA + CORE_RULES)
-// SYNC_VERSION: 2026-05-21-v4
+// SYNC_VERSION: 2026-05-21-v5
 // 维护方：喵呜（CLI端），prompt/校验器相关由喵呜拍板
 // 说明：共享 prompt 模板，buildBase() 提供两端共用的基础 prompt
 // CLI 端用 build()，插件端用 buildBase() + 自行追加 PSI 标签上下文
@@ -56,7 +56,8 @@ public class SystemPrompt {
             + "26. 架构改进建议必须包含 trade-off 分析：每个 suggestion 需说明解决了什么问题/"
             + "引入了什么新问题/适用前提条件\n"
             + "27. keyMethods 必须包含方法上的关键注解（特别是 @Transactional、@Async、@Scheduled 等影响行为的注解）和可见性\n"
-            + "28. 只输出 JSON，不要 markdown 代码块包裹\n\n"
+            + "28. 只输出 JSON，不要 markdown 代码块包裹\n"
+            + "29. 所有@Autowired/@Resource字段注入必须完整出现在dependencies中，禁止将字段注入归类到keyMethods.calls\n\n"
             + buildFewShotSection();
 
         if (structContext != null && !structContext.isEmpty()) {
@@ -72,10 +73,15 @@ public class SystemPrompt {
     private static String buildFewShotSection() {
         return "=== Few-shot 示例 ===\n"
             + "--- 规则23: dependencies 字段名精确匹配 + 完整列举 ---\n"
-            + "源码字段：@Autowired private ILoginManager loginManager;\n"
-            + "正确：{\"name\": \"loginManager\", \"type\": \"field\", \"line\": 26}\n"
-            + "错误：{\"name\": \"LoginManager\", \"type\": \"field\", \"line\": 26}\n"
-            + "⚠️ deps数量不做限制：源码有多少个@Autowired字段就列多少个deps，不要因为本示例只展示了1个字段就压缩deps列表\n\n"
+            + "源码有3个@Autowired字段注入：\n"
+            + "  @Autowired private ILoginManager loginManager;\n"
+            + "  @Autowired private ISysDeptService sysDeptService;\n"
+            + "  @Autowired private ISysCorpService sysCorpService;\n"
+            + "正确（全部列出，不压缩）：\n"
+            + "  {\"name\": \"loginManager\", \"type\": \"field\", \"line\": 26},\n"
+            + "  {\"name\": \"sysDeptService\", \"type\": \"field\", \"line\": 29},\n"
+            + "  {\"name\": \"sysCorpService\", \"type\": \"field\", \"line\": 32}\n"
+            + "错误（少列）：{\"name\": \"loginManager\", \"type\": \"field\", \"line\": 26}\n\n"
 
             + "--- 规则24: keyMethods.calls 精简 ---\n"
             + "{\n"
