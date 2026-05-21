@@ -241,7 +241,22 @@ public class ConfidenceAnnotator {
             } else {
                 ai.confidence = Confidence.MEDIUM;
                 ai.reason = "L1 未覆盖";
-                ai.lineOffset = -1;
+                // keyMethods 行号在源码范围内 → 偏差0，与插件端对齐
+                String lineStr = item.get("line");
+                if (lineStr != null && sourceLines != null) {
+                    try {
+                        int claimedLine = Integer.parseInt(lineStr.trim());
+                        if (claimedLine >= 1 && claimedLine <= sourceLines.length) {
+                            ai.lineOffset = 0;
+                        } else {
+                            ai.lineOffset = -1;
+                        }
+                    } catch (NumberFormatException e) {
+                        ai.lineOffset = -1;
+                    }
+                } else {
+                    ai.lineOffset = -1;
+                }
             }
             result.items.add(ai);
         }
