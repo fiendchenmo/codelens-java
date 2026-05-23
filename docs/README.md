@@ -31,18 +31,23 @@ docs/
 
 ## 当前进度
 
-- **Phase 1（L1 基准测试）**：Round 0-3 进行中，C6 deps过拟合修复中（v0.2.5）
-- **Phase 2**：11项任务已规划，等Phase 1收敛后启动
+- **Phase 1（L1 基准测试）**：Round 0-3 完成，v0.2.5
+- **Phase 2**：需求文档已编写，待评审后进入开发
 
-## Phase 2 common 归属任务（喵呜负责）
+## Phase 2 需求文档索引
 
-| # | 任务 | 优先级 | 产出 |
-|---|------|--------|------|
-| 3 | 完整 L3 多轮验证 | 🔴 P0 | 校验算法 → common |
-| 4 | 隐式依赖检测 | 🔴 P0 | 检测算法 → common |
-| 5 | CallIndex 迁移 Phase 2 | 🟡 P1 | SQLite+CRUD → common |
-| 6 | ProviderPreset 温度锁定 | 🟡 P1 | 温度逻辑 → common |
-| 7 | 模型特性标记 | 🟡 P1 | 枚举+Schema → common |
-| 11 | keyMethods 增强 | 🟢 P2 | Schema+校验器 → common |
+| 编号 | 需求 | 优先级 | 交付日期 | 状态 |
+|------|------|--------|----------|------|
+| REQ-C1 | 移除 architecture_issues 独立规则 | 🔴 立即 | 5/24 | 📝 待评审 |
+| REQ-C7 | L3 多轮验证 | 🔴 P0 | 5/25 | 📝 待评审 |
+| REQ-C8 | 隐式依赖检测 | 🔴 P0 | 5/26 | 📝 待评审 |
+| REQ-C2 | EvidenceValidator 加 methodRanges | 🟡 P1 | 5/27 | 📝 待评审 |
+| REQ-C3 | SchemaVersion 枚举 + JSON_SCHEMA 版本化 | 🟡 P1 | 5/27 | 📝 待评审 |
+| REQ-C4 | SystemPrompt 双模板 + 两阶段填充说明 | 🟡 P1 | 5/28 | 📝 待评审 |
+| REQ-C5 | Normalizer V3 分支 | 🟡 P1 | 5/28 | 📝 待评审 |
+| REQ-C10 | ProviderPreset 温度锁定 | 🟡 P1 | 5/26 | 📝 待评审 |
+| REQ-C11 | 模型特性标记 | 🟡 P1 | 5/29 | 📝 待评审 |
+| REQ-C6 | 双版测试 | 🟡 P1 | 5/29 | 📝 待评审 |
+| REQ-C9 | CallIndex 迁移 Phase 2 | 🟢 P2 | 5/30~31 | 📝 待评审 |
 
-建议执行顺序：#6 → #3 → #4 → #5 → #7 → #11
+排期：5/24 C-1+C-7 → 5/25 C-7 → 5/26 C-8+C-10 → 5/27 C-2+C-3 → 5/28 C-4+C-5 → 5/29 C-6+C-11 → 5/30~31 C-9
