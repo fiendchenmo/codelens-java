@@ -56,7 +56,6 @@ public class CodeMetaData {
      *   risks[]             - 风险项列表
      *   keyMethods[]        - 关键方法列表
      *   framework_integration - 框架集成分析
-     *   architecture_issues[] - 架构级问题列表
      */
     public static final String JSON_SCHEMA = ""
             + "{\n"
@@ -111,7 +110,7 @@ public class CodeMetaData {
             + "特别关注 @Transactional 方法中的异常处理模式\n"
             + "6. 检查跨资源一致性:当一个方法同时操作 DB 和外部系统(调度器/缓存/消息队列)，"
             + "必须分析两阶段操作的失败场景-DB 成功但外部系统失败时状态是否一致，是否有补偿/回滚机制. "
-            + "这类问题必须写入 architecture_issues，同时在 risks 中标注具体代码行\n"
+            + "这类跨资源一致性问题写入 risks 中标注具体代码行\n"
             + "7. @Transactional 自调用绕过代理:检查方法内是否有 this.xxx() 自调用，"
             + "被调方法上的 @Transactional 会被跳过(Spring AOP 代理模式下 this 不走代理). "
             + "如需事务一致性，必须通过注入的代理对象调用(@Autowired self)\n"
@@ -128,11 +127,6 @@ public class CodeMetaData {
             + "这会导致「幽灵记录」(DB 有但外部无). 标记为事务/逻辑类风险，"
             + "建议使用事务性发件箱模式或重新排序. 区分 DB->外部 和 外部->DB 的顺序差异:"
             + "前者产生幽灵记录，后者更安全\n"
-            + "11. architecture_issues 不得为空且不得合并为单条！每个维度的问题必须独立列出，至少 3 条. "
-            + "必须检查以下维度:状态一致性(多资源操作的原子性), 事务边界(@Transactional 的粒度和覆盖范围), "
-            + "并发安全(共享状态的线程安全), 资源管理(连接/流的关闭), 初始化时序"
-            + "(@PostConstruct/静态块的初始化顺序). 每类问题独立一条 issue，不要合并不同类别的问题. "
-            + "每个 issue 必须有 category/impact/suggestion 三个字段\n"
             + "12. framework_integration 不得为空！必须分析本类使用的框架的关键行为和前提条件:"
             + "框架方法的副作用, 框架异常处理机制, 框架与 DB 的事务关系. "
             + "例如:如果用了 Quartz，必须分析 JobStore 类型(RAMJobStore 内存存储 vs JobStoreTX/JDBC 持久化)"
@@ -142,7 +136,7 @@ public class CodeMetaData {
             + "13. 只输出 JSON，不要 markdown 代码块包裹，不要加任何前缀/后缀说明文字\n"
             + "14. 同一类安全风险只列一条 risk，在 description 中列举所有涉及方法，只标首个入口行号\n"
             + "15. keyMethods 的 description 字段保持精简，只写关键发现，不要重复 purpose 已涵盖的内容. "
-            + "优先保证 architecture_issues 和 risks 的完整性\n"
+            + "优先保证 risks 的完整性\n"
             + "16. class_analysis 必须用箭头(->)分隔数据流步骤，格式: 输入 -> 步骤1 -> 步骤2 -> ... -> 输出. "
             + "每个步骤应标注关键方法名或操作类型，如: DB查询(selectById) -> 缓存写入(redis.set) -> 返回结果. "
             + "多分支用分号分隔，如: 输入 -> 分支A: ... ; 分支B: ... -> 输出\n"
