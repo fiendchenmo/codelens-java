@@ -6,7 +6,7 @@
 
     <groupId>com.github.fiendchenmo</groupId>
     <artifactId>codelens</artifactId>
-    <version>0.2.0</version>
+    <version>0.2.7</version>
     <packaging>pom</packaging>
 
     <modules>
