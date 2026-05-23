@@ -11,6 +11,10 @@
 | # | 提出日期 | 提出方 | 需求 | 目的 | 可行方案 | 验证方式 | 评估结果 | 修改方 | 预计交付 | 版本 | 状态 |
 |---|----------|--------|------|------|----------|----------|----------|--------|----------|------|------|
 | 1 | 2026-05-21 | 嗷呜 | ProviderPreset 温度锁定 | CLI端和插件端温度行为一致 | ProviderPreset加temperature字段 | 插件端验证温度生效 | 待评估 | 喵呜 | — | — | ⏳ |
+| 2 | 2026-05-23 | 默默 | 移除 architecture_issues 独立规则 | 消除 LLM 被迫凑 3 条架构问题 | CORE_RULES 中删除该约束 | 插件端测试验证 LLM 输出不再包含 architecture_issues | ✅ 喵呜确认 | 喵呜 | 5 分钟 | Phase 2 | ⏳ 待排期 |
+| 3 | 2026-05-23 | 默默 | EvidenceValidator 加 methodRanges | 方法内嵌 risks 的行号能在方法范围内校验，而非整文件 | EvidenceValidator.validate() 新增重载，MethodRange 类放 common，@Nullable 不传降级 | CLI 端不传 methodRanges → 降级整文件；插件端传 → 方法范围校验 | ✅ 喵呜确认 | 喵呜 | 0.5d | Phase 2 | ⏳ 待排期 |
+| 4 | 2026-05-23 | 默默 | SystemPrompt.buildBase() [FACT]/[INFER] 两阶段标记 | Schema 每个字段旁标注来源，LLM 知道哪些不可修改 | buildBase(version) 模板中每个字段追加 [FACT]/[INFER] 标记，不绑定引擎名 | 插件端 v3 输出验证字段标记正确 | ✅ 喵呜确认 | 喵呜 | 1d | Phase 2 | ⏳ 待排期 |
+| 5 | 2026-05-23 | 默默 | JSON Schema 版本化 + Normalizer 分版 | common 一套代码服务 V2/V3 两个 Schema | buildSchema(version) 继承+覆盖，Normalizer 按 version 分支 | CLI 端 V2 不炸，插件端 V3 能跑，过渡期共存 | ✅ 确认方向 | 喵呜 | 1d | v3 启动时 | ⏳ 待排期 |
 
 ---
 
