@@ -177,6 +177,62 @@ public class EvidenceValidator {
         }
     }
 
+    /**
+     * validateRisks 重载 — 支持方法级行号校验。
+     *
+     * @param json         LLM 生成的 JSON 分析结果
+     * @param methodRanges 方法范围列表（null 或空列表时降级为整文件校验）
+     * @param totalLines   源码总行数（降级模式使用）
+     * @return 校验结果
+     */
+    public static ValidationResult validateRisks(String json, List<MethodRange> methodRanges, int totalLines) {
+        ValidationResult result = new ValidationResult();
+        String arrayContent = extractJsonArray(json, "risks");
+        if (arrayContent == null) return result;
+        List<Map<String, String>> items = parseJsonObjects(arrayContent);
+
+        boolean useMethodRanges = methodRanges != null && !methodRanges.isEmpty();
+
+        for (int i = 0; i < items.size(); i++) {
+            Map<String, String> item = items.get(i);
+            String lineStr = item.get("line");
+            if (lineStr == null) continue;
+            try {
+                int claimedLine = Integer.parseInt(lineStr.trim());
+                result.totalChecked++;
+
+                if (useMethodRanges) {
+                    // 方法级校验：line 必须落在某个方法范围内
+                    boolean inAnyMethod = false;
+                    for (MethodRange range : methodRanges) {
+                        if (range.contains(claimedLine)) {
+                            inAnyMethod = true;
+                            break;
+                        }
+                    }
+                    if (inAnyMethod) {
+                        result.passedCount++;
+                    } else {
+                        addIssue(result, "risks", i, claimedLine, "line", lineStr, null,
+                                "行号不在任何方法范围内", Confidence.LOW);
+                    }
+                } else {
+                    // 降级为整文件范围校验
+                    if (claimedLine >= 1 && claimedLine <= totalLines) {
+                        result.passedCount++;
+                    } else {
+                        addIssue(result, "risks", i, claimedLine, "line", lineStr, null,
+                                "行号超出源码范围", Confidence.LOW);
+                    }
+                }
+            } catch (NumberFormatException e) {
+                addIssue(result, "risks", i, 0, "line", lineStr, null,
+                        "无效的行号格式", Confidence.LOW);
+            }
+        }
+        return result;
+    }
+
     private static void validateKeyMethods(String json, String[] sourceLines, ValidationResult result) {
         String arrayContent = extractJsonArray(json, "keyMethods");
         if (arrayContent == null) arrayContent = extractJsonArray(json, "methods");
