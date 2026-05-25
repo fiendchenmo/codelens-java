@@ -81,29 +81,29 @@ public class L3VerifierTest {
 
     @Test
     void testThresholdFiltersHighConfidence() {
-        // 阈值 MEDIUM：低于 MEDIUM（即 LOW）才触发验证
+        // 阈值 MEDIUM：MEDIUM 及以下（LOW + MEDIUM）触发验证
         ConfidenceThreshold threshold = new ConfidenceThreshold(ConfidenceLevel.MEDIUM);
-        assertFalse(threshold.shouldVerify(ConfidenceLevel.HIGH));
-        assertFalse(threshold.shouldVerify(ConfidenceLevel.MEDIUM));
-        assertTrue(threshold.shouldVerify(ConfidenceLevel.LOW));
-    }
-
-    @Test
-    void testThresholdFiltersMediumConfidence() {
-        // 阈值 HIGH：低于 HIGH（即 LOW + MEDIUM）触发验证
-        ConfidenceThreshold threshold = new ConfidenceThreshold(ConfidenceLevel.HIGH);
         assertFalse(threshold.shouldVerify(ConfidenceLevel.HIGH));
         assertTrue(threshold.shouldVerify(ConfidenceLevel.MEDIUM));
         assertTrue(threshold.shouldVerify(ConfidenceLevel.LOW));
     }
 
     @Test
+    void testThresholdFiltersMediumConfidence() {
+        // 阈值 HIGH：HIGH 及以下（LOW + MEDIUM + HIGH）全部触发验证
+        ConfidenceThreshold threshold = new ConfidenceThreshold(ConfidenceLevel.HIGH);
+        assertTrue(threshold.shouldVerify(ConfidenceLevel.HIGH));
+        assertTrue(threshold.shouldVerify(ConfidenceLevel.MEDIUM));
+        assertTrue(threshold.shouldVerify(ConfidenceLevel.LOW));
+    }
+
+    @Test
     void testThresholdLowPassesAll() {
-        // 阈值 LOW：没有级别低于 LOW，全部不触发
+        // 阈值 LOW：LOW 及以下（仅 LOW）触发验证，MEDIUM/HIGH 不触发
         ConfidenceThreshold threshold = new ConfidenceThreshold(ConfidenceLevel.LOW);
         assertFalse(threshold.shouldVerify(ConfidenceLevel.HIGH));
         assertFalse(threshold.shouldVerify(ConfidenceLevel.MEDIUM));
-        assertFalse(threshold.shouldVerify(ConfidenceLevel.LOW));
+        assertTrue(threshold.shouldVerify(ConfidenceLevel.LOW));
     }
 
     @Test
