@@ -26,11 +26,15 @@ Java 遗留代码分析工具 CLI 端。双端架构：
 
 ### 每次开始工作前
 
+**必须先切回 main 再拉取，绝不在 feature 分支上直接拉取。**
+
 ```bash
+git checkout main
 git pull --rebase origin main
+git checkout -b feature/REQ-XXX   # 基于最新 main 开新分支
 ```
 
-**绝不跳过。** 本地落后远程会导致 push 被拒。
+**绝不跳过。** 本地落后远程会导致 push 被拒。从 feature 分支而非 main 开新分支会导致分支基础不正确。
 
 ### Push 前
 
