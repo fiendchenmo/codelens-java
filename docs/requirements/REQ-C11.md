@@ -75,12 +75,13 @@ public class ModelProfile {
 
 ## 验收标准
 
-- [ ] ModelCapability 枚举在 common 模块中
-- [ ] ModelProfile 数据类在 common 模块中
-- [ ] of(provider, model) 至少支持上述 5 个模型
-- [ ] 未知模型返回带默认值的 fallback Profile
-- [ ] `mvn test` 全部通过
-- [ ] JDK 1.8 语法
+- [x] ModelCapability 枚举在 common 模块中
+- [x] ModelProfile 数据类在 common 模块中
+- [x] of(provider, model) 至少支持上述 5 个模型
+- [x] 未知模型返回带默认值的 fallback Profile
+- [x] of() 全部转小写匹配（provider.toLowerCase() + model.toLowerCase()）
+- [x] `mvn test` 全部通过
+- [x] JDK 1.8 语法
 
 ## 约束
 
