@@ -5,6 +5,7 @@ import org.junit.jupiter.api.io.TempDir;
 
 import java.nio.file.Path;
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.List;
 
 import static org.junit.jupiter.api.Assertions.*;
@@ -342,5 +343,28 @@ public class CallIndexTest {
         List<CallRecord> results = idx2.queryByCaller("A", "a");
         assertEquals(1, results.size());
         mgr2.close();
+    }
+
+    // ========== A8 — close 后防护 ==========
+
+    @Test
+    void testOperationsAfterClose() {
+        index.close();
+
+        assertThrows(IllegalStateException.class, () ->
+            index.insert(new CallRecord("A", "a", "T", "t", "DIRECT", "A.java", 1, "HIGH")));
+
+        assertThrows(IllegalStateException.class, () ->
+            index.batchInsert(Collections.singletonList(
+                new CallRecord("A", "a", "T", "t", "DIRECT", "A.java", 1, "HIGH"))));
+
+        assertThrows(IllegalStateException.class, () ->
+            index.queryByCaller("A", "a"));
+
+        assertThrows(IllegalStateException.class, () ->
+            index.queryByCallee("T", "t"));
+
+        assertThrows(IllegalStateException.class, () ->
+            index.deleteByFile("A.java"));
     }
 }

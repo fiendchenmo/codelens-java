@@ -34,6 +34,12 @@ public class SQLiteCallIndex implements CallIndex {
         }
     }
 
+    private void checkClosed() {
+        if (conn == null) {
+            throw new IllegalStateException("CallIndex is closed");
+        }
+    }
+
     private void initDatabase() throws SQLException {
         // 自动提交模式下运行，每条 DDL 自动提交
         try (Statement stmt = conn.createStatement()) {
@@ -62,6 +68,7 @@ public class SQLiteCallIndex implements CallIndex {
                     "callee_method, call_type, file_path, line_number, confidence) " +
                     "VALUES (?, ?, ?, ?, ?, ?, ?, ?)";
         synchronized (lock) {
+        checkClosed();
         try (PreparedStatement ps = conn.prepareStatement(sql)) {
             setInsertParams(ps, record);
             ps.executeUpdate();
@@ -79,6 +86,7 @@ public class SQLiteCallIndex implements CallIndex {
                     "callee_method, call_type, file_path, line_number, confidence) " +
                     "VALUES (?, ?, ?, ?, ?, ?, ?, ?)";
         synchronized (lock) {
+        checkClosed();
         try (PreparedStatement ps = conn.prepareStatement(sql)) {
             for (CallRecord record : records) {
                 setInsertParams(ps, record);
@@ -98,6 +106,8 @@ public class SQLiteCallIndex implements CallIndex {
                     "call_type, file_path, line_number, confidence FROM call_records " +
                     "WHERE caller_class = ? AND caller_method = ? ORDER BY line_number";
         List<CallRecord> results = new ArrayList<CallRecord>();
+        synchronized (lock) {
+        checkClosed();
         try (PreparedStatement ps = conn.prepareStatement(sql)) {
             ps.setString(1, className);
             ps.setString(2, methodName);
@@ -109,6 +119,7 @@ public class SQLiteCallIndex implements CallIndex {
         } catch (SQLException e) {
             throw new RuntimeException("Failed to query by caller", e);
         }
+        }
         return results;
     }
 
@@ -118,6 +129,8 @@ public class SQLiteCallIndex implements CallIndex {
                     "call_type, file_path, line_number, confidence FROM call_records " +
                     "WHERE callee_class = ? AND callee_method = ? ORDER BY line_number";
         List<CallRecord> results = new ArrayList<CallRecord>();
+        synchronized (lock) {
+        checkClosed();
         try (PreparedStatement ps = conn.prepareStatement(sql)) {
             ps.setString(1, className);
             ps.setString(2, methodName);
@@ -129,6 +142,7 @@ public class SQLiteCallIndex implements CallIndex {
         } catch (SQLException e) {
             throw new RuntimeException("Failed to query by callee", e);
         }
+        }
         return results;
     }
 
@@ -136,6 +150,7 @@ public class SQLiteCallIndex implements CallIndex {
     public void deleteByFile(String filePath) {
         String sql = "DELETE FROM call_records WHERE file_path = ?";
         synchronized (lock) {
+        checkClosed();
         try (PreparedStatement ps = conn.prepareStatement(sql)) {
             ps.setString(1, filePath);
             ps.executeUpdate();
