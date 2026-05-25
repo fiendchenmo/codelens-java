@@ -180,7 +180,7 @@ public class L3VerifierTest {
     void testCrossValidatorConsistentResult() {
         // 当二次验证结论与原始结论一致时，结果应为 PASSED
         CrossValidator validator = new CrossValidator(config, (claim, context) ->
-            "OrderService.process() 确实调用了 PaymentService.pay()"
+            VerificationVerdict.CONFIRMED
         );
         VerificationRequest req = new VerificationRequest(
             "OrderService.process() 调用了 PaymentService.pay()",
@@ -196,7 +196,7 @@ public class L3VerifierTest {
     void testCrossValidatorInconsistentResult() {
         // 当二次验证结论与原始结论矛盾时，结果应为 REJECTED
         CrossValidator validator = new CrossValidator(config, (claim, context) ->
-            "OrderService.process() 并未调用 PaymentService.pay()，而是调用了 OrderDAO.save()"
+            VerificationVerdict.REJECTED
         );
         VerificationRequest req = new VerificationRequest(
             "OrderService.process() 调用了 PaymentService.pay()",
@@ -213,7 +213,7 @@ public class L3VerifierTest {
     void testCrossValidatorDisabled() {
         // 交叉验证关闭时不应执行验证
         config.setCrossValidationEnabled(false);
-        CrossValidator validator = new CrossValidator(config, (claim, context) -> "whatever");
+        CrossValidator validator = new CrossValidator(config, (claim, context) -> VerificationVerdict.CONFIRMED);
         VerificationRequest req = new VerificationRequest(
             "某结论",
             ConfidenceLevel.LOW,
@@ -231,7 +231,7 @@ public class L3VerifierTest {
         int[] callCount = {0};
         CrossValidator validator = new CrossValidator(config, (claim, context) -> {
             callCount[0]++;
-            return "不确定，无法验证"; // 模糊回答
+            return VerificationVerdict.UNCERTAIN;
         });
         VerificationRequest req = new VerificationRequest(
             "某结论",
@@ -461,7 +461,7 @@ public class L3VerifierTest {
     void testL3DisabledSkipsAll() {
         // L3 关闭时，所有验证跳过
         config.setEnabled(false);
-        CrossValidator validator = new CrossValidator(config, (claim, ctx) -> "whatever");
+        CrossValidator validator = new CrossValidator(config, (claim, ctx) -> VerificationVerdict.CONFIRMED);
         VerificationRequest req = new VerificationRequest(
             "某结论",
             ConfidenceLevel.LOW,
@@ -477,7 +477,7 @@ public class L3VerifierTest {
     @Test
     void testEmptyClaimList() {
         // 空结论列表 → 空结果
-        L3Verifier verifier = new CrossValidator(config, (claim, ctx) -> "确认");
+        L3Verifier verifier = new CrossValidator(config, (claim, ctx) -> VerificationVerdict.CONFIRMED);
         List<VerificationResult> results = verifier.verifyAll(Collections.emptyList());
         assertNotNull(results);
         assertTrue(results.isEmpty());
@@ -495,7 +495,7 @@ public class L3VerifierTest {
         assertNotNull(req);
         assertNull(req.getContext());
         // 验证器不应因 null context 崩溃
-        CrossValidator validator = new CrossValidator(config, (claim, ctx) -> "确认");
+        CrossValidator validator = new CrossValidator(config, (claim, ctx) -> VerificationVerdict.CONFIRMED);
         assertDoesNotThrow(() -> validator.verify(req));
     }
 
