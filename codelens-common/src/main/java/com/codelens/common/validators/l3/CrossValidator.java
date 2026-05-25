@@ -6,13 +6,13 @@ import java.util.function.BiFunction;
 
 public class CrossValidator implements L3Verifier {
     private final L3Config config;
-    private final BiFunction<String, String, String> reVerifier;
+    private final BiFunction<String, String, VerificationVerdict> reVerifier;
 
     public CrossValidator(L3Config config) {
-        this(config, (claim, context) -> "确认");
+        this(config, (claim, context) -> VerificationVerdict.CONFIRMED);
     }
 
-    public CrossValidator(L3Config config, BiFunction<String, String, String> reVerifier) {
+    public CrossValidator(L3Config config, BiFunction<String, String, VerificationVerdict> reVerifier) {
         this.config = config;
         this.reVerifier = reVerifier;
     }
@@ -26,21 +26,16 @@ public class CrossValidator implements L3Verifier {
             return new VerificationResult(request.getClaim(), VerificationStatus.PENDING, "Cross-validation disabled", ConfidenceLevel.MEDIUM);
         }
 
-        String result = reVerifier.apply(request.getClaim(), request.getContext());
+        VerificationVerdict verdict = reVerifier.apply(request.getClaim(), request.getContext());
 
-        if (result.contains("未调用") || result.contains("并未") || result.contains("否认")) {
-            return new VerificationResult(request.getClaim(), VerificationStatus.REJECTED, result, ConfidenceLevel.HIGH);
+        switch (verdict) {
+            case CONFIRMED:
+                return new VerificationResult(request.getClaim(), VerificationStatus.PASSED, "Cross-validation confirmed", ConfidenceLevel.HIGH);
+            case REJECTED:
+                return new VerificationResult(request.getClaim(), VerificationStatus.REJECTED, "Cross-validation rejected", ConfidenceLevel.HIGH);
+            default:
+                return new VerificationResult(request.getClaim(), VerificationStatus.PENDING, "Cross-validation uncertain", ConfidenceLevel.MEDIUM);
         }
-
-        if (result.contains("不确定") || result.contains("无法验证")) {
-            return new VerificationResult(request.getClaim(), VerificationStatus.PENDING, result, ConfidenceLevel.MEDIUM);
-        }
-
-        if (result.contains("确认") || result.contains("确实") || result.contains("调用了")) {
-            return new VerificationResult(request.getClaim(), VerificationStatus.PASSED, result, ConfidenceLevel.HIGH);
-        }
-
-        return new VerificationResult(request.getClaim(), VerificationStatus.PENDING, result, ConfidenceLevel.MEDIUM);
     }
 
     @Override
