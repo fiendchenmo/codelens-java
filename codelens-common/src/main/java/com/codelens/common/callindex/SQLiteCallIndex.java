@@ -63,22 +63,31 @@ public class SQLiteCallIndex implements CallIndex {
                     "VALUES (?, ?, ?, ?, ?, ?, ?, ?)";
         synchronized (lock) {
         try (PreparedStatement ps = conn.prepareStatement(sql)) {
-            ps.setString(1, record.getCallerClass());
-            ps.setString(2, record.getCallerMethod());
-            ps.setString(3, record.getCalleeClass());
-            ps.setString(4, record.getCalleeMethod());
-            ps.setString(5, record.getCallType());
-            ps.setString(6, record.getFilePath());
-            ps.setInt(7, record.getLineNumber());
-            if (record.getConfidence() != null) {
-                ps.setString(8, record.getConfidence());
-            } else {
-                ps.setNull(8, Types.VARCHAR);
-            }
+            setInsertParams(ps, record);
             ps.executeUpdate();
             conn.commit();
         } catch (SQLException e) {
             throw new RuntimeException("Failed to insert call record", e);
+        }
+        }
+    }
+
+    @Override
+    public void batchInsert(List<CallRecord> records) {
+        if (records == null || records.isEmpty()) return;
+        String sql = "INSERT INTO call_records(caller_class, caller_method, callee_class, " +
+                    "callee_method, call_type, file_path, line_number, confidence) " +
+                    "VALUES (?, ?, ?, ?, ?, ?, ?, ?)";
+        synchronized (lock) {
+        try (PreparedStatement ps = conn.prepareStatement(sql)) {
+            for (CallRecord record : records) {
+                setInsertParams(ps, record);
+                ps.addBatch();
+            }
+            ps.executeBatch();
+            conn.commit();
+        } catch (SQLException e) {
+            throw new RuntimeException("Failed to batch insert call records", e);
         }
         }
     }
@@ -148,6 +157,21 @@ public class SQLiteCallIndex implements CallIndex {
             }
             conn = null;
         }
+        }
+    }
+
+    private void setInsertParams(PreparedStatement ps, CallRecord record) throws SQLException {
+        ps.setString(1, record.getCallerClass());
+        ps.setString(2, record.getCallerMethod());
+        ps.setString(3, record.getCalleeClass());
+        ps.setString(4, record.getCalleeMethod());
+        ps.setString(5, record.getCallType());
+        ps.setString(6, record.getFilePath());
+        ps.setInt(7, record.getLineNumber());
+        if (record.getConfidence() != null) {
+            ps.setString(8, record.getConfidence());
+        } else {
+            ps.setNull(8, Types.VARCHAR);
         }
     }
 

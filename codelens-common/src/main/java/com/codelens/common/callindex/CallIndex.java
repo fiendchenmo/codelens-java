@@ -18,6 +18,11 @@ public interface CallIndex extends AutoCloseable {
     void insert(CallRecord record);
 
     /**
+     * 批量插入调用记录。
+     */
+    void batchInsert(List<CallRecord> records);
+
+    /**
      * 按调用方查询。
      */
     List<CallRecord> queryByCaller(String className, String methodName);
