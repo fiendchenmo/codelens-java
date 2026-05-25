@@ -10,6 +10,6 @@ public class ConfidenceThreshold {
     public ConfidenceLevel getThreshold() { return threshold; }
 
     public boolean shouldVerify(ConfidenceLevel level) {
-        return level.ordinal() < threshold.ordinal();
+        return level.ordinal() <= threshold.ordinal();
     }
 }
