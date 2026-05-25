@@ -4,6 +4,7 @@ import org.junit.jupiter.api.*;
 import org.junit.jupiter.api.io.TempDir;
 
 import java.nio.file.Path;
+import java.util.ArrayList;
 import java.util.List;
 
 import static org.junit.jupiter.api.Assertions.*;
@@ -284,6 +285,30 @@ public class CallIndexTest {
         List<CallRecord> results = index.queryByCaller("Util", "run");
         assertEquals(1, results.size());
         assertNull(results.get(0).getConfidence());
+    }
+
+    // ========== A7 — 批量插入 ==========
+
+    @Test
+    void testBatchInsert() {
+        int count = 1000;
+        List<CallRecord> records = new ArrayList<CallRecord>();
+        for (int i = 0; i < count; i++) {
+            records.add(new CallRecord("BatchClass", "method" + i, "Target", "t",
+                "DIRECT", "Batch.java", i, "HIGH"));
+        }
+        index.batchInsert(records);
+
+        assertEquals(count, index.getRecordCount());
+
+        List<CallRecord> results = index.queryByCaller("BatchClass", "method0");
+        assertEquals(1, results.size());
+        assertEquals("method0", results.get(0).getCallerMethod());
+        assertEquals("Target", results.get(0).getCalleeClass());
+
+        results = index.queryByCaller("BatchClass", "method999");
+        assertEquals(1, results.size());
+        assertEquals("method999", results.get(0).getCallerMethod());
     }
 
     // ========== A6 — CallIndexManager ==========
