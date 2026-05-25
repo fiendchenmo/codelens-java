@@ -49,7 +49,7 @@ public class ConstraintValidator implements L3Verifier {
 
     static List<String> extractMethodSignatures(String text) {
         List<String> methods = new ArrayList<>();
-        Pattern pattern = Pattern.compile("\\b([A-Z]\\w*)\\.([a-z]\\w*)\\(\\)");
+        Pattern pattern = Pattern.compile("\\b([A-Z]\\w*)\\.([a-z]\\w*)\\([^)]*\\)");
         Matcher matcher = pattern.matcher(text);
         while (matcher.find()) {
             methods.add(matcher.group(1) + "." + matcher.group(2) + "()");
