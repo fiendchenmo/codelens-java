@@ -35,11 +35,13 @@
 
 ```
 L3Verifier (接口)
-├── ConfidenceThreshold   # 置信度阈值配置
+├── ConfidenceThreshold   # 置信度阈值配置（shouldVerify: ordinal()<= 比较）
+├── ConfidenceLevel       # 枚举 LOW(0)/MEDIUM(1)/HIGH(2)
 ├── VerificationRequest   # 验证请求（原始结论+上下文）
 ├── VerificationResult    # 验证结果（通过/否决/待定+证据）
-├── CrossValidator        # 交叉验证实现
-├── ConstraintValidator   # 约束验证实现
+├── VerificationVerdict   # 交叉验证判定枚举：CONFIRMED/REJECTED/UNCERTAIN
+├── CrossValidator        # 交叉验证实现（BiFunction<String,String,VerificationVerdict>）
+├── ConstraintValidator   # 约束验证实现（正则匹配任意参数列表）
 └── VotingValidator       # 投票验证实现（多模型）
 ```
 
@@ -90,12 +92,15 @@ L1/L2 校验通过
 
 ## 验收标准
 
-- [ ] L3Verifier 接口及 3 个实现类在 common 模块中，通过单元测试
+- [x] L3Verifier 接口及 3 个实现类在 common 模块中，通过单元测试
+- [x] ConstraintValidator 正则匹配任意参数列表（含参方法）
+- [x] ConfidenceThreshold 使用 ordinal()<= 比较，threshold=LOW 时 LOW 自身也验证
+- [x] CrossValidator 使用 VerificationVerdict 枚举判定，不再依赖中文关键词
 - [ ] CLI 端集成后，基准测试 L3 通过率达到目标值
 - [ ] V3 Schema 输出含 `[FACT]`/`[INFER]` 标注
 - [ ] V2 模式下 L3 验证仍可正常工作（无标注时统一验证）
-- [ ] `mvn test` 全部通过
-- [ ] 配置项可外部化（可通过配置文件/环境变量覆盖默认值）
+- [x] `mvn test` 全部通过
+- [x] 配置项可外部化（可通过配置文件/环境变量覆盖默认值）
 
 ## 风险与约束
 

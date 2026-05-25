@@ -19,8 +19,9 @@ Phase 1 的 CallIndex 使用内存 Map 存储调用索引，每次启动需全�
 ### CallIndex 接口（→ common）
 
 ```java
-public interface CallIndex {
+public interface CallIndex extends AutoCloseable {
     void insert(CallRecord record);
+    void batchInsert(List<CallRecord> records);  // 批量插入，单次事务提交
     List<CallRecord> queryByCaller(String className, String methodName);
     List<CallRecord> queryByCallee(String className, String methodName);
     void deleteByFile(String filePath);  // 删除某文件的所有记录（增量更新前清理）
@@ -75,13 +76,21 @@ batch insert 新记录
 
 ## 验收标准
 
-- [ ] CallIndex 接口在 common 模块中
-- [ ] SQLiteCallIndex 实现完整 CRUD
-- [ ] 增量更新正确（修改文件后索引同步更新）
-- [ ] 首次全量构建后，后续启动直接加载 SQLite（无需重建）
-- [ ] 并发安全（多线程读写不丢数据）
-- [ ] `mvn test` 全部通过
-- [ ] JDK 1.8 语法
+- [x] CallIndex 接口在 common 模块中
+- [x] SQLiteCallIndex 实现完整 CRUD + batchInsert
+- [x] 增量更新正确（修改文件后索引同步更新）
+- [x] 首次全量构建后，后续启动直接加载 SQLite（无需重建）
+- [x] 并发安全（多线程读写不丢数据，所有方法 synchronized(lock)）
+- [x] close 后调用 CRUD 方法抛 IllegalStateException（checkClosed 防护）
+- [x] `mvn test` 全部通过
+- [x] JDK 1.8 语法
+
+## 实现备注
+
+- SQLiteCallIndex 所有公开方法均加 synchronized(lock)，查询也不例外
+- close() 后 conn=null，方法入口 checkClosed() 防 NPE
+- batchInsert 用 addBatch() + executeBatch()，单次 commit，批量场景性能优
+- callee_method 字段允许 NULL（SPRING_INJECTION 类型无明确被调用方法名）
 
 ## 风险与约束
 
