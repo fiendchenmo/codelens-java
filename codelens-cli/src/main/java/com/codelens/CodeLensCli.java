@@ -4,6 +4,7 @@ import com.codelens.ColorUtil;
 import com.codelens.CallIndex;
 
 import com.codelens.CallerFinder;
+import com.codelens.common.models.SchemaVersion;
 import com.codelens.common.utils.MethodFilter;
 import com.google.gson.Gson;
 import com.google.gson.JsonArray;
@@ -50,10 +51,11 @@ public class CodeLensCli {
         java.util.logging.Logger codelensLogger = java.util.logging.Logger.getLogger("com.codelens");
         codelensLogger.setUseParentHandlers(false);
 
-        // 检测 --no-color、--no-validate、--no-cache、--json 参数
+        // 检测 --no-color、--no-validate、--no-cache、--json、--schema 参数
         boolean noValidate = false;
         boolean noCache = false;
         boolean rawJson = false;
+        SchemaVersion schemaVersion = null; // null 表示默认 V2
         List<String> filteredArgs = new ArrayList<>();
         for (String arg : args) {
             if (arg.equals("--no-color")) {
@@ -64,6 +66,14 @@ public class CodeLensCli {
                 noCache = true;
             } else if (arg.equals("--json")) {
                 rawJson = true;
+            } else if (arg.startsWith("--schema=")) {
+                String v = arg.substring("--schema=".length());
+                SchemaVersion parsed = SchemaVersion.fromString(v);
+                if (parsed != null) {
+                    schemaVersion = parsed;
+                } else {
+                    System.out.println("[!] 无效的 Schema 版本: " + v + "，支持: v2, v3");
+                }
             } else {
                 filteredArgs.add(arg);
             }
@@ -79,7 +89,7 @@ public class CodeLensCli {
         
         switch (command) {
             case "analyze":
-                handleAnalyze(args, noValidate, noCache, rawJson);
+                handleAnalyze(args, noValidate, noCache, rawJson, schemaVersion);
                 break;
             case "index":
                 handleIndex(args);
@@ -88,14 +98,14 @@ public class CodeLensCli {
                 handleCallers(args);
                 break;
             case "full":
-                handleFull(args, noValidate, noCache, rawJson);
+                handleFull(args, noValidate, noCache, rawJson, schemaVersion);
                 break;
             case "--help":
             case "-h":
                 printUsage();
                 break;
             default:
-                handleAnalyze(args, noValidate, noCache, rawJson);
+                handleAnalyze(args, noValidate, noCache, rawJson, schemaVersion);
                 break;
         }
     }
@@ -175,6 +185,7 @@ public class CodeLensCli {
         System.out.println("  --no-validate                跳过L1+L2证据校验");
         System.out.println("  --no-cache                   禁用LLM摘要缓存，强制重新分析");
         System.out.println("  --json                       JSON 格式输出（raw JSON，不格式化）");
+        System.out.println("  --schema=v3                  Schema版本（默认v2，支持: v2, v3）");
         System.out.println("");
         System.out.println("选项:");
         System.out.println("  --api-url=URL                API 地址（默认 https://api.deepseek.com/v1/chat/completions）");
@@ -200,7 +211,7 @@ public class CodeLensCli {
         System.out.println("  java -jar codelens.jar callers MyService --dir=/path/to/project");
     }
     
-    private static void handleAnalyze(String[] args, boolean noValidate, boolean noCache, boolean rawJson) {
+    private static void handleAnalyze(String[] args, boolean noValidate, boolean noCache, boolean rawJson, SchemaVersion schemaVersion) {
         if (args.length < 2) {
             System.out.println("[!] 请提供 Java 文件路径");
             System.out.println("用法: java -jar codelens.jar analyze <Java文件路径> [API_KEY]");
@@ -254,7 +265,8 @@ public class CodeLensCli {
                 temperature,
                 noValidate,
                 noCache,
-                true // enable validation
+                true, // enable validation
+                schemaVersion
             );
 
             if (jsonResult != null && !jsonResult.isEmpty() && !"{}".equals(jsonResult)) {
@@ -365,7 +377,7 @@ public class CodeLensCli {
         }
     }
     
-    private static void handleFull(String[] args, boolean noValidate, boolean noCache, boolean rawJson) {
+    private static void handleFull(String[] args, boolean noValidate, boolean noCache, boolean rawJson, SchemaVersion schemaVersion) {
         if (args.length < 2) {
             System.out.println("[!] 请提供 Java 文件路径");
             System.out.println("用法: java -jar codelens.jar full <Java文件路径> [API_KEY]");
@@ -438,7 +450,8 @@ public class CodeLensCli {
                     temperature,
                     noValidate,
                     noCache,
-                    true // enable validation
+                    true, // enable validation
+                    schemaVersion
                 );
 
                 // 4. 输出分析结果

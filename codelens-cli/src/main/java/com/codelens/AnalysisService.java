@@ -3,6 +3,7 @@ package com.codelens;
 import com.codelens.common.cache.CacheConfig;
 import com.codelens.common.cache.CacheEntry;
 import com.codelens.common.cache.FileSystemCache;
+import com.codelens.common.models.SchemaVersion;
 import com.codelens.common.validators.EvidenceValidator;
 import com.codelens.common.validators.ConfidenceAnnotator;
 import com.codelens.common.normalizers.OutputNormalizer;
@@ -71,7 +72,7 @@ public class AnalysisService {
 
     /**
      * 分析单个 Java 文件
-     * 
+     *
      * @param sourceCode 源代码
      * @param filePath 文件路径
      * @param callers 可选的调用者信息列表（用于 full 命令）
@@ -82,6 +83,7 @@ public class AnalysisService {
      * @param noValidate 是否跳过校验
      * @param noCache 是否禁用缓存
      * @param enableValidation 是否启用验证
+     * @param schemaVersion Schema 版本，null 时默认 V2
      * @return 分析结果（JSON 字符串）
      */
     public static String analyzeFile(
@@ -94,7 +96,8 @@ public class AnalysisService {
             double temperature,
             boolean noValidate,
             boolean noCache,
-            boolean enableValidation
+            boolean enableValidation,
+            SchemaVersion schemaVersion
     ) {
         try {
             File sourceFile = filePath.toFile();
@@ -125,7 +128,7 @@ public class AnalysisService {
                 System.out.println("[=] 使用缓存摘要 (可通过 --no-cache 禁用)");
                 
                 // 格式化展示缓存的分析内容（与 LLM 新调用保持一致）
-                String normalized = OutputNormalizer.normalize(cachedSummary);
+                String normalized = OutputNormalizer.normalize(cachedSummary, schemaVersion);
                 String prettyCached = JsonFormatter.prettyPrintJson(normalized);
                 System.out.println(ColorUtil.heading("LLM 分析（缓存）"));
                 System.out.println(prettyCached);
@@ -156,7 +159,7 @@ public class AnalysisService {
             }
             
             // 调用 LLM 分析（现在会抛出 LLMException）
-            String jsonResult = callLLM(sourceCode, structContext, mainClass, apiKey, apiUrl, model, temperature, filePath);
+            String jsonResult = callLLM(sourceCode, structContext, mainClass, apiKey, apiUrl, model, temperature, filePath, schemaVersion);
             
             if (jsonResult == null || jsonResult.isEmpty()) {
                 System.out.println("[!] LLM 调用返回空结果");
@@ -164,7 +167,7 @@ public class AnalysisService {
             }
             
             // 输出归一化（method_call 迁移等）
-            String normalized = OutputNormalizer.normalize(jsonResult);
+            String normalized = OutputNormalizer.normalize(jsonResult, schemaVersion);
 
             // 格式化输出
             String prettyJson = JsonFormatter.prettyPrintJson(normalized);
@@ -230,7 +233,8 @@ public class AnalysisService {
             String apiUrl,
             String model,
             double temperature,
-            Path filePath
+            Path filePath,
+            SchemaVersion schemaVersion
     ) {
         try {
             // Layer 1 底图提取
@@ -242,8 +246,8 @@ public class AnalysisService {
                 LOGGER.log(Level.WARNING, "底图提取失败，跳过", e);
             }
 
-            // 构建系统提示词（含底图）
-            String systemPrompt = SystemPrompt.build(structPromptContext);
+            // 构建系统提示词（含底图，指定 Schema 版本）
+            String systemPrompt = SystemPrompt.build(schemaVersion, structPromptContext);
 
             // 构建用户提示
             StringBuilder userPrompt = new StringBuilder();
