@@ -55,12 +55,15 @@ public class SystemPrompt {
                 + "- struct 中已有的信息（字段名、方法签名、调用关系）标记为 [FACT]\n"
                 + "- [FACT] 项必须与 struct 完全一致，不得修改、省略或\"纠正\"\n"
                 + "- 违反 [FACT] 约束的输出将被校验器标记为错误\n"
+                + "- [FACT] 风险的 confidence 字段必须填写 \"CERTAIN\"\n"
                 + "\n"
                 + "### 第二阶段：推理填充 [INFER]\n"
                 + "- 基于 [FACT] 推导出的结论标记为 [INFER]\n"
                 + "- [INFER] 项必须说明推理依据（引用哪些 [FACT] 支撑）\n"
                 + "- [INFER] 项的置信度由 LLM 自行判断\n"
-                + "- [INFER] 项可能被 L3 验证器二次校验\n";
+                + "- [INFER] 项可能被 L3 验证器二次校验\n"
+                + "- [INFER] 风险的 confidence 字段必须填写 \"POSSIBLE\"，不得省略；description 需简述推理依据\n"
+                + "- 宁可标 POSSIBLE 也不得遗漏风险\n";
         }
 
         return base;

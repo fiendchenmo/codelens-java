@@ -681,9 +681,18 @@ public class CodeLensCli {
                                     String severity = getStringField(risk, "severity", "MEDIUM");
                                     String riskDesc = getStringField(risk, "description", "");
                                     String riskLine = getStringField(risk, "line", "");
+                                    String riskConfidence = getStringField(risk, "confidence", "");
                                     String riskInfo = riskLine.isEmpty() ? "" : " (行" + riskLine + ")";
-                                    System.out.println("    " + ColorUtil.warning("⚠ ") + formatSeverity(severity)
-                                        + riskInfo + ": " + riskDesc);
+
+                                    // confidence 显示：CERTAIN→[确定], POSSIBLE→[可能], 无→[确定]（兼容旧输出）
+                                    String confidenceTag = "";
+                                    if ("POSSIBLE".equals(riskConfidence)) {
+                                        confidenceTag = ColorUtil.medium("[可能] ");
+                                    } else {
+                                        confidenceTag = ColorUtil.business("[确定] ");
+                                    }
+                                    System.out.println("    " + ColorUtil.warning("⚠ ") + confidenceTag
+                                        + formatSeverity(severity) + riskInfo + ": " + riskDesc);
                                 }
                             }
                         }
