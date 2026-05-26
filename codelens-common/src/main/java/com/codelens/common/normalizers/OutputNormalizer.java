@@ -1,6 +1,7 @@
-// SYNC_VERSION: 2026-05-19-v1
+// SYNC_VERSION: 2026-05-26-v1
 // 维护方:喵呜(CLI端)
 // 职责：LLM输出JSON归一化，将dependencies中的method_call迁移到keyMethods.calls
+// C-5: 新增 V3 分支，处理 methods.calls/fields/methods.risks 归一化
 
 package com.codelens.common.normalizers;
 
@@ -11,6 +12,8 @@ import com.google.gson.JsonElement;
 import com.google.gson.JsonObject;
 import com.google.gson.JsonParser;
 import com.google.gson.JsonPrimitive;
+
+import com.codelens.common.models.SchemaVersion;
 
 import java.util.Arrays;
 import java.util.HashSet;
@@ -46,7 +49,7 @@ public class OutputNormalizer {
     private OutputNormalizer() {}
 
     /**
-     * 归一化 LLM 输出的 JSON 字符串
+     * 归一化 LLM 输出的 JSON 字符串（自动检测版本）
      *
      * @param rawJson LLM 返回的原始 JSON 字符串
      * @return 归一化后的 JSON 字符串
@@ -113,7 +116,25 @@ public class OutputNormalizer {
                 sortJsonArrayByLine(risks);
             }
 
-            // 移除 architecture_issues（不在 Schema v2 中）
+            // ==================== V3 处理 ====================
+            JsonArray methods = root.has("methods") ? root.getAsJsonArray("methods") : null;
+
+            // V3: methods[].calls 字符串→对象归一化
+            if (methods != null) {
+                normalizeAllCalls(methods);
+                // V3: methods[].risks type 归一化
+                normalizeAllMethodsRisks(methods);
+                sortJsonArrayByLine(methods);
+            }
+
+            // V3: fields 工具类过滤
+            JsonArray fields = root.has("fields") ? root.getAsJsonArray("fields") : null;
+            if (fields != null) {
+                filterToolClassFields(fields);
+                sortJsonArrayByLine(fields);
+            }
+
+            // 移除 architecture_issues（不在 Schema v2/v3 中）
             if (root.has("architecture_issues")) {
                 root.remove("architecture_issues");
             }
@@ -350,6 +371,38 @@ public class OutputNormalizer {
     }
 
     /**
+     * 遍历 methods 数组，归一化每项的 risks[].type
+     */
+    static void normalizeAllMethodsRisks(JsonArray methods) {
+        if (methods == null) return;
+        for (int i = 0; i < methods.size(); i++) {
+            JsonElement elem = methods.get(i);
+            if (!elem.isJsonObject()) continue;
+            JsonObject method = elem.getAsJsonObject();
+            if (!method.has("risks") || !method.get("risks").isJsonArray()) continue;
+            JsonArray risks = method.getAsJsonArray("risks");
+            normalizeRiskTypes(risks);
+        }
+    }
+
+    /**
+     * V3 fields 工具类过滤
+     */
+    static void filterToolClassFields(JsonArray fields) {
+        if (fields == null || fields.size() == 0) return;
+        for (int i = fields.size() - 1; i >= 0; i--) {
+            JsonElement elem = fields.get(i);
+            if (!elem.isJsonObject()) continue;
+            JsonObject field = elem.getAsJsonObject();
+            if (!field.has("name") || field.get("name").isJsonNull()) continue;
+            String name = field.get("name").getAsString();
+            if (isToolClassDep(name)) {
+                fields.remove(i);
+            }
+        }
+    }
+
+    /**
      * 全限定类名/方法调用 → 简化为字段名
      *
      * 示例：
@@ -394,8 +447,9 @@ public class OutputNormalizer {
      */
     static boolean isToolClassDep(String name) {
         if (name == null) return false;
+        String lower = name.toLowerCase();
         for (String pattern : TOOL_CLASS_PATTERNS) {
-            if (name.contains(pattern)) return true;
+            if (lower.contains(pattern.toLowerCase())) return true;
         }
         // 工具包全限定名
         if (name.startsWith("com.stream.core.util.")) return true;
@@ -470,7 +524,22 @@ public class OutputNormalizer {
     }
 
     /**
-     * 遍历所有 keyMethod，归一化其 calls 数组
+     * 按版本归一化 LLM 输出的 JSON 字符串
+     *
+     * @param rawJson LLM 返回的原始 JSON 字符串
+     * @param version Schema 版本，null 或 V2 时走 V2 逻辑
+     * @return 归一化后的 JSON 字符串
+     */
+    public static String normalize(String rawJson, SchemaVersion version) {
+        if (version == null || version == SchemaVersion.V2) {
+            return normalize(rawJson);
+        }
+        // V3: 先走通用 normalize 做基础归一化，再补充 V3 特有处理
+        return normalize(rawJson);
+    }
+
+    /**
+     * 遍历所有 method（V2 keyMethods / V3 methods），归一化其 calls 数组
      */
     static void normalizeAllCalls(JsonArray keyMethods) {
         if (keyMethods == null) return;
