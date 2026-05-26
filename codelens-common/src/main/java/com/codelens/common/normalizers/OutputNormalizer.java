@@ -371,7 +371,7 @@ public class OutputNormalizer {
     }
 
     /**
-     * 遍历 methods 数组，归一化每项的 risks[].type
+     * 遍历 methods 数组，归一化每项的 risks[].type + confidence
      */
     static void normalizeAllMethodsRisks(JsonArray methods) {
         if (methods == null) return;
@@ -382,6 +382,24 @@ public class OutputNormalizer {
             if (!method.has("risks") || !method.get("risks").isJsonArray()) continue;
             JsonArray risks = method.getAsJsonArray("risks");
             normalizeRiskTypes(risks);
+            normalizeRiskConfidence(risks);
+        }
+    }
+
+    /**
+     * 归一化 risks[].confidence：有值时只能是 CERTAIN|POSSIBLE，不合法值降级为 POSSIBLE
+     */
+    static void normalizeRiskConfidence(JsonArray risks) {
+        if (risks == null) return;
+        for (int i = 0; i < risks.size(); i++) {
+            JsonElement elem = risks.get(i);
+            if (!elem.isJsonObject()) continue;
+            JsonObject risk = elem.getAsJsonObject();
+            if (!risk.has("confidence") || risk.get("confidence").isJsonNull()) continue;
+            String c = risk.get("confidence").getAsString();
+            if (!"CERTAIN".equals(c) && !"POSSIBLE".equals(c)) {
+                risk.addProperty("confidence", "POSSIBLE");
+            }
         }
     }
 
