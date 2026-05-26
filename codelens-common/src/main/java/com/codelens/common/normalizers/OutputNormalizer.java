@@ -134,6 +134,14 @@ public class OutputNormalizer {
                 sortJsonArrayByLine(fields);
             }
 
+            // V3: 顶层 risks confidence 归一化（与 methods[].risks 相同逻辑）
+            if (methods != null) {
+                JsonArray topRisks = root.has("risks") ? root.getAsJsonArray("risks") : null;
+                if (topRisks != null) {
+                    normalizeRiskConfidence(topRisks);
+                }
+            }
+
             // 移除 architecture_issues（不在 Schema v2/v3 中）
             if (root.has("architecture_issues")) {
                 root.remove("architecture_issues");

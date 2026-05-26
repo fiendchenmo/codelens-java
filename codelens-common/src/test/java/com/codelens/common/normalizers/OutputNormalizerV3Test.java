@@ -213,6 +213,94 @@ class OutputNormalizerV3Test {
         }
     }
 
+    // ==================== REQ-C15: V3 顶层 risks 归一化 ====================
+
+    @Nested
+    class V3TopLevelRisksNormalizationTests {
+
+        @Test
+        void testV3TopLevelRisksTypeNormalization() {
+            // V3 顶层 risks[].type 应做枚举校验
+            String json = "{"
+                + "\"summary\":\"test\","
+                + "\"framework\":\"Spring\","
+                + "\"fields\":[],"
+                + "\"methods\":[],"
+                + "\"risks\":["
+                + "  {\"type\":\"SECURITY\",\"description\":\"SQL注入\",\"line\":35,\"severity\":\"HIGH\"},"
+                + "  {\"type\":\"performance\",\"description\":\"慢查询\",\"line\":40,\"severity\":\"MEDIUM\"}"
+                + "]}";
+            String result = OutputNormalizer.normalize(json);
+            JsonObject root = JsonParser.parseString(result).getAsJsonObject();
+            JsonArray risks = root.getAsJsonArray("risks");
+
+            assertEquals("SECURITY", risks.get(0).getAsJsonObject().get("type").getAsString());
+            String normalizedType = risks.get(1).getAsJsonObject().get("type").getAsString();
+            assertTrue(
+                "MAINTAINABILITY".equals(normalizedType) || "PERFORMANCE".equals(normalizedType),
+                "Invalid risk type should be normalized, got: " + normalizedType
+            );
+        }
+
+        @Test
+        void testV3TopLevelRisksConfidenceNormalization() {
+            // V3 顶层 risks[].confidence 归一化
+            String json = "{"
+                + "\"summary\":\"test\","
+                + "\"framework\":\"Spring\","
+                + "\"fields\":[],"
+                + "\"methods\":[],"
+                + "\"risks\":["
+                + "  {\"type\":\"SECURITY\",\"description\":\"r1\",\"line\":10,\"severity\":\"HIGH\",\"confidence\":\"CERTAIN\"},"
+                + "  {\"type\":\"MAINTAINABILITY\",\"description\":\"r2\",\"line\":20,\"severity\":\"MEDIUM\",\"confidence\":\"POSSIBLE\"},"
+                + "  {\"type\":\"PERFORMANCE\",\"description\":\"r3\",\"line\":30,\"severity\":\"LOW\",\"confidence\":\"INVALID\"}"
+                + "]}";
+            String result = OutputNormalizer.normalize(json);
+            JsonObject root = JsonParser.parseString(result).getAsJsonObject();
+            JsonArray risks = root.getAsJsonArray("risks");
+
+            assertEquals("CERTAIN", risks.get(0).getAsJsonObject().get("confidence").getAsString());
+            assertEquals("POSSIBLE", risks.get(1).getAsJsonObject().get("confidence").getAsString());
+            assertEquals("POSSIBLE", risks.get(2).getAsJsonObject().get("confidence").getAsString(),
+                "Invalid confidence should be downgraded to POSSIBLE");
+        }
+
+        @Test
+        void testV3TopLevelRisksWithV2FormatUnchanged() {
+            // V2 格式输出含 risks 时不做 confidence 归一化
+            String json = "{"
+                + "\"summary\":\"test\","
+                + "\"risks\":["
+                + "  {\"type\":\"SECURITY\",\"description\":\"r1\",\"line\":10,\"severity\":\"HIGH\"}"
+                + "],"
+                + "\"keyMethods\":[]"
+                + "}";
+            String result = OutputNormalizer.normalize(json);
+            JsonObject root = JsonParser.parseString(result).getAsJsonObject();
+            JsonArray risks = root.getAsJsonArray("risks");
+
+            assertEquals("SECURITY", risks.get(0).getAsJsonObject().get("type").getAsString());
+            assertFalse(risks.get(0).getAsJsonObject().has("confidence"),
+                "V2 risks should not have confidence field added");
+        }
+
+        @Test
+        void testV3TopLevelRisksNormalizeIdempotent() {
+            String json = "{"
+                + "\"summary\":\"test\","
+                + "\"framework\":\"Spring\","
+                + "\"fields\":[],"
+                + "\"methods\":[],"
+                + "\"risks\":["
+                + "  {\"type\":\"SECURITY\",\"description\":\"r1\",\"line\":10,\"severity\":\"HIGH\",\"confidence\":\"CERTAIN\"},"
+                + "  {\"type\":\"MAINTAINABILITY\",\"description\":\"r2\",\"line\":20,\"severity\":\"MEDIUM\",\"confidence\":\"POSSIBLE\"}"
+                + "]}";
+            String first = OutputNormalizer.normalize(json);
+            String second = OutputNormalizer.normalize(first);
+            assertEquals(first, second, "V3 top-level risks normalize should be idempotent");
+        }
+    }
+
     // ==================== C-5: V2 dependencies 截断修复 ====================
 
     @Nested
