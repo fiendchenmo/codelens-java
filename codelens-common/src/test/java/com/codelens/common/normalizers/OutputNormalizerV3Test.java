@@ -59,7 +59,6 @@ class OutputNormalizerV3Test {
     class V3CallsTruncationTests {
 
         @Test
-        @Disabled("C-5 实现: V3 methods[].calls 字符串数组→对象数组归一化")
         void testV3CallsObjectArrayNormalization() {
             // C-5 验收: V3修calls截断
             String json = "{"
@@ -157,7 +156,6 @@ class OutputNormalizerV3Test {
         }
 
         @Test
-        @Disabled("C-5 实现: V3 fields 工具类过滤")
         void testV3FieldsToolClassFilter() {
             // V3 fields 也应过滤工具类（与 V2 dependencies 同理）
             String json = "{"
@@ -185,7 +183,6 @@ class OutputNormalizerV3Test {
     class V3MethodsRisksNormalizationTests {
 
         @Test
-        @Disabled("C-5 实现: V3 methods[].risks type 归一化")
         void testV3MethodsRisksTypeNormalization() {
             // V3 methods[].risks 的 type 也应做枚举校验
             String json = "{"
@@ -292,7 +289,6 @@ class OutputNormalizerV3Test {
         }
 
         @Test
-        @Disabled("C-5 实现: V3 methods[].calls 归一化")
         void testV3FormatNormalizedAsV3() {
             // 包含 fields/methods 的 V3 格式应按 V3 逻辑处理
             String v3Json = "{"
