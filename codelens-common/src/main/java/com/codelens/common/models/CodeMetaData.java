@@ -1,11 +1,13 @@
-// SYNC_VERSION: 2026-05-17-v1
+// SYNC_VERSION: 2026-05-26-v1
 // 维护方:喵呜(CLI端)，prompt/校验器相关由喵呜拍板
 // 同步说明:两端共用 JSON Schema & 核心规则，修改需双方确认
+// C-3: SchemaVersion枚举 + JSON_SCHEMA版本化
 
 package com.codelens.common.models;
 
 import java.util.LinkedHashMap;
 import java.util.Map;
+
 /**
  * 代码元数据结构
  * LLM 返回的 JSON 结构定义 + 核心分析规则
@@ -45,7 +47,7 @@ public class CodeMetaData {
         public String description; // 方法功能描述(合并 notes -> description)
     }
 
-    // ==================== JSON Schema ====================
+    // ==================== JSON Schema 版本化 (C-3) ====================
 
     // ==================== JSON Schema 版本化 (C-3) ====================
 
@@ -67,6 +69,7 @@ public class CodeMetaData {
     /**
      * 获取默认版本的JSON Schema（V2，向后兼容）
      * @deprecated 使用 {@link #getSchema(SchemaVersion)} 明确指定版本
+     * @deprecated 使用 getSchema(SchemaVersion) 明确指定版本
      */
     @Deprecated
     public static final String JSON_SCHEMA = buildV2Schema();

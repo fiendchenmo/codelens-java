@@ -1,35 +1,49 @@
 // SYNC_SOURCE: codelens-common/models/CodeMetaData.java (JSON_SCHEMA + CORE_RULES)
-// SYNC_VERSION: 2026-05-21-v5
+// SYNC_VERSION: 2026-05-26-v1
 // 维护方：喵呜（CLI端），prompt/校验器相关由喵呜拍板
 // 说明：共享 prompt 模板，buildBase() 提供两端共用的基础 prompt
-// CLI 端用 build()，插件端用 buildBase() + 自行追加 PSI 标签上下文
+// C-3: buildBase(SchemaVersion) 支持版本化
 
 package com.codelens.common.prompts;
 
 import com.codelens.common.models.CodeMetaData;
+import com.codelens.common.models.SchemaVersion;
 
 /**
  * 系统提示词模板 — 由 codelens-common 统一维护
  * 
  * 架构：
- *   buildBase() — 两端共用（角色定义 + JSON Schema + CORE_RULES）
- *   build()    — CLI 端完整 prompt = buildBase() + CLI 特有规则
- *   插件端     — buildBase() + 插件端特有规则（PSI 标签说明等）
+ *   buildBase()      — 两端共用（角色定义 + JSON Schema + CORE_RULES，默认V2）
+ *   buildBase(version) — 两端共用，支持指定Schema版本
+ *   build()         — CLI 端完整 prompt = buildBase() + CLI 特有规则
+ *   插件端          — buildBase(version) + 插件端特有规则（PSI 标签说明等）
  */
 public class SystemPrompt {
 
     private SystemPrompt() {}
 
     /**
-     * 构建两端共用的基础系统提示词
-     * 包含：角色定义 + JSON Schema + 核心分析规则(1-17)
+     * 构建两端共用的基础系统提示词（默认V2版本）
+     * 包含：角色定义 + JSON Schema + 核心分析规则
      *
-     * 两端必须使用此方法作为 prompt 基础，在此基础上追加各自的特有规则
+     * @deprecated 使用 {@link #buildBase(SchemaVersion)} 明确指定版本
      */
+    @Deprecated
     public static String buildBase() {
+        return buildBase(SchemaVersion.V2);
+    }
+    
+    /**
+     * 构建两端共用的基础系统提示词，支持指定Schema版本
+     * 包含：角色定义 + JSON Schema + 核心分析规则
+     *
+     * @param version Schema版本，null时默认V2
+     * @return 基础系统提示词
+     */
+    public static String buildBase(SchemaVersion version) {
         return "你是Java遗留代码分析专家，专精架构级问题发现。必须严格按JSON格式输出，不要输出任何JSON以外的内容。\n"
             + "JSON Schema如下：\n"
-            + CodeMetaData.JSON_SCHEMA + "\n"
+            + CodeMetaData.getSchema(version) + "\n"
             + CodeMetaData.CORE_RULES + "\n";
     }
 
