@@ -584,105 +584,193 @@ public class CodeLensCli {
 
             System.out.println();
 
-            // 概要 & 设计意图
-            if (root.has("summary") && !root.get("summary").isJsonNull()) {
-                String summary = root.get("summary").getAsString();
-                if (!summary.isEmpty()) {
-                    System.out.println(ColorUtil.info("概要: ") + summary);
-                }
-            }
+            // 检测 Schema 版本：V3 有 methods 字段，V2 有 keyMethods 字段
+            boolean isV3Format = root.has("methods") && root.get("methods").isJsonArray();
 
-            if (root.has("design_intent") && !root.get("design_intent").isJsonNull()) {
-                String designIntent = root.get("design_intent").getAsString();
-                if (!designIntent.isEmpty()) {
-                    System.out.println(ColorUtil.info("设计意图: ") + designIntent);
-                }
-            }
+            if (isV3Format) {
+                // ==================== V3 渲染 ====================
 
-            if (root.has("class_analysis") && !root.get("class_analysis").isJsonNull()) {
-                String classAnalysis = root.get("class_analysis").getAsString();
-                if (!classAnalysis.isEmpty()) {
-                    System.out.println(ColorUtil.info("数据流: ") + classAnalysis);
-                }
-            }
-
-            // 依赖关系
-            if (root.has("dependencies") && root.get("dependencies").isJsonArray()) {
-                JsonArray deps = root.getAsJsonArray("dependencies");
-                if (deps.size() > 0) {
-                    System.out.println();
-                    System.out.println(ColorUtil.heading("━━━ 依赖关系 ━━━"));
-                    for (JsonElement elem : deps) {
-                        JsonObject dep = elem.getAsJsonObject();
-                        String name = getStringField(dep, "name", "?");
-                        String type = getStringField(dep, "type", "");
-                        String line = getStringField(dep, "line", "");
-                        String desc = getStringField(dep, "description", "");
-
-                        String lineInfo = line.isEmpty() ? "" : ", L" + line;
-                        System.out.println("  * " + name + " (" + type + lineInfo + ") - " + desc);
+                // framework
+                if (root.has("framework") && !root.get("framework").isJsonNull()) {
+                    String framework = root.get("framework").getAsString();
+                    if (!framework.isEmpty()) {
+                        System.out.println();
+                        System.out.println(ColorUtil.heading("━━━ 框架集成 ━━━"));
+                        System.out.println("  " + framework.trim());
                     }
                 }
-            }
 
-            // 风险项
-            if (root.has("risks") && root.get("risks").isJsonArray()) {
-                JsonArray risks = root.getAsJsonArray("risks");
-                if (risks.size() > 0) {
-                    System.out.println();
-                    System.out.println(ColorUtil.heading("━━━ 风险项 ━━━"));
-                    for (JsonElement elem : risks) {
-                        JsonObject risk = elem.getAsJsonObject();
-                        String severity = getStringField(risk, "severity", "LOW");
-                        String desc = getStringField(risk, "description", "");
-                        String line = getStringField(risk, "line", "");
+                // fields
+                if (root.has("fields") && root.get("fields").isJsonArray()) {
+                    JsonArray fields = root.getAsJsonArray("fields");
+                    if (fields.size() > 0) {
+                        System.out.println();
+                        System.out.println(ColorUtil.heading("━━━ 字段 ━━━"));
+                        for (JsonElement elem : fields) {
+                            JsonObject f = elem.getAsJsonObject();
+                            String name = getStringField(f, "name", "?");
+                            String type = getStringField(f, "type", "");
+                            String injectType = getStringField(f, "injectType", "");
+                            String line = getStringField(f, "line", "");
+                            String desc = getStringField(f, "description", "");
 
-                        String severityTag = formatSeverity(severity);
-                        String lineInfo = line.isEmpty() ? "" : "(行" + line + ")";
-                        System.out.println("  " + ColorUtil.warning("! ") + severityTag + " " + lineInfo + " " + desc);
+                            String lineInfo = line.isEmpty() ? "" : " L" + line;
+                            String injectInfo = injectType.isEmpty() ? "" : " [" + injectType + "]";
+                            System.out.println("  * " + name + " (" + type + ")" + injectInfo + lineInfo
+                                + (desc.isEmpty() ? "" : " - " + desc));
+                        }
+                    }
+                }
 
-                        if (risk.has("suggestion") && !risk.get("suggestion").isJsonNull()) {
-                            String suggestion = risk.get("suggestion").getAsString();
-                            if (!suggestion.isEmpty()) {
-                                System.out.println("    建议: " + suggestion);
+                // methods (含 calls + risks)
+                if (root.has("methods") && root.get("methods").isJsonArray()) {
+                    JsonArray methods = root.getAsJsonArray("methods");
+                    if (methods.size() > 0) {
+                        System.out.println();
+                        System.out.println(ColorUtil.heading("━━━ 方法 ━━━"));
+                        for (JsonElement elem : methods) {
+                            JsonObject m = elem.getAsJsonObject();
+                            String name = getStringField(m, "name", "?");
+                            String line = getStringField(m, "line", "");
+                            String visibility = getStringField(m, "visibility", "");
+                            String complexity = getStringField(m, "complexity", "MEDIUM");
+                            String desc = getStringField(m, "description", "");
+
+                            String lineInfo = line.isEmpty() ? "" : "L" + line;
+                            String visInfo = formatVisibility(visibility);
+                            // V3 用 complexity 字段，降级兼容 visibility
+                            String badge = !visibility.isEmpty() ? visInfo : formatSeverity(complexity);
+                            System.out.println("  * " + name + " (" + lineInfo + ", " + badge + ")"
+                                + (desc.isEmpty() ? "" : " - " + desc));
+
+                            // methods[].calls
+                            if (m.has("calls") && m.get("calls").isJsonArray()) {
+                                JsonArray calls = m.getAsJsonArray("calls");
+                                for (JsonElement ce : calls) {
+                                    if (!ce.isJsonObject()) continue;
+                                    JsonObject call = ce.getAsJsonObject();
+                                    String target = getStringField(call, "target", getStringField(call, "method", "?"));
+                                    String callLine = getStringField(call, "line", "");
+                                    String callType = getStringField(call, "type", "");
+                                    String callInfo = callLine.isEmpty() ? "" : " [" + callLine;
+                                    callInfo += callType.isEmpty() ? "" : ", " + callType;
+                                    callInfo += callLine.isEmpty() ? "" : "]";
+                                    System.out.println("    调用: " + target + callInfo);
+                                }
+                            }
+
+                            // methods[].risks
+                            if (m.has("risks") && m.get("risks").isJsonArray()) {
+                                JsonArray risks = m.getAsJsonArray("risks");
+                                for (JsonElement re : risks) {
+                                    if (!re.isJsonObject()) continue;
+                                    JsonObject risk = re.getAsJsonObject();
+                                    String severity = getStringField(risk, "severity", "MEDIUM");
+                                    String riskDesc = getStringField(risk, "description", "");
+                                    String riskLine = getStringField(risk, "line", "");
+                                    String riskInfo = riskLine.isEmpty() ? "" : " (行" + riskLine + ")";
+                                    System.out.println("    " + ColorUtil.warning("⚠ ") + formatSeverity(severity)
+                                        + riskInfo + ": " + riskDesc);
+                                }
                             }
                         }
                     }
                 }
-            }
 
-            // 关键方法（Schema v2 适配：用 visibility 替代 complexity）
-            if (root.has("keyMethods") && root.get("keyMethods").isJsonArray()) {
-                JsonArray methods = root.getAsJsonArray("keyMethods");
-                if (methods.size() > 0) {
-                    System.out.println();
-                    System.out.println(ColorUtil.heading("━━━ 关键方法 ━━━"));
-                    for (JsonElement elem : methods) {
-                        JsonObject method = elem.getAsJsonObject();
-                        String name = getStringField(method, "name", "?");
-                        String line = getStringField(method, "line", "");
-                        String visibility = getStringField(method, "visibility", "");
-                        String desc = getStringField(method, "description", "");
-                        // Schema v2: 从 risks 取 severity 或默认 MEDIUM
-                        String severity = getStringField(method, "severity", "MEDIUM");
+            } else {
+                // ==================== V2 渲染（保持不变） ====================
 
-                        String lineInfo = line.isEmpty() ? "" : "L" + line;
-                        String visInfo = formatVisibility(visibility);
-                        System.out.println("  * " + name + " (" + lineInfo + ", " + formatSeverity(severity) + ", " + visInfo + ") - " + desc);
+                if (root.has("design_intent") && !root.get("design_intent").isJsonNull()) {
+                    String designIntent = root.get("design_intent").getAsString();
+                    if (!designIntent.isEmpty()) {
+                        System.out.println(ColorUtil.info("设计意图: ") + designIntent);
                     }
                 }
-            }
 
-            // 框架集成
-            if (root.has("framework_integration") && !root.get("framework_integration").isJsonNull()) {
-                String framework = root.get("framework_integration").getAsString();
-                if (!framework.isEmpty()) {
-                    System.out.println();
-                    System.out.println(ColorUtil.heading("━━━ 框架集成 ━━━"));
-                    String[] lines = framework.split("\n");
-                    for (String line : lines) {
-                        if (!line.trim().isEmpty()) {
-                            System.out.println("  " + line.trim());
+                if (root.has("class_analysis") && !root.get("class_analysis").isJsonNull()) {
+                    String classAnalysis = root.get("class_analysis").getAsString();
+                    if (!classAnalysis.isEmpty()) {
+                        System.out.println(ColorUtil.info("数据流: ") + classAnalysis);
+                    }
+                }
+
+                // 依赖关系
+                if (root.has("dependencies") && root.get("dependencies").isJsonArray()) {
+                    JsonArray deps = root.getAsJsonArray("dependencies");
+                    if (deps.size() > 0) {
+                        System.out.println();
+                        System.out.println(ColorUtil.heading("━━━ 依赖关系 ━━━"));
+                        for (JsonElement depElem : deps) {
+                            JsonObject dep = depElem.getAsJsonObject();
+                            String depName = getStringField(dep, "name", "?");
+                            String depType = getStringField(dep, "type", "");
+                            String depLine = getStringField(dep, "line", "");
+                            String depDesc = getStringField(dep, "description", "");
+
+                            String lineInfo = depLine.isEmpty() ? "" : ", L" + depLine;
+                            System.out.println("  * " + depName + " (" + depType + lineInfo + ") - " + depDesc);
+                        }
+                    }
+                }
+
+                // 风险项
+                if (root.has("risks") && root.get("risks").isJsonArray()) {
+                    JsonArray risks = root.getAsJsonArray("risks");
+                    if (risks.size() > 0) {
+                        System.out.println();
+                        System.out.println(ColorUtil.heading("━━━ 风险项 ━━━"));
+                        for (JsonElement riskElem : risks) {
+                            JsonObject risk = riskElem.getAsJsonObject();
+                            String severity = getStringField(risk, "severity", "LOW");
+                            String riskDesc = getStringField(risk, "description", "");
+                            String riskLine = getStringField(risk, "line", "");
+
+                            String severityTag = formatSeverity(severity);
+                            String lineInfo = riskLine.isEmpty() ? "" : "(行" + riskLine + ")";
+                            System.out.println("  " + ColorUtil.warning("! ") + severityTag + " " + lineInfo + " " + riskDesc);
+
+                            if (risk.has("suggestion") && !risk.get("suggestion").isJsonNull()) {
+                                String suggestion = risk.get("suggestion").getAsString();
+                                if (!suggestion.isEmpty()) {
+                                    System.out.println("    建议: " + suggestion);
+                                }
+                            }
+                        }
+                    }
+                }
+
+                // 关键方法
+                if (root.has("keyMethods") && root.get("keyMethods").isJsonArray()) {
+                    JsonArray keyMethods = root.getAsJsonArray("keyMethods");
+                    if (keyMethods.size() > 0) {
+                        System.out.println();
+                        System.out.println(ColorUtil.heading("━━━ 关键方法 ━━━"));
+                        for (JsonElement kmElem : keyMethods) {
+                            JsonObject km = kmElem.getAsJsonObject();
+                            String kmName = getStringField(km, "name", "?");
+                            String kmLine = getStringField(km, "line", "");
+                            String visibility = getStringField(km, "visibility", "");
+                            String kmDesc = getStringField(km, "description", "");
+                            String severity = getStringField(km, "severity", "MEDIUM");
+
+                            String lineInfo = kmLine.isEmpty() ? "" : "L" + kmLine;
+                            String visInfo = formatVisibility(visibility);
+                            System.out.println("  * " + kmName + " (" + lineInfo + ", " + formatSeverity(severity) + ", " + visInfo + ") - " + kmDesc);
+                        }
+                    }
+                }
+
+                // 框架集成
+                if (root.has("framework_integration") && !root.get("framework_integration").isJsonNull()) {
+                    String framework = root.get("framework_integration").getAsString();
+                    if (!framework.isEmpty()) {
+                        System.out.println();
+                        System.out.println(ColorUtil.heading("━━━ 框架集成 ━━━"));
+                        String[] lines = framework.split("\n");
+                        for (String fLine : lines) {
+                            if (!fLine.trim().isEmpty()) {
+                                System.out.println("  " + fLine.trim());
+                            }
                         }
                     }
                 }
