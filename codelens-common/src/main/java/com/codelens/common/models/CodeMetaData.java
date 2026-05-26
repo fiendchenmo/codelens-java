@@ -4,6 +4,8 @@
 
 package com.codelens.common.models;
 
+import java.util.LinkedHashMap;
+import java.util.Map;
 /**
  * 代码元数据结构
  * LLM 返回的 JSON 结构定义 + 核心分析规则
@@ -45,19 +47,55 @@ public class CodeMetaData {
 
     // ==================== JSON Schema ====================
 
+    // ==================== JSON Schema 版本化 (C-3) ====================
+
     /**
-     * LLM 输出 JSON Schema(用于 prompt 中的结构化输出约束)
-     *
-     * 字段说明:
-     *   summary             - 一句话功能摘要
-     *   design_intent       - 设计意图分析:这个类在整个系统中的角色
-     *   class_analysis      - 数据流描述:从输入到输出的关键数据流转路径
-     *   dependencies[]      - 依赖项列表
-     *   risks[]             - 风险项列表
-     *   keyMethods[]        - 关键方法列表
-     *   framework_integration - 框架集成分析
+     * LLM 输出 JSON Schema Map (用于 prompt 中的结构化输出约束)
+     * 
+     * V2 — 8顶层字段（旧版）
+     * V3 — 4顶层字段（新版）：summary, framework, fields, methods
      */
-    public static final String JSON_SCHEMA = ""
+    private static final Map<SchemaVersion, String> JSON_SCHEMA_MAP = new LinkedHashMap<>();
+    
+    static {
+        // V2 Schema (向后兼容)
+        JSON_SCHEMA_MAP.put(SchemaVersion.V2, buildV2Schema());
+        // V3 Schema (新版)
+        JSON_SCHEMA_MAP.put(SchemaVersion.V3, buildV3Schema());
+    }
+    
+    /**
+     * 获取默认版本的JSON Schema（V2，向后兼容）
+     * @deprecated 使用 {@link #getSchema(SchemaVersion)} 明确指定版本
+     */
+    @Deprecated
+    public static final String JSON_SCHEMA = buildV2Schema();
+    
+    /**
+     * 根据版本获取JSON Schema
+     * @param version Schema版本
+     * @return 对应版本的JSON Schema字符串
+     */
+    public static String getSchema(SchemaVersion version) {
+        if (version == null) {
+            return JSON_SCHEMA_MAP.get(SchemaVersion.V2);
+        }
+        String schema = JSON_SCHEMA_MAP.get(version);
+        return schema != null ? schema : JSON_SCHEMA_MAP.get(SchemaVersion.V2);
+    }
+    
+    /**
+     * 获取所有可用版本
+     */
+    public static SchemaVersion[] getAvailableVersions() {
+        return JSON_SCHEMA_MAP.keySet().toArray(new SchemaVersion[0]);
+    }
+
+    /**
+     * 构建V2版本的JSON Schema（向后兼容）
+     */
+    private static String buildV2Schema() {
+        return ""
             + "{\n"
             + "  \"summary\": \"一句话功能摘要\",\n"
             + "  \"design_intent\": \"设计意图分析:这个类在整个系统中的角色，它协调了哪些外部资源\",\n"
@@ -84,6 +122,49 @@ public class CodeMetaData {
             + "  \"framework_integration\": \"框架集成分析:本类使用了哪些框架(Spring/Quartz/MyBatis等)，"
             + "框架的关键调用链是什么，框架的行为如何影响本类的逻辑正确性\",\n"
             + "}";
+    }
+    
+    /**
+     * 构建V3版本的JSON Schema
+     * 
+     * V3字段映射：
+     * - dependencies → fields + methods.calls
+     * - risks → methods.risks  
+     * - keyMethods → methods（统一不分key/non-key）
+     * - architecture_issues → 删除（合入methods.risks）
+     * - design_intent/class_analysis → 合并进summary
+     * - framework_integration → 顶层framework
+     */
+    private static String buildV3Schema() {
+        return ""
+            + "{\n"
+            + "  \"summary\": \"功能摘要:一句话概括本类的职责，融合设计意图与数据流转路径\",\n"
+            + "  \"framework\": \"框架集成:本类使用的框架(Spring/Quartz/MyBatis等)及关键调用链、框架行为对逻辑的影响\",\n"
+            + "  \"fields\": [\n"
+            + "    {\"name\": \"字段名\", \"type\": \"字段类型\", \"line\": 行号, \"injectType\": \"依赖类型(AUTOWIRED|RESOURCE|INJECT|STATIC)\", "
+            + "\"description\": \"字段用途描述\"}\n"
+            + "  ],\n"
+            + "  \"methods\": [\n"
+            + "    {\n"
+            + "      \"name\": \"方法名\",\n"
+            + "      \"line\": 行号,\n"
+            + "      \"complexity\": \"复杂度(LOW|MEDIUM|HIGH)\",\n"
+            + "      \"signature\": \"方法签名(含参数类型)\",\n"
+            + "      \"visibility\": \"可见性(public|private|protected)\",\n"
+            + "      \"annotations\": \"关键注解(@Transactional/@Async/@Scheduled等)\",\n"
+            + "      \"description\": \"方法功能描述\",\n"
+            + "      \"params\": [{\"name\": \"参数名\", \"type\": \"参数类型\", \"usage\": \"参数用途\", \"sample\": \"调用示例\"}],\n"
+            + "      \"logic_summary\": \"核心逻辑:用1-2句话描述方法的业务逻辑\",\n"
+            + "      \"calls\": [{\"target\": \"被调方法(类名.方法名)\", \"line\": 行号, \"type\": \"调用类型(same_file|cross_file|static)\"}],\n"
+            + "      \"return\": {\"type\": \"返回类型\", \"business_meaning\": \"返回值的业务含义\"},\n"
+            + "      \"risks\": [{\"type\": \"SECURITY|PERFORMANCE|MAINTAINABILITY\", \"description\": \"风险描述\", "
+            + "\"line\": 行号, \"severity\": \"HIGH|MEDIUM|LOW\", \"impact\": \"影响面\", \"suggestion\": \"修复建议\"}],\n"
+            + "      \"exceptions\": [{\"type\": \"异常类型\", \"handling\": \"异常处理方式\", \"line\": 行号}],\n"
+            + "      \"called_by\": [{\"caller\": \"调用方(类名.方法名)\", \"line\": 行号}]\n"
+            + "    }\n"
+            + "  ]\n"
+            + "}";
+    }
 
     // ==================== 核心分析规则 ====================
 
