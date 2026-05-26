@@ -699,6 +699,40 @@ public class CodeLensCli {
                     }
                 }
 
+                // 顶层 risks（跨方法/跨字段审计）
+                if (root.has("risks") && root.get("risks").isJsonArray()) {
+                    JsonArray topRisks = root.getAsJsonArray("risks");
+                    if (topRisks.size() > 0) {
+                        System.out.println();
+                        System.out.println(ColorUtil.heading("━━━ 文件级风险 ━━━"));
+                        for (JsonElement re : topRisks) {
+                            if (!re.isJsonObject()) continue;
+                            JsonObject risk = re.getAsJsonObject();
+                            String severity = getStringField(risk, "severity", "MEDIUM");
+                            String riskDesc = getStringField(risk, "description", "");
+                            String riskLine = getStringField(risk, "line", "");
+                            String riskConfidence = getStringField(risk, "confidence", "");
+                            String riskInfo = riskLine.isEmpty() ? "" : " (行" + riskLine + ")";
+
+                            String confidenceTag = "";
+                            if ("POSSIBLE".equals(riskConfidence)) {
+                                confidenceTag = ColorUtil.medium("[可能] ");
+                            } else {
+                                confidenceTag = ColorUtil.business("[确定] ");
+                            }
+                            System.out.println("  " + ColorUtil.warning("⚠ ") + confidenceTag
+                                + formatSeverity(severity) + riskInfo + ": " + riskDesc);
+
+                            if (risk.has("suggestion") && !risk.get("suggestion").isJsonNull()) {
+                                String suggestion = risk.get("suggestion").getAsString();
+                                if (!suggestion.isEmpty()) {
+                                    System.out.println("    建议: " + suggestion);
+                                }
+                            }
+                        }
+                    }
+                }
+
             } else {
                 // ==================== V2 渲染（保持不变） ====================
 

@@ -55,7 +55,7 @@ public class CodeMetaData {
      * LLM 输出 JSON Schema Map (用于 prompt 中的结构化输出约束)
      * 
      * V2 — 8顶层字段（旧版）
-     * V3 — 4顶层字段（新版）：summary, framework, fields, methods
+     * V3 — 5顶层字段（新版）：summary, framework, risks, fields, methods
      */
     private static final Map<SchemaVersion, String> JSON_SCHEMA_MAP = new LinkedHashMap<>();
     
@@ -132,9 +132,9 @@ public class CodeMetaData {
      * 
      * V3字段映射：
      * - dependencies → fields + methods.calls
-     * - risks → methods.risks  
+     * - risks → 顶层risks（跨方法/跨字段审计）+ methods.risks（方法级精确标注）
      * - keyMethods → methods（统一不分key/non-key）
-     * - architecture_issues → 删除（合入methods.risks）
+     * - architecture_issues → 删除（合入顶层risks）
      * - design_intent/class_analysis → 合并进summary
      * - framework_integration → 顶层framework
      */
@@ -143,6 +143,14 @@ public class CodeMetaData {
             + "{\n"
             + "  \"summary\": \"功能摘要:一句话概括本类的职责，融合设计意图与数据流转路径\",\n"
             + "  \"framework\": \"框架集成:本类使用的框架(Spring/Quartz/MyBatis等)及关键调用链、框架行为对逻辑的影响\",\n"
+            + "  \"risks\": [\n"
+            + "    {\"type\": \"SECURITY|PERFORMANCE|MAINTAINABILITY\", "
+            + "\"description\": \"跨方法/跨字段审计风险，必须基于代码事实\", "
+            + "\"line\": 行号, \"severity\": \"HIGH|MEDIUM|LOW\", "
+            + "\"impact\": \"影响面\", "
+            + "\"suggestion\": \"修复建议\", "
+            + "\"confidence\": \"CERTAIN|POSSIBLE\"}\n"
+            + "  ],\n"
             + "  \"fields\": [\n"
             + "    {\"name\": \"字段名\", \"type\": \"字段类型\", \"line\": 行号, \"injectType\": \"依赖类型(AUTOWIRED|RESOURCE|INJECT|STATIC)\", "
             + "\"description\": \"字段用途描述\"}\n"
