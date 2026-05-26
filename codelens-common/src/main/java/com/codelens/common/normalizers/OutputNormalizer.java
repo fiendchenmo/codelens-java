@@ -1,4 +1,5 @@
-// SYNC_VERSION: 2026-05-26-v1
+// SYNC_VERSION: 2026-05-26-v2
+// IMPACT: LOGIC_CHANGE
 // 维护方:喵呜(CLI端)
 // 职责：LLM输出JSON归一化，将dependencies中的method_call迁移到keyMethods.calls
 // C-5: 新增 V3 分支，处理 methods.calls/fields/methods.risks 归一化
@@ -150,6 +151,17 @@ public class OutputNormalizer {
             return GSON.toJson(root);
 
         } catch (Exception e) {
+            // C16: 首次解析失败时尝试逐步修复
+            String repaired = repairJson(rawJson);
+            if (repaired != null && !repaired.equals(rawJson)) {
+                try {
+                    JsonObject root = JsonParser.parseString(repaired).getAsJsonObject();
+                    // 递归调用 normalize 做完整归一化
+                    return normalize(repaired);
+                } catch (Exception e2) {
+                    // 修复后仍解析失败，返回原始值
+                }
+            }
             return rawJson;
         }
     }
@@ -650,5 +662,241 @@ public class OutputNormalizer {
         } catch (NumberFormatException e) {
             return Integer.MAX_VALUE;
         }
+    }
+
+    // ==================== REQ-C16: JSON 修复 ====================
+
+    /**
+     * 尝试修复 LLM 输出的损坏 JSON。
+     * 修复顺序：控制字符 → 未转义引号 → 截断闭合。
+     * 每步修复后立即尝试解析，成功就停，不做多余修复。
+     */
+    static String repairJson(String json) {
+        if (json == null || json.trim().isEmpty()) return json;
+
+        // 第一步：修复控制字符
+        String step1 = fixControlChars(json);
+        if (isValidJson(step1)) return step1;
+
+        // 第二步：修复未转义引号
+        String step2 = fixUnescapedQuotes(step1);
+        if (isValidJson(step2)) return step2;
+
+        // 第三步：截断闭合
+        String step3 = fixTruncation(step2);
+        if (isValidJson(step3)) return step3;
+
+        // 都失败则返回原始输入
+        return json;
+    }
+
+    /**
+     * 检查字符串是否为合法 JSON（可被解析为 JsonObject 或 JsonArray）
+     */
+    private static boolean isValidJson(String json) {
+        if (json == null || json.trim().isEmpty()) return false;
+        String trimmed = json.trim();
+        if (!(trimmed.startsWith("{") || trimmed.startsWith("["))) return false;
+        try {
+            JsonParser.parseString(json);
+            return true;
+        } catch (Exception e) {
+            return false;
+        }
+    }
+
+    /**
+     * 修复 JSON 字符串值内的控制字符。
+     * 将字符串值内的裸换行（LF/CR）替换为 \\n/\\r，裸制表符替换为 \\t。
+     */
+    static String fixControlChars(String json) {
+        if (json == null) return null;
+        StringBuilder sb = new StringBuilder(json.length());
+        boolean inString = false;
+        boolean escaped = false;
+
+        for (int i = 0; i < json.length(); i++) {
+            char c = json.charAt(i);
+
+            if (escaped) {
+                sb.append(c);
+                escaped = false;
+                continue;
+            }
+
+            if (c == '\\' && inString) {
+                sb.append(c);
+                escaped = true;
+                continue;
+            }
+
+            if (c == '"') {
+                inString = !inString;
+                sb.append(c);
+                continue;
+            }
+
+            if (inString) {
+                if (c == '\n' || c == '\r') {
+                    sb.append("\\n");
+                    continue;
+                }
+                if (c == '\t') {
+                    sb.append("\\t");
+                    continue;
+                }
+            }
+
+            sb.append(c);
+        }
+
+        return sb.toString();
+    }
+
+    /**
+     * 修复 JSON 字符串值内的未转义引号。
+     * 策略：逐字符扫描，跟踪是否在字符串值内部。
+     * 值内的裸 " 会被替换为 \"，除非该 " 是字符串的结束引号
+     * （结束引号的特征是后续非空字符为 , } ] : 或文件末尾）。
+     */
+    static String fixUnescapedQuotes(String json) {
+        if (json == null) return null;
+        StringBuilder sb = new StringBuilder(json.length());
+        boolean inString = false;    // 是否在字符串内（key 或 value）
+        boolean escaped = false;     // 刚遇到转义符
+        boolean afterColon = false;  // 刚遇到冒号（即将进入 value 字符串）
+        boolean inValue = false;     // 在 value 字符串内（不是 key）
+
+        for (int i = 0; i < json.length(); i++) {
+            char c = json.charAt(i);
+
+            if (escaped) {
+                sb.append(c);
+                escaped = false;
+                continue;
+            }
+
+            if (c == '\\' && inString) {
+                sb.append(c);
+                escaped = true;
+                continue;
+            }
+
+            if (c == '"') {
+                if (inString) {
+                    // 在字符串内遇到引号 — 判断是否为内容引号
+                    if (inValue) {
+                        // 查找下一个非空字符判断是否为结构结束符
+                        int nextIdx = i + 1;
+                        while (nextIdx < json.length() && json.charAt(nextIdx) <= ' ') {
+                            nextIdx++;
+                        }
+                        boolean isStructuralClose = false;
+                        if (nextIdx < json.length()) {
+                            char next = json.charAt(nextIdx);
+                            isStructuralClose = (next == ',' || next == '}' || next == ']' || next == ':');
+                        } else {
+                            // 文件末尾也是结构关闭
+                            isStructuralClose = true;
+                        }
+
+                        if (isStructuralClose) {
+                            // 结束引号
+                            inString = false;
+                            inValue = false;
+                            sb.append(c);
+                        } else {
+                            // 内容引号，需要转义
+                            sb.append('\\');
+                            sb.append(c);
+                        }
+                    } else {
+                        // key 字符串结束
+                        inString = false;
+                        sb.append(c);
+                    }
+                } else {
+                    // 新的字符串开始
+                    inString = true;
+                    inValue = afterColon;
+                    afterColon = false;
+                    sb.append(c);
+                }
+                continue;
+            }
+
+            if (!inString && c == ':') {
+                afterColon = true;
+            } else if (!inString && c > ' ') {
+                afterColon = false;
+            }
+
+            sb.append(c);
+        }
+
+        return sb.toString();
+    }
+
+    /**
+     * 尝试闭合截断的 JSON。
+     * 策略：从末尾找最后一个完整的 } 或 ]，丢弃不完整的尾部，
+     * 然后按 LIFO 顺序补全缺失的闭合符号。
+     */
+    static String fixTruncation(String json) {
+        if (json == null) return null;
+
+        // 找最后完整的 } 或 ]
+        int lastBrace = json.lastIndexOf('}');
+        int lastBracket = json.lastIndexOf(']');
+        int cutPos = Math.max(lastBrace, lastBracket);
+
+        String body;
+        if (cutPos < 0) {
+            // 没有完整结构，保留全部输入尝试修复
+            body = json;
+        } else {
+            // 丢弃截断尾部（最后一个完整结构之后的内容）
+            body = json.substring(0, cutPos + 1);
+        }
+
+        // 用栈追踪未闭合的括号，得到 LIFO 顺序
+        StringBuilder closers = new StringBuilder();
+        boolean inStr = false;
+        boolean esc = false;
+
+        for (int i = 0; i < body.length(); i++) {
+            char c = body.charAt(i);
+
+            if (esc) {
+                esc = false;
+                continue;
+            }
+            if (c == '\\' && inStr) {
+                esc = true;
+                continue;
+            }
+            if (c == '"') {
+                inStr = !inStr;
+                continue;
+            }
+            if (inStr) continue;
+
+            if (c == '{') closers.append('}');
+            else if (c == '[') closers.append(']');
+            else if (c == '}' && closers.length() > 0 && closers.charAt(closers.length() - 1) == '}') {
+                closers.setLength(closers.length() - 1);
+            }
+            else if (c == ']' && closers.length() > 0 && closers.charAt(closers.length() - 1) == ']') {
+                closers.setLength(closers.length() - 1);
+            }
+        }
+
+        // 栈的末尾是最后打开的括号，应最先闭合（LIFO: 反向遍历）
+        StringBuilder result = new StringBuilder(body);
+        for (int i = closers.length() - 1; i >= 0; i--) {
+            result.append(closers.charAt(i));
+        }
+
+        return result.toString();
     }
 }
