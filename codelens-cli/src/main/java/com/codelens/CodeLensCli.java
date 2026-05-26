@@ -584,6 +584,14 @@ public class CodeLensCli {
 
             System.out.println();
 
+            // 概要（V2/V3 共用）
+            if (root.has("summary") && !root.get("summary").isJsonNull()) {
+                String summary = root.get("summary").getAsString();
+                if (!summary.isEmpty()) {
+                    System.out.println(ColorUtil.info("概要: ") + summary);
+                }
+            }
+
             // 检测 Schema 版本：V3 有 methods 字段，V2 有 keyMethods 字段
             boolean isV3Format = root.has("methods") && root.get("methods").isJsonArray();
 
@@ -647,6 +655,11 @@ public class CodeLensCli {
                             if (m.has("calls") && m.get("calls").isJsonArray()) {
                                 JsonArray calls = m.getAsJsonArray("calls");
                                 for (JsonElement ce : calls) {
+                                    if (ce.isJsonPrimitive()) {
+                                        // 字符串格式调用（兼容旧输出）
+                                        System.out.println("    调用: " + ce.getAsString());
+                                        continue;
+                                    }
                                     if (!ce.isJsonObject()) continue;
                                     JsonObject call = ce.getAsJsonObject();
                                     String target = getStringField(call, "target", getStringField(call, "method", "?"));
