@@ -358,8 +358,8 @@ public class CodeLensCli {
         
         try (CallIndex indexer = new CallIndex(projectRoot)) {
             CallerFinder searcher = new CallerFinder(indexer, projectRoot);
-            List<CallerFinder.CallerInfo> callers = searcher.findCallers(className);
-            
+            List<CallerFinder.CallerInfo> callers = searcher.findCallersWithInterfacePenetration(className);
+
             // 获取索引的源码目录列表
             List<String> indexedSrcRoots = indexer.getIndexedSrcRoots();
             String srcRootsStr = indexedSrcRoots.isEmpty() ? "未知" : String.join(", ", indexedSrcRoots);
@@ -469,7 +469,7 @@ public class CodeLensCli {
                 // 5. Callers 反向依赖（基于索引，独立 section）
                 if (projectRoot.toFile().exists()) {
                     CallerFinder searcher = new CallerFinder(indexer, projectRoot);
-                    callers = searcher.findCallers(className);
+                    callers = searcher.findCallersWithInterfacePenetration(className);
                     
                     System.out.println("\n" + ColorUtil.heading("━━━ Callers 反向依赖（基于索引查询） ━━━"));
                     System.out.println("查找: " + className);
