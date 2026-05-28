@@ -3,10 +3,13 @@ package com.codelens.common.agent;
 /**
  * 任务执行状态。
  * <p>
- * Phase 1 定义基础状态，后续 Phase 扩展更多状态值。
+ * Phase 4 扩展：RUNNING、SKIPPED、CACHED。
  */
 public enum ExecutionStatus {
     PENDING,
+    RUNNING,
     COMPLETED,
-    FAILED
+    FAILED,
+    SKIPPED,
+    CACHED
 }
