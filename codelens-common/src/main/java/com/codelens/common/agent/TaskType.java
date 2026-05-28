@@ -9,7 +9,7 @@ package com.codelens.common.agent;
 public enum TaskType {
 
     STRUCTURE_EXTRACTION(null, null),
-    SUMMARY(null, null),
+    SUMMARY(SummaryPrompt.class, SummaryValidator.class),
     METHOD_ANALYSIS(null, null),
     CROSS_FILE_INFERENCE(null, null);
 
