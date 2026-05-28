@@ -10,7 +10,7 @@ public enum TaskType {
 
     STRUCTURE_EXTRACTION(null, null),
     SUMMARY(SummaryPrompt.class, SummaryValidator.class),
-    METHOD_ANALYSIS(null, null),
+    METHOD_ANALYSIS(MethodAnalysisPrompt.class, MethodAnalysisValidator.class),
     CROSS_FILE_INFERENCE(null, null);
 
     private final Class<?> promptClass;
