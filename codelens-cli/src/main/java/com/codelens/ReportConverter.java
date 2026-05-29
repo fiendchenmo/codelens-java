@@ -91,7 +91,7 @@ public class ReportConverter {
         JsonObject m = new JsonObject();
         m.addProperty("name", nullSafe(mr.getMethodName()));
         m.addProperty("signature", nullSafe(mr.getSignature()));
-        m.addProperty("line", 0);
+        m.addProperty("line", mr.getLine());
         m.addProperty("complexity", "");
         m.addProperty("visibility", "");
         m.addProperty("description", "");

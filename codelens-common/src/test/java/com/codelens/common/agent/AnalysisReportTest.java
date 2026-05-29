@@ -21,7 +21,7 @@ public class AnalysisReportTest {
                 Collections.singletonList("NULL_CHECK_MISSING"));
 
         MethodReport method = new MethodReport("processOrder",
-                "public void processOrder(Long id)", l1, l2);
+                "public void processOrder(Long id)", 10, l1, l2);
 
         AnalysisReport report = new AnalysisReport(
                 "com.example.OrderService", "SERVICE",

@@ -18,6 +18,7 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -669,32 +670,78 @@ public class CodeLensCli {
             throw new RuntimeException("SUMMARY 分析失败，无法继续");
         }
 
-        // 5. STEP 2: METHOD_ANALYSIS × N（仅非平凡方法）
-        List<String> methodOutputs = new ArrayList<>();
+        // 5. 解析源码获取方法行号
         List<JavaParserService.ClassInfo> classInfos = JavaParserService.parseFile(sourceFile);
+        Map<String, Integer> methodLines = new HashMap<>();
         for (JavaParserService.ClassInfo ci : classInfos) {
             for (JavaParserService.MethodInfo mi : ci.methods) {
-                if (MethodFilter.isTrivialCall(mi.name)) continue;
-
-                String methodBody = JavaParserService.extractMethodBody(sourceFile, mi);
-                String methodSignature = mi.returnType + " " + mi.name + "(" + mi.params + ")";
-
-                AnalysisTask<String, String> methodTask = new AnalysisTask<>(TaskType.METHOD_ANALYSIS, methodBody);
-                ExecutionTrace methodTrace = runner.runMethodAnalysis(
-                        methodTask, methodSignature, sourceCode, summaryOutput, "");
-                traces.add(methodTrace);
-
-                if (methodTask.getOutput() != null) {
-                    methodOutputs.add(methodTask.getOutput());
+                // overloaded 方法只保留第一个出现的行号
+                if (!methodLines.containsKey(mi.name)) {
+                    methodLines.put(mi.name, mi.line);
                 }
             }
         }
 
-        // 6. STEP 3: Merge
+        // 6. STEP 2: METHOD_ANALYSIS × N（仅非平凡方法）
+        List<String> methodOutputs = Collections.synchronizedList(new ArrayList<String>());
+        List<JavaParserService.MethodInfo> nonTrivialMethods = new ArrayList<>();
+        for (JavaParserService.ClassInfo ci : classInfos) {
+            for (JavaParserService.MethodInfo mi : ci.methods) {
+                if (MethodFilter.isTrivialCall(mi.name)) continue;
+                nonTrivialMethods.add(mi);
+            }
+        }
+
+        java.util.concurrent.ExecutorService executor = java.util.concurrent.Executors.newFixedThreadPool(
+                Math.min(nonTrivialMethods.size(), Runtime.getRuntime().availableProcessors()));
+        List<java.util.concurrent.Future<?>> futures = new ArrayList<>();
+
+        for (final JavaParserService.MethodInfo mi : nonTrivialMethods) {
+            futures.add(executor.submit(new Runnable() {
+                @Override
+                public void run() {
+                    try {
+                        String methodBody = JavaParserService.extractMethodBody(sourceFile, mi);
+                        String methodSignature = mi.returnType + " " + mi.name + "(" + mi.params + ")";
+
+                        AnalysisTask<String, String> methodTask = new AnalysisTask<>(TaskType.METHOD_ANALYSIS, methodBody);
+                        ExecutionTrace methodTrace = runner.runMethodAnalysis(
+                                methodTask, methodSignature, sourceCode, summaryOutput, "");
+                        synchronized (traces) {
+                            traces.add(methodTrace);
+                        }
+
+                        if (methodTask.getOutput() != null) {
+                            methodOutputs.add(methodTask.getOutput());
+                        }
+                    } catch (Exception e) {
+                        LOGGER.log(Level.WARNING, "方法分析失败: " + mi.name, e);
+                    }
+                }
+            }));
+        }
+
+        // 等待所有方法分析完成
+        for (java.util.concurrent.Future<?> f : futures) {
+            f.get();
+        }
+        executor.shutdown();
+
+        // 7. STEP 3: Merge
         ReportMerger merger = new ReportMerger();
         AnalysisReport report = merger.merge(summaryOutput, methodOutputs);
 
-        // 7. STEP 4: Convert to V3-compatible JSON
+        // 8. 注入真实行号到 MethodReport
+        if (report.getMethods() != null) {
+            for (MethodReport mr : report.getMethods()) {
+                Integer line = methodLines.get(mr.getMethodName());
+                if (line != null) {
+                    mr.setLine(line);
+                }
+            }
+        }
+
+        // 9. STEP 4: Convert to V3-compatible JSON
         return ReportConverter.convert(report, traces);
     }
 
