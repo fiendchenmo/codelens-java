@@ -4,6 +4,8 @@ import com.codelens.ColorUtil;
 import com.codelens.CallIndex;
 
 import com.codelens.CallerFinder;
+import com.codelens.common.agent.*;
+import com.codelens.common.cache.*;
 import com.codelens.common.models.SchemaVersion;
 import com.codelens.common.utils.MethodFilter;
 import com.google.gson.Gson;
@@ -51,10 +53,11 @@ public class CodeLensCli {
         java.util.logging.Logger codelensLogger = java.util.logging.Logger.getLogger("com.codelens");
         codelensLogger.setUseParentHandlers(false);
 
-        // 检测 --no-color、--no-validate、--no-cache、--json、--schema 参数
+        // 检测 --no-color、--no-validate、--no-cache、--json、--schema、--mode 参数
         boolean noValidate = false;
         boolean noCache = false;
         boolean rawJson = false;
+        boolean multiMode = false;
         SchemaVersion schemaVersion = null; // null 表示默认 V2
         List<String> filteredArgs = new ArrayList<>();
         for (String arg : args) {
@@ -74,6 +77,13 @@ public class CodeLensCli {
                 } else {
                     System.out.println("[!] 无效的 Schema 版本: " + v + "，支持: v2, v3");
                 }
+            } else if (arg.startsWith("--mode=")) {
+                String mode = arg.substring("--mode=".length());
+                if ("multi".equals(mode)) {
+                    multiMode = true;
+                } else if (!"single".equals(mode)) {
+                    System.out.println("[!] 无效的 mode: " + mode + "，支持: single, multi");
+                }
             } else {
                 filteredArgs.add(arg);
             }
@@ -89,7 +99,11 @@ public class CodeLensCli {
         
         switch (command) {
             case "analyze":
-                handleAnalyze(args, noValidate, noCache, rawJson, schemaVersion);
+                if (multiMode) {
+                    handleAnalyzeMulti(args);
+                } else {
+                    handleAnalyze(args, noValidate, noCache, rawJson, schemaVersion);
+                }
                 break;
             case "index":
                 handleIndex(args);
@@ -98,7 +112,11 @@ public class CodeLensCli {
                 handleCallers(args);
                 break;
             case "full":
-                handleFull(args, noValidate, noCache, rawJson, schemaVersion);
+                if (multiMode) {
+                    handleFullMulti(args);
+                } else {
+                    handleFull(args, noValidate, noCache, rawJson, schemaVersion);
+                }
                 break;
             case "--help":
             case "-h":
@@ -496,6 +514,188 @@ public class CodeLensCli {
         }
         
         System.out.println("\n" + ColorUtil.heading("━━━ full 命令执行完成 ━━━"));
+    }
+
+    // ==================== Multi-Agent 模式 ====================
+
+    private static void handleAnalyzeMulti(String[] args) {
+        if (args.length < 2) {
+            System.out.println("[!] 请提供 Java 文件路径");
+            System.out.println("用法: java -jar codelens.jar analyze <Java文件路径> [API_KEY] --mode=multi");
+            return;
+        }
+
+        String filePath = args[1];
+        File sourceFile = new File(filePath);
+
+        if (!sourceFile.exists() || !sourceFile.isFile()) {
+            System.out.println("[!] 文件不存在: " + filePath);
+            return;
+        }
+
+        try {
+            String apiKey = args.length > 2 ? args[2] : System.getenv("CODELENS_API_KEY");
+            if (apiKey == null || apiKey.isEmpty()) {
+                System.out.println("[!] 请设置 CODELENS_API_KEY 环境变量或提供 API_KEY 参数");
+                return;
+            }
+
+            Map<String, String> options = parseOptions(args);
+            String apiUrl = getApiUrl(options);
+            String model = getModel(options);
+            double temperature = getTemperature(options);
+
+            System.out.println(ColorUtil.heading("━━━ Multi-Agent 分析 ━━━"));
+            System.out.println("文件: " + filePath);
+            printLlmConfig(apiUrl, model, temperature);
+
+            String jsonResult = runMultiAgent(sourceFile, apiKey, apiUrl, model, temperature);
+            System.out.println(ColorUtil.heading("━━━ 分析结果 ━━━"));
+            System.out.println(jsonResult);
+
+        } catch (Exception e) {
+            System.out.println("[!] Multi-Agent 分析失败: " + e.getMessage());
+            LOGGER.log(Level.SEVERE, "Multi-Agent 分析失败", e);
+        }
+    }
+
+    private static void handleFullMulti(String[] args) {
+        if (args.length < 2) {
+            System.out.println("[!] 请提供 Java 文件路径");
+            System.out.println("用法: java -jar codelens.jar full <Java文件路径> [API_KEY] --mode=multi");
+            return;
+        }
+
+        String filePath = args[1];
+        File sourceFile = new File(filePath);
+
+        if (!sourceFile.exists() || !sourceFile.isFile()) {
+            System.out.println("[!] 文件不存在: " + filePath);
+            return;
+        }
+
+        System.out.println(ColorUtil.heading("━━━ full (multi-agent) ━━━"));
+
+        try {
+            String apiKey = args.length > 2 ? args[2] : System.getenv("CODELENS_API_KEY");
+            if (apiKey == null || apiKey.isEmpty()) {
+                System.out.println("[!] 请设置 CODELENS_API_KEY 环境变量或提供 API_KEY 参数");
+                return;
+            }
+
+            Map<String, String> options = parseOptions(args);
+            String apiUrl = getApiUrl(options);
+            String model = getModel(options);
+            double temperature = getTemperature(options);
+
+            Path projectRoot = JavaParserService.findProjectRoot(sourceFile.toPath());
+            System.out.println("文件: " + filePath);
+            System.out.println("项目根: " + projectRoot);
+            printLlmConfig(apiUrl, model, temperature);
+
+            try (CallIndex indexer = new CallIndex(projectRoot)) {
+                // 建立索引
+                Path srcRoot = JavaParserService.findSrcRoot(sourceFile.toPath());
+                if (srcRoot != null && srcRoot.toFile().exists()) {
+                    indexer.indexDirectory(srcRoot);
+                }
+
+                // 结构概览
+                List<JavaParserService.ClassInfo> classInfos = JavaParserService.parseFile(sourceFile);
+                String packageName = JavaParserService.getPackageName(sourceFile);
+                if (!classInfos.isEmpty()) {
+                    System.out.println(ColorUtil.heading("━━━ 结构概览: " + classInfos.get(0).name + " ━━━"));
+                    printStructOverview(packageName, classInfos);
+                }
+
+                // Multi-Agent 分析
+                System.out.println(ColorUtil.heading("━━━ Multi-Agent 分析 ━━━"));
+                String jsonResult = runMultiAgent(sourceFile, apiKey, apiUrl, model, temperature);
+
+                System.out.println(ColorUtil.heading("━━━ 分析结果 ━━━"));
+                System.out.println(jsonResult);
+
+                // Callers 反向依赖
+                String className = JavaParserService.extractClassName(sourceFile);
+                CallerFinder searcher = new CallerFinder(indexer, projectRoot);
+                List<CallerFinder.CallerInfo> callers = searcher.findCallers(className);
+
+                System.out.println(ColorUtil.heading("━━━ Callers 反向依赖 ━━━"));
+                System.out.println("查找: " + className);
+                if (callers.isEmpty()) {
+                    System.out.println("未找到调用该类的代码");
+                } else {
+                    System.out.println("找到 " + callers.size() + " 处调用:");
+                    for (CallerFinder.CallerInfo caller : callers) {
+                        System.out.println("  " + caller.filePath + ":" + caller.lineNumber);
+                    }
+                }
+            }
+        } catch (Exception e) {
+            System.out.println("[!] Multi-Agent 分析失败: " + e.getMessage());
+            LOGGER.log(Level.SEVERE, "Multi-Agent 分析失败", e);
+        }
+
+        System.out.println("\n" + ColorUtil.heading("━━━ full 命令执行完成 ━━━"));
+    }
+
+    /**
+     * Multi-Agent 核心执行逻辑。
+     * 流程: SUMMARY → METHOD_ANALYSIS × N → ReportMerger → ReportConverter
+     */
+    private static String runMultiAgent(File sourceFile, String apiKey, String apiUrl,
+                                        String model, double temperature) throws Exception {
+        String sourceCode = new String(Files.readAllBytes(sourceFile.toPath()));
+
+        // 1. 创建 CliLLMClient
+        com.codelens.common.llm.LLMClient llmClient = new CliLLMClient(apiKey, apiUrl, model, temperature);
+
+        // 2. 创建 GranularCache（存储到 .codelens/granular/）
+        Path cacheRoot = JavaParserService.findProjectRoot(sourceFile.toPath());
+        CacheConfig cacheConfig = CacheConfig.defaults(cacheRoot.toString());
+        FileSystemCache fsCache = new FileSystemCache(cacheConfig);
+        GranularCache granularCache = new GranularCacheAdapter(fsCache);
+
+        // 3. 创建 AgentRunner
+        AgentRunner runner = new AgentRunner(llmClient, granularCache);
+        List<ExecutionTrace> traces = new ArrayList<>();
+
+        // 4. STEP 1: SUMMARY
+        AnalysisTask<String, String> summaryTask = new AnalysisTask<>(TaskType.SUMMARY, sourceCode);
+        ExecutionTrace summaryTrace = runner.run(summaryTask, "");
+        traces.add(summaryTrace);
+        String summaryOutput = summaryTask.getOutput();
+        if (summaryOutput == null) {
+            throw new RuntimeException("SUMMARY 分析失败，无法继续");
+        }
+
+        // 5. STEP 2: METHOD_ANALYSIS × N（仅非平凡方法）
+        List<String> methodOutputs = new ArrayList<>();
+        List<JavaParserService.ClassInfo> classInfos = JavaParserService.parseFile(sourceFile);
+        for (JavaParserService.ClassInfo ci : classInfos) {
+            for (JavaParserService.MethodInfo mi : ci.methods) {
+                if (MethodFilter.isTrivialCall(mi.name)) continue;
+
+                String methodBody = JavaParserService.extractMethodBody(sourceFile, mi);
+                String methodSignature = mi.returnType + " " + mi.name + "(" + mi.params + ")";
+
+                AnalysisTask<String, String> methodTask = new AnalysisTask<>(TaskType.METHOD_ANALYSIS, methodBody);
+                ExecutionTrace methodTrace = runner.runMethodAnalysis(
+                        methodTask, methodSignature, sourceCode, summaryOutput, "");
+                traces.add(methodTrace);
+
+                if (methodTask.getOutput() != null) {
+                    methodOutputs.add(methodTask.getOutput());
+                }
+            }
+        }
+
+        // 6. STEP 3: Merge
+        ReportMerger merger = new ReportMerger();
+        AnalysisReport report = merger.merge(summaryOutput, methodOutputs);
+
+        // 7. STEP 4: Convert to V3-compatible JSON
+        return ReportConverter.convert(report, traces);
     }
 
     // ==================== 格式化输出方法 ====================
