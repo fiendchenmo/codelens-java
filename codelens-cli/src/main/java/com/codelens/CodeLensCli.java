@@ -101,7 +101,7 @@ public class CodeLensCli {
         switch (command) {
             case "analyze":
                 if (multiMode) {
-                    handleAnalyzeMulti(args);
+                    handleAnalyzeMulti(args, noCache);
                 } else {
                     handleAnalyze(args, noValidate, noCache, rawJson, schemaVersion);
                 }
@@ -114,7 +114,7 @@ public class CodeLensCli {
                 break;
             case "full":
                 if (multiMode) {
-                    handleFullMulti(args);
+                    handleFullMulti(args, noCache);
                 } else {
                     handleFull(args, noValidate, noCache, rawJson, schemaVersion);
                 }
@@ -519,7 +519,7 @@ public class CodeLensCli {
 
     // ==================== Multi-Agent 模式 ====================
 
-    private static void handleAnalyzeMulti(String[] args) {
+    private static void handleAnalyzeMulti(String[] args, boolean noCache) {
         if (args.length < 2) {
             System.out.println("[!] 请提供 Java 文件路径");
             System.out.println("用法: java -jar codelens.jar analyze <Java文件路径> [API_KEY] --mode=multi");
@@ -550,7 +550,7 @@ public class CodeLensCli {
             System.out.println("文件: " + filePath);
             printLlmConfig(apiUrl, model, temperature);
 
-            String jsonResult = runMultiAgent(sourceFile, apiKey, apiUrl, model, temperature);
+            String jsonResult = runMultiAgent(sourceFile, apiKey, apiUrl, model, temperature, noCache);
             System.out.println(ColorUtil.heading("━━━ 分析结果 ━━━"));
             System.out.println(jsonResult);
 
@@ -560,7 +560,7 @@ public class CodeLensCli {
         }
     }
 
-    private static void handleFullMulti(String[] args) {
+    private static void handleFullMulti(String[] args, boolean noCache) {
         if (args.length < 2) {
             System.out.println("[!] 请提供 Java 文件路径");
             System.out.println("用法: java -jar codelens.jar full <Java文件路径> [API_KEY] --mode=multi");
@@ -611,9 +611,7 @@ public class CodeLensCli {
 
                 // Multi-Agent 分析
                 System.out.println(ColorUtil.heading("━━━ Multi-Agent 分析 ━━━"));
-                String jsonResult = runMultiAgent(sourceFile, apiKey, apiUrl, model, temperature);
-
-                System.out.println(ColorUtil.heading("━━━ 分析结果 ━━━"));
+                String jsonResult = runMultiAgent(sourceFile, apiKey, apiUrl, model, temperature, noCache);
                 System.out.println(jsonResult);
 
                 // Callers 反向依赖
@@ -645,14 +643,16 @@ public class CodeLensCli {
      * 流程: SUMMARY → METHOD_ANALYSIS × N → ReportMerger → ReportConverter
      */
     private static String runMultiAgent(File sourceFile, String apiKey, String apiUrl,
-                                        String model, double temperature) throws Exception {
+                                        String model, double temperature, boolean noCache) throws Exception {
         String sourceCode = new String(Files.readAllBytes(sourceFile.toPath()));
 
         // 1. 创建 CliLLMClient
         com.codelens.common.llm.LLMClient llmClient = new CliLLMClient(apiKey, apiUrl, model, temperature);
 
-        // 2. 创建 GranularCache（存储到 .codelens/granular/）
-        Path cacheRoot = JavaParserService.findProjectRoot(sourceFile.toPath());
+        // 2. 创建 GranularCache（noCache 时使用临时目录，等价于禁用缓存）
+        Path cacheRoot = noCache
+                ? Files.createTempDirectory("codelens-cache-")
+                : JavaParserService.findProjectRoot(sourceFile.toPath());
         CacheConfig cacheConfig = CacheConfig.defaults(cacheRoot.toString());
         FileSystemCache fsCache = new FileSystemCache(cacheConfig);
         GranularCache granularCache = new GranularCacheAdapter(fsCache);
