@@ -11,6 +11,8 @@ import com.github.javaparser.ast.expr.MethodCallExpr;
 import com.github.javaparser.ast.expr.NameExpr;
 
 import java.io.File;
+import java.io.IOException;
+import java.nio.charset.StandardCharsets;
 import java.nio.file.FileSystems;
 import java.nio.file.Files;
 import java.nio.file.Path;
@@ -67,6 +69,7 @@ public class JavaParserService {
         public String annotations;
         public String visibility;
         public int line;
+        public int endLine;
     }
 
     /**
@@ -123,6 +126,7 @@ public class JavaParserService {
                             .orElse("");
                     mi.visibility = method.getAccessSpecifier().asString();
                     mi.line = method.getBegin().map(p -> p.line).orElse(0);
+                    mi.endLine = method.getRange().map(r -> r.end.line).orElse(mi.line);
                     ci.methods.add(mi);
                 }
 
@@ -234,6 +238,33 @@ public class JavaParserService {
             }
         }
         return sb.toString();
+    }
+
+    /**
+     * 从源文件中提取方法体源码。
+     *
+     * @param sourceFile Java 源文件
+     * @param method     方法信息（含 startLine/endLine）
+     * @return 方法体源码（含方法签名），提取失败返回空字符串
+     */
+    public static String extractMethodBody(File sourceFile, MethodInfo method) {
+        try {
+            List<String> allLines = Files.readAllLines(sourceFile.toPath(), StandardCharsets.UTF_8);
+            int startIdx = Math.max(0, method.line - 1);
+            int endIdx = Math.min(allLines.size(), method.endLine);
+            if (startIdx >= allLines.size() || endIdx <= startIdx) {
+                return "";
+            }
+            StringBuilder sb = new StringBuilder();
+            for (int i = startIdx; i < endIdx; i++) {
+                if (sb.length() > 0) sb.append("\n");
+                sb.append(allLines.get(i));
+            }
+            return sb.toString();
+        } catch (IOException e) {
+            LOGGER.log(Level.WARNING, "提取方法体失败: " + sourceFile.getPath(), e);
+            return "";
+        }
     }
 
     // ========== 路径查找方法 ==========
