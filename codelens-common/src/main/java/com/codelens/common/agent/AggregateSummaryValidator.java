@@ -51,6 +51,18 @@ public class AggregateSummaryValidator {
             return ValidationResult.fail("json", "JSON 解析结果为空");
         }
 
+        return validate(output);
+    }
+
+    /**
+     * 对已解析的 AggregateSummaryOutput 执行全部 9 条规则校验。
+     * WARN 规则会直接修改 output 对象。
+     */
+    public ValidationResult validate(AggregateSummaryOutput output) {
+        if (output == null) {
+            return ValidationResult.fail("output", "输出对象为空");
+        }
+
         // ★ 在所有校验之前，先用实际值覆盖 LLM 不可信的统计字段
         overrideStatisticsFromInput(output);
 
