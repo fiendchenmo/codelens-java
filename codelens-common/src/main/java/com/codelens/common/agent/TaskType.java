@@ -11,7 +11,9 @@ public enum TaskType {
     STRUCTURE_EXTRACTION(null, null),
     SUMMARY(SummaryPrompt.class, SummaryValidator.class),
     METHOD_ANALYSIS(MethodAnalysisPrompt.class, MethodAnalysisValidator.class),
-    CROSS_FILE_INFERENCE(null, null);
+    CROSS_FILE_INFERENCE(null, null),
+    GROUPING(GroupingPrompt.class, GroupingValidator.class),
+    AGGREGATE_SUMMARY(AggregateSummaryPrompt.class, AggregateSummaryValidator.class);
 
     private final Class<?> promptClass;
     private final Class<?> validatorClass;
