@@ -243,7 +243,7 @@ class AggregateSummaryValidatorTest {
     void validate_nullJson() {
         AggregateSummaryInput input = inputWithPackage("com.example.test");
         AggregateSummaryValidator validator = new AggregateSummaryValidator(input);
-        ValidationResult result = validator.validate(null);
+        ValidationResult result = validator.validate((String) null);
         assertFalse(result.isValid());
     }
 

@@ -110,6 +110,7 @@ public class AggregateSummaryAgent {
      *   <li>GroupingPrompt → LLM 获取分组表</li>
      *   <li>每组分批调用 AggregateSummaryPrompt → LLM 获取组摘要</li>
      *   <li>合并所有组摘要为最终输出</li>
+     *   <li>最终校验（覆盖计数字段、补 riskOverview 等）</li>
      * </ol>
      */
     private AggregateSummaryOutput groupedAggregate(AggregateSummaryInput input) {
@@ -129,7 +130,15 @@ public class AggregateSummaryAgent {
         }
 
         // 3. 合并
-        return mergeGroupOutputs(input, groupOutputs);
+        AggregateSummaryOutput merged = mergeGroupOutputs(input, groupOutputs);
+
+        // 4. 最终校验：合并后的输出需要再次经过 validate，确保 riskOverview 等 WARN 规则生效
+        AggregateSummaryValidator validator = new AggregateSummaryValidator(input);
+        ValidationResult vr = validator.validate(merged);
+        if (!vr.isValid()) {
+            return buildDefaultOutput(input);
+        }
+        return merged;
     }
 
     /**
@@ -276,6 +285,20 @@ public class AggregateSummaryAgent {
         merged.setHighRiskCount(highRisk);
         merged.setMediumRiskCount(mediumRisk);
 
+        // 合并 riskOverview：取非空组的 riskOverview
+        StringBuilder riskSb = new StringBuilder();
+        for (AggregateSummaryOutput out : groupOutputs) {
+            if (out == null) continue;
+            String ro = out.getRiskOverview();
+            if (ro != null && !ro.trim().isEmpty()) {
+                if (riskSb.length() > 0) riskSb.append("；");
+                riskSb.append(ro);
+            }
+        }
+        if (riskSb.length() > 0) {
+            merged.setRiskOverview(riskSb.toString());
+        }
+
         // 限制列表长度
         if (allCoreEntries.size() > 5) allCoreEntries = allCoreEntries.subList(0, 5);
         if (allCoreResp.size() > 5) allCoreResp = allCoreResp.subList(0, 5);
@@ -293,17 +316,24 @@ public class AggregateSummaryAgent {
             return null;
         }
 
+        AggregateSummaryOutput output;
+        try {
+            output = GSON.fromJson(llmOutput, AggregateSummaryOutput.class);
+        } catch (Exception e) {
+            return null;
+        }
+        if (output == null) {
+            return null;
+        }
+
         AggregateSummaryValidator validator = new AggregateSummaryValidator(input);
-        ValidationResult vr = validator.validate(llmOutput);
+        ValidationResult vr = validator.validate(output);
         if (!vr.isValid()) {
             return null;
         }
 
-        try {
-            return GSON.fromJson(llmOutput, AggregateSummaryOutput.class);
-        } catch (Exception e) {
-            return null;
-        }
+        // 直接返回已校验并修正的 output 对象，不从 JSON 重解析（否则 WARN 修正会丢失）
+        return output;
     }
 
     /**
