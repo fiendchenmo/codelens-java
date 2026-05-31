@@ -1,0 +1,163 @@
+package com.codelens.common.agent;
+
+import com.codelens.common.models.ArchitectureLayer;
+
+import java.util.List;
+
+/**
+ * 聚合摘要的输出数据模型。
+ * <p>
+ * 由 LLM 生成，包含包/模块维度的整体摘要信息。
+ * </p>
+ */
+public class AggregateSummaryOutput {
+
+    private String packageName;
+    private ArchitectureLayer architectureLayer;
+    private String layerComposition;
+    private String summary;
+    private List<String> coreEntries;
+    private List<String> coreResponsibilities;
+    private List<CrossPackageDep> crossPackageDeps;
+    private String riskOverview;
+    private int totalFiles;
+    private int totalMethods;
+    private int highRiskCount;
+    private int mediumRiskCount;
+
+    public AggregateSummaryOutput() {
+    }
+
+    public String getPackageName() {
+        return packageName;
+    }
+
+    public void setPackageName(String packageName) {
+        this.packageName = packageName;
+    }
+
+    public ArchitectureLayer getArchitectureLayer() {
+        return architectureLayer;
+    }
+
+    public void setArchitectureLayer(ArchitectureLayer architectureLayer) {
+        this.architectureLayer = architectureLayer;
+    }
+
+    public String getLayerComposition() {
+        return layerComposition;
+    }
+
+    public void setLayerComposition(String layerComposition) {
+        this.layerComposition = layerComposition;
+    }
+
+    public String getSummary() {
+        return summary;
+    }
+
+    public void setSummary(String summary) {
+        this.summary = summary;
+    }
+
+    public List<String> getCoreEntries() {
+        return coreEntries;
+    }
+
+    public void setCoreEntries(List<String> coreEntries) {
+        this.coreEntries = coreEntries;
+    }
+
+    public List<String> getCoreResponsibilities() {
+        return coreResponsibilities;
+    }
+
+    public void setCoreResponsibilities(List<String> coreResponsibilities) {
+        this.coreResponsibilities = coreResponsibilities;
+    }
+
+    public List<CrossPackageDep> getCrossPackageDeps() {
+        return crossPackageDeps;
+    }
+
+    public void setCrossPackageDeps(List<CrossPackageDep> crossPackageDeps) {
+        this.crossPackageDeps = crossPackageDeps;
+    }
+
+    public String getRiskOverview() {
+        return riskOverview;
+    }
+
+    public void setRiskOverview(String riskOverview) {
+        this.riskOverview = riskOverview;
+    }
+
+    public int getTotalFiles() {
+        return totalFiles;
+    }
+
+    public void setTotalFiles(int totalFiles) {
+        this.totalFiles = totalFiles;
+    }
+
+    public int getTotalMethods() {
+        return totalMethods;
+    }
+
+    public void setTotalMethods(int totalMethods) {
+        this.totalMethods = totalMethods;
+    }
+
+    public int getHighRiskCount() {
+        return highRiskCount;
+    }
+
+    public void setHighRiskCount(int highRiskCount) {
+        this.highRiskCount = highRiskCount;
+    }
+
+    public int getMediumRiskCount() {
+        return mediumRiskCount;
+    }
+
+    public void setMediumRiskCount(int mediumRiskCount) {
+        this.mediumRiskCount = mediumRiskCount;
+    }
+
+    /**
+     * 用于 Gson 反序列化的内部类型，与 {@link AggregateSummaryInput.CrossPackageDep} 结构相同，
+     * 但在输出中作为独立数据类使用。
+     */
+    public static class CrossPackageDep {
+        private String targetPackage;
+        private java.util.List<String> viaMethods;
+        private String direction;
+
+        public CrossPackageDep() {
+        }
+
+        public String getTargetPackage() {
+            return targetPackage;
+        }
+
+        public void setTargetPackage(String targetPackage) {
+            this.targetPackage = targetPackage;
+        }
+
+        public java.util.List<String> getViaMethods() {
+            return viaMethods;
+        }
+
+        public void setViaMethods(java.util.List<String> viaMethods) {
+            this.viaMethods = viaMethods;
+        }
+
+        public String getDirection() {
+            return direction;
+        }
+
+        public void setDirection(String direction) {
+            this.direction = direction;
+        }
+    }
+}
