@@ -52,21 +52,22 @@ class AggregateSummaryValidatorTest {
 
     @Test
     void v2_architectureLayer_invalid() {
+        // overrideStatisticsFromInput 会将无效值兜底为 UNKNOWN
         AggregateSummaryInput input = inputWithPackage("com.example.test");
         AggregateSummaryValidator validator = new AggregateSummaryValidator(input);
         String json = jsonWithOverrides("architectureLayer", "\"INVALID_LAYER\"");
         ValidationResult result = validator.validate(json);
-        assertFalse(result.isValid());
-        assertTrue(result.getErrorMessage().contains("architectureLayer"));
+        assertTrue(result.isValid()); // 现在会被覆盖为 UNKNOWN
     }
 
     @Test
     void v2_architectureLayer_null() {
+        // overrideStatisticsFromInput 会将 null 兜底为 UNKNOWN
         AggregateSummaryInput input = inputWithPackage("com.example.test");
         AggregateSummaryValidator validator = new AggregateSummaryValidator(input);
         String json = jsonWithOverrides("architectureLayer", "null");
         ValidationResult result = validator.validate(json);
-        assertFalse(result.isValid());
+        assertTrue(result.isValid()); // 现在会被覆盖为 UNKNOWN
     }
 
     @Test
@@ -178,11 +179,10 @@ class AggregateSummaryValidatorTest {
                 new HashMap<ArchitectureLayer, Integer>());
 
         AggregateSummaryValidator validator = new AggregateSummaryValidator(input);
-        // totalFiles=3, 但实际文件只有 2 个
+        // totalFiles 被 override 自动修正，不再 FAIL
         String json = jsonWithOverrides("totalFiles", "3");
         ValidationResult result = validator.validate(json);
-        assertFalse(result.isValid());
-        assertTrue(result.getErrorMessage().contains("totalFiles"));
+        assertTrue(result.isValid()); // V7 已降级为 WARN
     }
 
     @Test
