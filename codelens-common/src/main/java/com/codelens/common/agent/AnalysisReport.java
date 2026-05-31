@@ -3,6 +3,8 @@ package com.codelens.common.agent;
 import com.google.gson.GsonBuilder;
 import com.google.gson.annotations.SerializedName;
 
+import com.codelens.common.models.ArchitectureLayer;
+
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -20,6 +22,8 @@ public class AnalysisReport {
     private List<String> dependencies;
     private String overallComplexity;
     private Map<String, Object> metadata;
+    private List<AggregateSummaryOutput> packageSummaries;
+    private AggregateSummaryOutput moduleSummary;
 
     public AnalysisReport() {}
 
@@ -45,6 +49,12 @@ public class AnalysisReport {
     public void setOverallComplexity(String overallComplexity) { this.overallComplexity = overallComplexity; }
     public Map<String, Object> getMetadata() { return metadata; }
     public void setMetadata(Map<String, Object> metadata) { this.metadata = metadata; }
+
+    public List<AggregateSummaryOutput> getPackageSummaries() { return packageSummaries; }
+    public void setPackageSummaries(List<AggregateSummaryOutput> packageSummaries) { this.packageSummaries = packageSummaries; }
+
+    public AggregateSummaryOutput getModuleSummary() { return moduleSummary; }
+    public void setModuleSummary(AggregateSummaryOutput moduleSummary) { this.moduleSummary = moduleSummary; }
 
     /**
      * 序列化为 JSON。
