@@ -412,54 +412,51 @@ public class CodeLensCli {
      * 缓存状态标签。
      */
     /**
-     * 从文件列表和 SUMMARY 任务列表构建 AggregateSummaryInput。
-     * 解析每个文件的包名、类名和层分布。
+     * 文件级分析结果，关联文件名和对应的输出。
      */
-    private static com.codelens.common.agent.AggregateSummaryInput buildAggregateInputFromFiles(
-            List<File> javaFiles,
-            List<com.codelens.common.agent.AnalysisTask<String, String>> summaryTasks,
-            String moduleName) {
+    private static class FileAnalysisResult {
+        String fileName;
+        String packageName;
+        String summaryOutput;
+        com.codelens.common.models.ArchitectureLayer layer;
+
+        FileAnalysisResult(String fileName, String packageName,
+                            String summaryOutput,
+                            com.codelens.common.models.ArchitectureLayer layer) {
+            this.fileName = fileName;
+            this.packageName = packageName;
+            this.summaryOutput = summaryOutput;
+            this.layer = layer;
+        }
+    }
+
+    /**
+     * 从文件分析结果列表构建 AggregateSummaryInput。
+     */
+    private static com.codelens.common.agent.AggregateSummaryInput buildAggregateInputFromResults(
+            List<FileAnalysisResult> results,
+            String defaultPackage) {
 
         List<com.codelens.common.agent.AggregateSummaryInput.FileSummaryEntry> entries =
                 new ArrayList<>();
         Map<com.codelens.common.models.ArchitectureLayer, Integer> layerDist =
                 new HashMap<>();
-        String detectedPackage = moduleName;
+        String detectedPackage = defaultPackage;
 
-        for (int i = 0; i < javaFiles.size() && i < summaryTasks.size(); i++) {
-            File f = javaFiles.get(i);
-            com.codelens.common.agent.AnalysisTask<String, String> task = summaryTasks.get(i);
-            String output = task.getOutput();
-            if (output == null) continue;
-
-            String fileName = f.getName();
-            String className = fileName.replace(".java", "");
-
-            // 通过 JavaParser 解析包名
-            String pkg = "";
-            try {
-                pkg = JavaParserService.getPackageName(f);
-            } catch (Exception e) {
-                // 解析失败使用默认值
+        for (FileAnalysisResult r : results) {
+            if (r.summaryOutput == null) continue;
+            if (r.packageName != null && !r.packageName.isEmpty()) {
+                detectedPackage = r.packageName;
             }
-
-            if (pkg != null && !pkg.isEmpty()) {
-                detectedPackage = pkg;
-            }
-
-            // 用 ArchitectureLayerDetector 通过类名和包名检测层次
-            com.codelens.common.models.ArchitectureLayer layer =
-                    com.codelens.common.analyzer.ArchitectureLayerDetector.detectClassLayer(
-                            null, className, pkg);
 
             com.codelens.common.agent.AggregateSummaryInput.FileSummaryEntry entry =
                     new com.codelens.common.agent.AggregateSummaryInput.FileSummaryEntry(
-                            fileName, layer, output, "", "", "",
+                            r.fileName, r.layer, r.summaryOutput, "", "", "",
                             new ArrayList<String>(), new ArrayList<String>());
             entries.add(entry);
 
-            Integer count = layerDist.get(layer);
-            layerDist.put(layer, count != null ? count + 1 : 1);
+            Integer count = layerDist.get(r.layer);
+            layerDist.put(r.layer, count != null ? count + 1 : 1);
         }
 
         return new com.codelens.common.agent.AggregateSummaryInput(
@@ -711,8 +708,7 @@ public class CodeLensCli {
             com.codelens.common.agent.AgentRunner runner =
                     new com.codelens.common.agent.AgentRunner(llmClient, granularCache);
 
-            List<com.codelens.common.agent.AnalysisTask<String, String>> summaryTasks =
-                    new ArrayList<>();
+            List<FileAnalysisResult> fileResults = new ArrayList<>();
 
             for (int i = 0; i < javaFiles.size(); i++) {
                 File f = javaFiles.get(i);
@@ -790,7 +786,17 @@ public class CodeLensCli {
                         executor.shutdown();
                     }
 
-                    summaryTasks.add(summaryTask);
+                    // 收集文件分析结果用于后续聚合
+                    String className2 = fileName.replace(".java", "");
+                    String pkg2 = "";
+                    try {
+                        pkg2 = JavaParserService.getPackageName(f);
+                    } catch (Exception ignored) {}
+                    com.codelens.common.models.ArchitectureLayer layer2 =
+                            com.codelens.common.analyzer.ArchitectureLayerDetector.detectClassLayer(
+                                    null, className2, pkg2);
+                    fileResults.add(new FileAnalysisResult(
+                            fileName, pkg2, summaryTask.getOutput(), layer2));
 
                 } catch (Exception e) {
                     System.out.println("  ✗ " + fileName + " 分析失败: " + e.getMessage());
@@ -798,28 +804,16 @@ public class CodeLensCli {
                 }
             }
 
-            // STEP 3: 包级聚合 — 直接构造 AggregateSummaryInput
-            if (!summaryTasks.isEmpty()) {
+            // STEP 3: 包级聚合
+            if (!fileResults.isEmpty()) {
                 System.out.println(ColorUtil.heading("━━━ 生成包级聚合摘要 ━━━"));
-                System.out.println("收集了 " + summaryTasks.size() + " 个文件摘要");
-
-                // 从文件循环中收集的元数据构造输入
-                List<com.codelens.common.agent.AggregateSummaryInput.FileSummaryEntry> entries =
-                        new ArrayList<>();
-                Map<com.codelens.common.models.ArchitectureLayer, Integer> layerDist =
-                        new HashMap<>();
-                String commonPkg = "";
-
-                for (int i = 0; i < summaryTasks.size(); i++) {
-                    // 从对应文件中提取信息（需在循环中保存，此处做二次扫描）
-                }
-
-                // 改用直接调用 AggregateSummaryAgent
-                com.codelens.common.agent.AggregateSummaryAgent aggAgent =
-                        new com.codelens.common.agent.AggregateSummaryAgent(llmClient, granularCache);
+                System.out.println("收集了 " + fileResults.size() + " 个文件摘要");
 
                 com.codelens.common.agent.AggregateSummaryInput aggInput =
-                        buildAggregateInputFromFiles(javaFiles, summaryTasks, moduleName);
+                        buildAggregateInputFromResults(fileResults, moduleName);
+
+                com.codelens.common.agent.AggregateSummaryAgent aggAgent =
+                        new com.codelens.common.agent.AggregateSummaryAgent(llmClient, granularCache);
                 com.codelens.common.agent.AggregateSummaryOutput aggOutput =
                         aggAgent.execute(aggInput);
 

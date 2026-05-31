@@ -88,16 +88,43 @@ public class AggregateSummaryAgent {
      */
     private AggregateSummaryOutput directAggregate(AggregateSummaryInput input) {
         AggregateSummaryPrompt prompt = new AggregateSummaryPrompt();
+        StringBuilder debugLog = new StringBuilder();
 
         for (int attempt = 0; attempt < 2; attempt++) {
             String systemPrompt = prompt.buildPackageSystemPrompt();
             String userPrompt = prompt.buildPackageUserPrompt(input);
             String llmOutput = llmClient.chat(systemPrompt, userPrompt);
 
+            debugLog.append("=== Attempt ").append(attempt).append(" ===\n");
+            debugLog.append("UserPrompt:\n").append(userPrompt).append("\n\n");
+            debugLog.append("RawLLMOutput:\n").append(llmOutput).append("\n\n");
+
             AggregateSummaryOutput output = parseAndValidateOutput(llmOutput, input);
             if (output != null) {
                 return output;
             }
+            // 捕获验证失败详情
+            AggregateSummaryValidator debugValidator = new AggregateSummaryValidator(input);
+            ValidationResult failResult = debugValidator.validate(llmOutput);
+            debugLog.append("ValidationResult: valid=").append(failResult.isValid())
+                    .append(" field=").append(failResult.getFieldName())
+                    .append(" msg=").append(failResult.getErrorMessage()).append("\n");
+            // 测试 Gson 解析（不考虑 validation）
+            try {
+                AggregateSummaryOutput parsed = GSON.fromJson(llmOutput, AggregateSummaryOutput.class);
+                debugLog.append("GsonParse: OK archLayer=").append(parsed.getArchitectureLayer())
+                        .append(" totalFiles=").append(parsed.getTotalFiles()).append("\n");
+            } catch (Exception e) {
+                debugLog.append("GsonParse: FAIL ").append(e.getMessage()).append("\n");
+            }
+        }
+
+        // 保存调试信息
+        try {
+            java.nio.file.Files.write(
+                    java.nio.file.Paths.get("C:\\workspace\\agg_debug.log"),
+                    debugLog.toString().getBytes(java.nio.charset.StandardCharsets.UTF_8));
+        } catch (Exception ignored) {
         }
 
         // 两次都失败，返回默认值
