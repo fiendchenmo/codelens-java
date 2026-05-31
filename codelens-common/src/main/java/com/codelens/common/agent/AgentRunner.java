@@ -1,11 +1,18 @@
 package com.codelens.common.agent;
 
+import com.codelens.common.agent.AggregateSummaryInput.FileSummaryEntry;
+import com.codelens.common.analyzer.ArchitectureLayerDetector;
 import com.codelens.common.cache.GranularCache;
 import com.codelens.common.llm.LLMClient;
+import com.codelens.common.models.ArchitectureLayer;
 
 import java.lang.reflect.Method;
+import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
+import java.util.HashMap;
+import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 
 /**
@@ -90,6 +97,140 @@ public class AgentRunner {
             return summaryTask.getOutput();
         }
         return "";
+    }
+
+    /**
+     * 执行包级聚合摘要。
+     * <p>
+     * 等子 Task 完成 → 收集 File Summary → 组装 AggregateSummaryInput → 调 AggregateSummaryAgent。
+     * 支持增量更新：文件修改时对比输出，变了才重跑 Package Summary。
+     *
+     * @param fileTasks    已完成的文件级 SUMMARY 任务列表
+     * @param crossDeps    跨包依赖列表
+     * @param moduleName   模块名（用于缓存键）
+     * @return 聚合摘要输出
+     */
+    public AggregateSummaryOutput runAggregate(List<AnalysisTask<String, String>> fileTasks,
+                                                 List<AggregateSummaryInput.CrossPackageDep> crossDeps,
+                                                 String moduleName) {
+        AggregateSummaryInput input = buildAggregateInput(fileTasks, crossDeps);
+        AggregateSummaryAgent agent = new AggregateSummaryAgent(llmClient, cache);
+        return agent.execute(input);
+    }
+
+    /**
+     * 增量更新聚合摘要。
+     * <p>
+     * 对已修改的文件重新执行 SUMMARY，比对输出是否确实变化。
+     * 仅当子级输出真正改变时才重跑 AGGREGATE_SUMMARY。
+     *
+     * @param changedFiles 已修改的文件列表（新 AnalysisTask，含新 sourceCode）
+     * @param allFiles     所有文件的 AnalysisTask（含未修改的）
+     * @param crossDeps    跨包依赖列表
+     * @param metadata     索引元数据
+     * @return true 表示 Package Summary 已更新
+     */
+    public boolean runAggregateIncremental(List<AnalysisTask<String, String>> changedFiles,
+                                            List<AnalysisTask<String, String>> allFiles,
+                                            List<AggregateSummaryInput.CrossPackageDep> crossDeps,
+                                            String metadata) {
+        boolean anySummaryChanged = false;
+
+        // 重跑已修改文件的 SUMMARY，比对输出
+        for (AnalysisTask<String, String> task : changedFiles) {
+            if (task.getTaskType() != TaskType.SUMMARY) continue;
+
+            // 获取旧的输出（缓存中的）
+            String oldOutput = task.getOutput();
+            String cacheKey = CacheGranule.generateKey(task.getInput(), TaskType.SUMMARY);
+            Optional<CacheGranule> cached = cache.get(cacheKey);
+            if (cached.isPresent()) {
+                oldOutput = cached.get().getOutput();
+            }
+
+            // 重新执行 SUMMARY
+            run(task, metadata);
+
+            String newOutput = task.getOutput();
+            // 仅当输出确实变了才标记
+            if (oldOutput != null && !oldOutput.equals(newOutput)) {
+                anySummaryChanged = true;
+            } else if (oldOutput == null && newOutput != null) {
+                anySummaryChanged = true;
+            }
+        }
+
+        // 有增删（changedFiles 包含新文件）或 SUMMARY 输出变化时重跑聚合
+        if (anySummaryChanged || hasFileChanges(changedFiles, allFiles)) {
+            runAggregate(allFiles, crossDeps, "");
+            return true;
+        }
+        return false;
+    }
+
+    /**
+     * 检查是否有文件增删（新增或删除的文件）。
+     */
+    private boolean hasFileChanges(List<AnalysisTask<String, String>> changedFiles,
+                                    List<AnalysisTask<String, String>> allFiles) {
+        // 如果 changedFiles 中的 task 没有 oldOutput（是新文件），或某文件不再在 allFiles 中
+        for (AnalysisTask<String, String> task : changedFiles) {
+            String cacheKey = CacheGranule.generateKey(task.getInput(), TaskType.SUMMARY);
+            Optional<CacheGranule> cached = cache.get(cacheKey);
+            if (!cached.isPresent()) {
+                return true; // 新文件，无缓存
+            }
+        }
+        return false;
+    }
+
+    /**
+     * 将文件级任务列表组装为 AggregateSummaryInput。
+     */
+    private AggregateSummaryInput buildAggregateInput(
+            List<AnalysisTask<String, String>> fileTasks,
+            List<AggregateSummaryInput.CrossPackageDep> crossDeps) {
+        if (fileTasks == null || fileTasks.isEmpty()) {
+            return new AggregateSummaryInput("",
+                    new ArrayList<FileSummaryEntry>(),
+                    crossDeps != null ? crossDeps : new ArrayList<AggregateSummaryInput.CrossPackageDep>(),
+                    new HashMap<ArchitectureLayer, Integer>());
+        }
+
+        // 从第一个文件的 packageName 推断
+        String packageName = "";
+        List<FileSummaryEntry> entries = new ArrayList<FileSummaryEntry>();
+        Map<ArchitectureLayer, Integer> layerDist = new HashMap<ArchitectureLayer, Integer>();
+
+        for (AnalysisTask<String, String> task : fileTasks) {
+            if (task.getTaskType() != TaskType.SUMMARY) continue;
+            String output = task.getOutput();
+            if (output == null || output.trim().isEmpty()) continue;
+
+            // 从输出中解析文件名和层信息（简化：使用任务 id 作为文件名）
+            String fileName = task.getTaskId() + ".java";
+            String summary = output;
+            ArchitectureLayer layer = ArchitectureLayerDetector.detectClassLayer(
+                    null, task.getTaskId(), packageName);
+            if (layer == null) {
+                layer = ArchitectureLayer.UNKNOWN;
+            }
+
+            FileSummaryEntry entry = new FileSummaryEntry(
+                    fileName, layer, summary, "", "", "",
+                    new ArrayList<String>(), new ArrayList<String>());
+            entries.add(entry);
+
+            // 更新层分布
+            Integer count = layerDist.get(layer);
+            layerDist.put(layer, count != null ? count + 1 : 1);
+        }
+
+        return new AggregateSummaryInput(
+                packageName,
+                entries,
+                crossDeps != null ? crossDeps : new ArrayList<AggregateSummaryInput.CrossPackageDep>(),
+                layerDist);
     }
 
     /**
