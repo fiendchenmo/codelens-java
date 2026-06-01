@@ -380,6 +380,92 @@ public class ImpactAnalyzerTest {
         assertEquals(ArchitectureLayer.CONTROLLER, report.impacts.get(0).layer);
     }
 
+    // ==================== BFS 广度限制 ====================
+
+    @Test
+    void testMaxCallersPerNodeLimit() {
+        index = new SQLiteCallIndex(":memory:");
+        // 一个方法被 100 个地方调用
+        for (int i = 0; i < 100; i++) {
+            index.insert(new CallRecord("Caller" + i, "call",
+                    "ServiceA", "methodA", "DIRECT",
+                    "src/Caller" + i + ".java", 1, null));
+        }
+
+        ChangedFile changedFile = createChangedFile("src/ServiceA.java", "ServiceA",
+                ChangeType.MODIFIED,
+                new ChangedMethod("ServiceA", "methodA", "methodA()",
+                        ChangeType.MODIFIED, 1, 1));
+
+        // maxCallersPerNode=10
+        ImpactAnalyzer analyzer = new ImpactAnalyzer(index, 3, 10, 200);
+        ImpactReport report = analyzer.analyze(Collections.singletonList(changedFile), "abc123");
+
+        // 最多返回 10 个 caller
+        assertTrue(report.impacts.size() <= 10,
+                "Should limit to maxCallersPerNode=10, got " + report.impacts.size());
+    }
+
+    @Test
+    void testMaxTotalImpactsLimit() {
+        index = new SQLiteCallIndex(":memory:");
+        // 链式调用: A.methodA → B.methodB → C.methodC ... (每层1个callee, 但每层有多个caller)
+        // 让每个方法被10个调用者引用，3跳后应有 10*10*10 = 1000+ 个节点
+        String[] classes = {"ServiceA", "ServiceB", "ServiceC", "ServiceD"};
+        String[] methods = {"methodA", "methodB", "methodC", "methodD"};
+        for (int hop = 0; hop < 3; hop++) {
+            for (int i = 0; i < 10; i++) {
+                index.insert(new CallRecord(
+                        "Caller_" + hop + "_" + i, "call",
+                        classes[hop], methods[hop], "DIRECT",
+                        "src/Caller.java", 1, null));
+            }
+        }
+        // 链：ServiceD → ServiceC → ServiceB → ServiceA
+        index.insert(new CallRecord("ServiceB", "methodB",
+                "ServiceA", "methodA", "DIRECT", "src/B.java", 1, null));
+        index.insert(new CallRecord("ServiceC", "methodC",
+                "ServiceB", "methodB", "DIRECT", "src/C.java", 1, null));
+        index.insert(new CallRecord("ServiceD", "methodD",
+                "ServiceC", "methodC", "DIRECT", "src/D.java", 1, null));
+
+        ChangedFile changedFile = createChangedFile("src/ServiceA.java", "ServiceA",
+                ChangeType.MODIFIED,
+                new ChangedMethod("ServiceA", "methodA", "methodA()",
+                        ChangeType.MODIFIED, 1, 1));
+
+        // maxTotalImpacts=50
+        ImpactAnalyzer analyzer = new ImpactAnalyzer(index, 5, 100, 50);
+        ImpactReport report = analyzer.analyze(Collections.singletonList(changedFile), "abc123");
+
+        assertTrue(report.impacts.size() <= 50,
+                "Should limit to maxTotalImpacts=50, got " + report.impacts.size());
+    }
+
+    @Test
+    void testDefaultConstructorDelegates() {
+        // 默认构造器应委托给完整构造器，不抛异常
+        index = new SQLiteCallIndex(":memory:");
+        index.insert(new CallRecord("OrderController", "submit",
+                "OrderService", "processOrder", "DIRECT",
+                "src/OrderController.java", 25, null));
+
+        ChangedFile changedFile = createChangedFile("src/OrderService.java", "OrderService",
+                ChangeType.MODIFIED,
+                new ChangedMethod("OrderService", "processOrder", "processOrder()",
+                        ChangeType.MODIFIED, 10, 10));
+
+        // 使用默认构造器（maxHops=3, maxCallersPerNode=30, maxTotalImpacts=200）
+        ImpactAnalyzer analyzer = new ImpactAnalyzer(index, 3);
+        ImpactReport report = analyzer.analyze(Collections.singletonList(changedFile), "abc123");
+
+        assertEquals(1, report.impacts.size());
+        ImpactNode node = report.impacts.get(0);
+        assertEquals("OrderController", node.className);
+        assertEquals(ImpactLevel.DIRECT, node.level);
+        assertEquals(ImpactConfidence.HIGH, node.confidence);
+    }
+
     // ==================== 辅助方法 ====================
 
     private ChangedFile createChangedFile(String filePath, String className,

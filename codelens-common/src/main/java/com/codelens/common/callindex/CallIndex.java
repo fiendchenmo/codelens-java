@@ -28,9 +28,19 @@ public interface CallIndex extends AutoCloseable {
     List<CallRecord> queryByCaller(String className, String methodName);
 
     /**
+     * 按调用方查询（带返回上限）。
+     */
+    List<CallRecord> queryByCaller(String className, String methodName, int limit);
+
+    /**
      * 按被调用方查询。
      */
     List<CallRecord> queryByCallee(String className, String methodName);
+
+    /**
+     * 按被调用方查询（带返回上限）。
+     */
+    List<CallRecord> queryByCallee(String className, String methodName, int limit);
 
     /**
      * 删除某文件的所有记录（增量更新前清理）。
