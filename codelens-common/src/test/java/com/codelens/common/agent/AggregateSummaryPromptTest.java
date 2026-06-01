@@ -39,10 +39,10 @@ class AggregateSummaryPromptTest {
         assertTrue(systemPrompt.contains("riskOverview"));
         assertTrue(systemPrompt.contains("totalFiles"));
         assertTrue(systemPrompt.contains("totalMethods"));
-        assertTrue(systemPrompt.contains("highRiskCount"));
-        assertTrue(systemPrompt.contains("mediumRiskCount"));
+        assertTrue(systemPrompt.contains("riskCategories"));
+        assertTrue(systemPrompt.contains("fileLayers"));
         assertTrue(systemPrompt.contains("200 字"));
-        assertTrue(systemPrompt.contains("800"));
+        assertTrue(systemPrompt.contains("1100"));
     }
 
     @Test
