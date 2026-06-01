@@ -19,16 +19,36 @@ public class ImpactAnalyzer {
     /** 变更文件数超过此阈值时自动降级为包级分析 */
     private static final int FILE_COUNT_THRESHOLD = 50;
 
+    /** 单节点最大调用方数（防止单节点扩散过宽） */
+    private static final int DEFAULT_MAX_CALLERS_PER_NODE = 30;
+    /** 总影响节点上限（防止搜索空间指数膨胀） */
+    private static final int DEFAULT_MAX_TOTAL_IMPACTS = 200;
+
     private final CallIndex callIndex;
     private final int maxHops;
+    private final int maxCallersPerNode;
+    private final int maxTotalImpacts;
 
     /**
      * @param callIndex 调用索引（可为 null，表示 CallIndex 缺失降级）
      * @param maxHops   最大扩散跳数
      */
     public ImpactAnalyzer(CallIndex callIndex, int maxHops) {
+        this(callIndex, maxHops, DEFAULT_MAX_CALLERS_PER_NODE, DEFAULT_MAX_TOTAL_IMPACTS);
+    }
+
+    /**
+     * @param callIndex         调用索引（可为 null，表示 CallIndex 缺失降级）
+     * @param maxHops           最大扩散跳数
+     * @param maxCallersPerNode 单节点最大调用方数
+     * @param maxTotalImpacts   总影响节点上限
+     */
+    public ImpactAnalyzer(CallIndex callIndex, int maxHops,
+                          int maxCallersPerNode, int maxTotalImpacts) {
         this.callIndex = callIndex;
         this.maxHops = maxHops > 0 ? maxHops : 3;
+        this.maxCallersPerNode = maxCallersPerNode > 0 ? maxCallersPerNode : DEFAULT_MAX_CALLERS_PER_NODE;
+        this.maxTotalImpacts = maxTotalImpacts > 0 ? maxTotalImpacts : DEFAULT_MAX_TOTAL_IMPACTS;
     }
 
     /**
@@ -93,19 +113,29 @@ public class ImpactAnalyzer {
 
         // Step 2: BFS 扩散
         while (!queue.isEmpty()) {
+            // ② 总影响节点上限守卫
+            if (nodeMap.size() >= maxTotalImpacts) {
+                break;
+            }
+
             BfsNode current = queue.poll();
 
             if (current.hop >= maxHops) {
                 continue;
             }
 
-            // 查询谁调用了这个方法
+            // 查询谁调用了这个方法（SQL LIMIT + 防御性截断）
             List<CallRecord> callers;
             try {
-                callers = callIndex.queryByCallee(current.className, current.methodName);
+                callers = callIndex.queryByCallee(current.className, current.methodName, maxCallersPerNode);
             } catch (Exception e) {
                 // 查询失败则跳过此节点
                 continue;
+            }
+
+            // ① 防御性截断：即使 SQL LIMIT 因实现差异未生效，Java 侧再保一道
+            if (callers != null && callers.size() > maxCallersPerNode) {
+                callers = new ArrayList<>(callers.subList(0, maxCallersPerNode));
             }
 
             if (callers == null || callers.isEmpty()) {
