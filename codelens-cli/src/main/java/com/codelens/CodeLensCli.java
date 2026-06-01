@@ -1102,6 +1102,14 @@ public class CodeLensCli {
             return;
         }
 
+        // 3.5 自动构建 CallIndex（如果为空）
+        int callIndexRecordCount = CallIndexBuilder.buildIfEmpty(repoPath);
+        if (callIndexRecordCount > 0) {
+            System.out.println(ColorUtil.info("✓ 调用索引: " + callIndexRecordCount + " 条记录"));
+        } else {
+            System.out.println(ColorUtil.warning("⚠ CallIndex 构建失败，仅文件级分析"));
+        }
+
         // 4. 加载 CallIndex（可选）
         com.codelens.common.callindex.CallIndex callIndex = null;
         try {
