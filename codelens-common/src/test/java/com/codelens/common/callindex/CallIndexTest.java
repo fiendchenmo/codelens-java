@@ -367,4 +367,48 @@ public class CallIndexTest {
         assertThrows(IllegalStateException.class, () ->
             index.deleteByFile("A.java"));
     }
+
+    // ========================================================================
+    // LIMIT 查询
+    // ========================================================================
+
+    @Test
+    void testQueryByCalleeWithLimit() {
+        // 插入 50 条 calleeClass=A, calleeMethod=a 的记录
+        for (int i = 0; i < 50; i++) {
+            index.insert(new CallRecord("Caller" + i, "m" + i,
+                    "A", "a", "DIRECT", "A.java", i, null));
+        }
+
+        List<CallRecord> limited = index.queryByCallee("A", "a", 10);
+        assertEquals(10, limited.size(), "LIMIT 10 should return 10 records");
+
+        List<CallRecord> all = index.queryByCallee("A", "a");
+        assertEquals(50, all.size(), "No limit should return all 50 records");
+    }
+
+    @Test
+    void testQueryByCallerWithLimit() {
+        // 插入 30 条 callerClass=X, callerMethod=x 的记录
+        for (int i = 0; i < 30; i++) {
+            index.insert(new CallRecord("X", "x",
+                    "Callee" + i, "c" + i, "DIRECT", "X.java", i, null));
+        }
+
+        List<CallRecord> limited = index.queryByCaller("X", "x", 5);
+        assertEquals(5, limited.size(), "LIMIT 5 should return 5 records");
+
+        List<CallRecord> all = index.queryByCaller("X", "x");
+        assertEquals(30, all.size(), "No limit should return all 30 records");
+    }
+
+    @Test
+    void testQueryByCalleeWithLimit_exceedsMax() {
+        // limit 大于实际记录数时，返回全部
+        index.insert(new CallRecord("C1", "m1", "A", "a", "DIRECT", "A.java", 1, null));
+        index.insert(new CallRecord("C2", "m2", "A", "a", "DIRECT", "A.java", 2, null));
+
+        List<CallRecord> result = index.queryByCallee("A", "a", 100);
+        assertEquals(2, result.size(), "LIMIT 100 should return all 2 records");
+    }
 }

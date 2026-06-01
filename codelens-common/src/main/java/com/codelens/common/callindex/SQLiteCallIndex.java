@@ -102,15 +102,21 @@ public class SQLiteCallIndex implements CallIndex {
 
     @Override
     public List<CallRecord> queryByCaller(String className, String methodName) {
+        return queryByCaller(className, methodName, Integer.MAX_VALUE);
+    }
+
+    @Override
+    public List<CallRecord> queryByCaller(String className, String methodName, int limit) {
         String sql = "SELECT caller_class, caller_method, callee_class, callee_method, " +
                     "call_type, file_path, line_number, confidence FROM call_records " +
-                    "WHERE caller_class = ? AND caller_method = ? ORDER BY line_number";
+                    "WHERE caller_class = ? AND caller_method = ? ORDER BY line_number LIMIT ?";
         List<CallRecord> results = new ArrayList<CallRecord>();
         synchronized (lock) {
         checkClosed();
         try (PreparedStatement ps = conn.prepareStatement(sql)) {
             ps.setString(1, className);
             ps.setString(2, methodName);
+            ps.setInt(3, limit);
             try (ResultSet rs = ps.executeQuery()) {
                 while (rs.next()) {
                     results.add(mapRecord(rs));
@@ -125,15 +131,21 @@ public class SQLiteCallIndex implements CallIndex {
 
     @Override
     public List<CallRecord> queryByCallee(String className, String methodName) {
+        return queryByCallee(className, methodName, Integer.MAX_VALUE);
+    }
+
+    @Override
+    public List<CallRecord> queryByCallee(String className, String methodName, int limit) {
         String sql = "SELECT caller_class, caller_method, callee_class, callee_method, " +
                     "call_type, file_path, line_number, confidence FROM call_records " +
-                    "WHERE callee_class = ? AND callee_method = ? ORDER BY line_number";
+                    "WHERE callee_class = ? AND callee_method = ? ORDER BY line_number LIMIT ?";
         List<CallRecord> results = new ArrayList<CallRecord>();
         synchronized (lock) {
         checkClosed();
         try (PreparedStatement ps = conn.prepareStatement(sql)) {
             ps.setString(1, className);
             ps.setString(2, methodName);
+            ps.setInt(3, limit);
             try (ResultSet rs = ps.executeQuery()) {
                 while (rs.next()) {
                     results.add(mapRecord(rs));
