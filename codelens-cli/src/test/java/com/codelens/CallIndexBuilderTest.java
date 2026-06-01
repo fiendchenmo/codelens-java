@@ -285,6 +285,49 @@ public class CallIndexBuilderTest {
         assertEquals(0, count);
     }
 
+    // ==================== 多模块路径验证 ====================
+
+    @Test
+    void testMultiModulePathClassName() throws Exception {
+        tempDir = createTempProject();
+        // Simulate multi-module structure: codelens-cli/src/main/java/...
+        Path srcDir = tempDir.resolve("codelens-cli/src/main/java/com/example");
+        Files.createDirectories(srcDir);
+
+        writeFile(srcDir.resolve("Service.java"),
+                "package com.example;\n" +
+                "public class Service {\n" +
+                "    public void process() {}\n" +
+                "}\n");
+
+        writeFile(srcDir.resolve("Controller.java"),
+                "package com.example;\n" +
+                "import com.example.Service;\n" +
+                "public class Controller {\n" +
+                "    private Service service;\n" +
+                "    void handle() {\n" +
+                "        service.process();\n" +
+                "    }\n" +
+                "}\n");
+
+        int count = CallIndexBuilder.build(tempDir);
+        assertEquals(1, count, "Should find 1 call");
+
+        // Verify the caller has correct className
+        com.codelens.common.callindex.SQLiteCallIndex idx = new com.codelens.common.callindex.SQLiteCallIndex(
+                tempDir.resolve(".codelens/callindex.db").toString());
+        try {
+            java.util.List<com.codelens.common.callindex.CallRecord> records =
+                    idx.queryByCaller("com.example.Controller", "handle");
+            assertEquals(1, records.size());
+            // calleeClass should be correctly resolved to com.example.Service
+            assertEquals("com.example.Service", records.get(0).getCalleeClass(),
+                    "Multi-module path should resolve to correct calleeClass");
+        } finally {
+            idx.close();
+        }
+    }
+
     // ==================== 辅助方法 ====================
 
     /**

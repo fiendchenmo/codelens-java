@@ -409,32 +409,29 @@ public class CallIndexBuilder {
 
     /**
      * 从文件路径推导类名（全限定名）。
-     * src/main/java/com/example/Service.java → com.example.Service
+     * 支持多模块路径如 codelens-cli/src/main/java/com/example/Service。
      */
     private static String deriveClassName(String filePath) {
         if (filePath == null || filePath.isEmpty()) return "";
         String normalized = filePath.replace('\\', '/');
+        String withoutExt = normalized.replaceAll("\\.java$", "");
 
-        // 去掉 src/main/java/ 前缀
-        String prefix = MAIN_SRC;
-        if (normalized.startsWith(prefix)) {
-            normalized = normalized.substring(prefix.length());
-        } else {
-            // 尝试去掉 src/main/java 或 src/
-            if (normalized.startsWith("src/main/java/")) {
-                normalized = normalized.substring("src/main/java/".length());
-            } else if (normalized.startsWith("src/")) {
-                normalized = normalized.substring("src/".length());
+        // 搜索 src/main/java/ 或 src/test/java/ 标记（支持多模块）
+        String[] markers = {"src/main/java/", "src/test/java/"};
+        for (String marker : markers) {
+            int idx = withoutExt.indexOf(marker);
+            if (idx >= 0) {
+                withoutExt = withoutExt.substring(idx + marker.length());
+                return withoutExt.replace('/', '.');
             }
         }
 
-        // 去掉 .java 后缀
-        if (normalized.endsWith(".java")) {
-            normalized = normalized.substring(0, normalized.length() - ".java".length());
+        // Fallback: 尝试去掉 src/ 前缀
+        if (withoutExt.startsWith("src/")) {
+            withoutExt = withoutExt.substring("src/".length());
         }
 
-        // / 替换为 .
-        return normalized.replace('/', '.');
+        return withoutExt.replace('/', '.');
     }
 
     // ==================== 内部数据结构 ====================
