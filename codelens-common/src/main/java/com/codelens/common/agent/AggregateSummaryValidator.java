@@ -21,12 +21,21 @@ public class AggregateSummaryValidator {
     static final int MAX_SUMMARY_CHARS = 200;
     static final int MAX_CORE_ENTRIES = 5;
     static final int MAX_CORE_RESPONSIBILITIES = 5;
-    static final int MAX_TOKEN_ESTIMATE = 800;
+    static final int MAX_TOKEN_ESTIMATE = 1100;
 
     private final AggregateSummaryInput input;
+    // 测试用：最近一次校验的输出对象
+    AggregateSummaryOutput lastOutput;
 
     public AggregateSummaryValidator(AggregateSummaryInput input) {
         this.input = input;
+    }
+
+    /**
+     * 测试用：获取最近一次校验的输出对象。
+     */
+    AggregateSummaryOutput getLastOutput() {
+        return lastOutput;
     }
 
     /**
@@ -63,6 +72,9 @@ public class AggregateSummaryValidator {
             return ValidationResult.fail("output", "输出对象为空");
         }
 
+        // 保存校验后的输出供测试验证
+        this.lastOutput = output;
+
         // ★ 在所有校验之前，先用实际值覆盖 LLM 不可信的统计字段
         overrideStatisticsFromInput(output);
 
@@ -93,7 +105,7 @@ public class AggregateSummaryValidator {
         // V8: 风险计数与概述一致（WARN 以计数为准）
         alignRiskCounts(output);
 
-        // V9: Token 估算 ≤800（WARN 截断）
+        // V9: Token 估算 ≤1100（WARN 截断）
         truncateByTokenEstimate(output);
 
         return ValidationResult.ok();
@@ -106,6 +118,7 @@ public class AggregateSummaryValidator {
     /**
      * 用 input 的实际统计值覆盖 LLM 输出的计数字段。
      * LLM 数数不可信，totalFiles/totalMethods 等必须以实际值为准。
+     * highRiskCount/mediumRiskCount 从 LLM 的 riskCategories 反算。
      */
     private void overrideStatisticsFromInput(AggregateSummaryOutput output) {
         if (input == null) return;
@@ -115,8 +128,51 @@ public class AggregateSummaryValidator {
             output.setTotalFiles(input.getFileSummaries().size());
         }
 
-        // architectureLayer 用 input 的 layerDistribution 重新检测
-        if (input.getLayerDistribution() != null && !input.getLayerDistribution().isEmpty()) {
+        // architectureLayer: 优先用LLM返回的fileLayers算众数，fallback到硬编码规则
+        if (output.getFileLayers() != null && !output.getFileLayers().isEmpty()) {
+            java.util.Map<ArchitectureLayer, Integer> llmLayerDist = new java.util.HashMap<>();
+            for (AggregateSummaryOutput.FileLayerEntry entry : output.getFileLayers()) {
+                try {
+                    ArchitectureLayer layer = ArchitectureLayer.valueOf(entry.getLayer());
+                    llmLayerDist.merge(layer, 1, Integer::sum);
+                } catch (IllegalArgumentException | NullPointerException ignored) {
+                    // LLM输出无效layer值，跳过
+                }
+            }
+            if (!llmLayerDist.isEmpty()) {
+                ArchitectureLayer detected = ArchitectureLayerDetector.detectPackageLayer(llmLayerDist);
+                output.setArchitectureLayer(detected != null ? detected : ArchitectureLayer.UNKNOWN);
+                String composition = ArchitectureLayerDetector.getLayerComposition(llmLayerDist);
+                output.setLayerComposition(composition);
+            } else {
+                fallbackToDetector(output);
+            }
+        } else {
+            fallbackToDetector(output);
+        }
+
+        // 从 riskCategories 反算 highRiskCount 和 mediumRiskCount
+        // 为 null 或空时归零（LLM 不再直接输出计数）
+        int high = 0, medium = 0;
+        if (output.getRiskCategories() != null) {
+            for (AggregateSummaryOutput.RiskCategoryEntry rc : output.getRiskCategories()) {
+                if ("HIGH".equals(rc.getSeverity())) {
+                    high++;
+                } else if ("MEDIUM".equals(rc.getSeverity())) {
+                    medium++;
+                }
+                // LOW 不计数
+            }
+        }
+        output.setHighRiskCount(high);
+        output.setMediumRiskCount(medium);
+    }
+
+    /**
+     * Fallback: 用 ArchitectureLayerDetector 硬编码规则推断 architectureLayer。
+     */
+    private void fallbackToDetector(AggregateSummaryOutput output) {
+        if (input != null && input.getLayerDistribution() != null && !input.getLayerDistribution().isEmpty()) {
             ArchitectureLayer detected = ArchitectureLayerDetector.detectPackageLayer(
                     input.getLayerDistribution());
             output.setArchitectureLayer(detected != null ? detected : ArchitectureLayer.UNKNOWN);
@@ -202,6 +258,7 @@ public class AggregateSummaryValidator {
 
     /**
      * V6: riskOverview 非空（有风险时）。补模板。
+     * 优先从 riskCategories 生成结构化概述。
      */
     void validateRiskOverview(AggregateSummaryOutput output) {
         int highRisk = output.getHighRiskCount();
@@ -209,8 +266,19 @@ public class AggregateSummaryValidator {
         String overview = output.getRiskOverview();
         if ((highRisk > 0 || mediumRisk > 0)
                 && (overview == null || overview.trim().isEmpty())) {
-            output.setRiskOverview("存在 " + highRisk + " 个高风险、"
-                    + mediumRisk + " 个中风险问题，请关注。");
+            // 优先从 riskCategories 生成概述
+            List<AggregateSummaryOutput.RiskCategoryEntry> cats = output.getRiskCategories();
+            if (cats != null && !cats.isEmpty()) {
+                StringBuilder sb = new StringBuilder();
+                for (AggregateSummaryOutput.RiskCategoryEntry rc : cats) {
+                    if (sb.length() > 0) sb.append("；");
+                    sb.append(rc.getCategory()).append("(").append(rc.getSeverity()).append(")");
+                }
+                output.setRiskOverview(sb.toString());
+            } else {
+                output.setRiskOverview("存在 " + highRisk + " 个高风险、"
+                        + mediumRisk + " 个中风险问题，请关注。");
+            }
         }
     }
 
@@ -242,7 +310,7 @@ public class AggregateSummaryValidator {
     }
 
     /**
-     * V9: Token 估算 ≤800。超长时截断。
+     * V9: Token 估算 ≤1100。超长时截断。
      */
     void truncateByTokenEstimate(AggregateSummaryOutput output) {
         // 估算当前输出 Token 数（粗略按 1 token ≈ 1.5 字符估算）

@@ -22,8 +22,12 @@ public class AggregateSummaryOutput {
     private String riskOverview;
     private int totalFiles;
     private int totalMethods;
+    /** 高风险数（由Validator从riskCategories反算，非LLM直接输出） */
     private int highRiskCount;
+    /** 中风险数（由Validator从riskCategories反算，非LLM直接输出） */
     private int mediumRiskCount;
+    private List<RiskCategoryEntry> riskCategories;
+    private List<FileLayerEntry> fileLayers;
 
     public AggregateSummaryOutput() {
     }
@@ -122,6 +126,73 @@ public class AggregateSummaryOutput {
 
     public void setMediumRiskCount(int mediumRiskCount) {
         this.mediumRiskCount = mediumRiskCount;
+    }
+
+    public List<RiskCategoryEntry> getRiskCategories() {
+        return riskCategories;
+    }
+
+    public void setRiskCategories(List<RiskCategoryEntry> riskCategories) {
+        this.riskCategories = riskCategories;
+    }
+
+    public List<FileLayerEntry> getFileLayers() {
+        return fileLayers;
+    }
+
+    public void setFileLayers(List<FileLayerEntry> fileLayers) {
+        this.fileLayers = fileLayers;
+    }
+
+    /**
+     * 文件架构层条目，由 LLM 根据语义分析判断各文件所属架构层。
+     */
+    public static class FileLayerEntry {
+        private String fileName;
+        private String layer;  // ArchitectureLayer 枚举值字符串
+
+        public FileLayerEntry() {
+        }
+
+        public FileLayerEntry(String fileName, String layer) {
+            this.fileName = fileName;
+            this.layer = layer;
+        }
+
+        public String getFileName() { return fileName; }
+        public void setFileName(String fileName) { this.fileName = fileName; }
+        public String getLayer() { return layer; }
+        public void setLayer(String layer) { this.layer = layer; }
+    }
+
+    /**
+     * 风险分类条目，由 LLM 根据语义分析归纳共性风险。
+     */
+    public static class RiskCategoryEntry {
+        private String category;
+        private String severity;    // HIGH / MEDIUM / LOW
+        private String description;
+        private List<String> affectedFiles;
+
+        public RiskCategoryEntry() {
+        }
+
+        public RiskCategoryEntry(String category, String severity,
+                                 String description, List<String> affectedFiles) {
+            this.category = category;
+            this.severity = severity;
+            this.description = description;
+            this.affectedFiles = affectedFiles;
+        }
+
+        public String getCategory() { return category; }
+        public void setCategory(String category) { this.category = category; }
+        public String getSeverity() { return severity; }
+        public void setSeverity(String severity) { this.severity = severity; }
+        public String getDescription() { return description; }
+        public void setDescription(String description) { this.description = description; }
+        public List<String> getAffectedFiles() { return affectedFiles; }
+        public void setAffectedFiles(List<String> affectedFiles) { this.affectedFiles = affectedFiles; }
     }
 
     /**

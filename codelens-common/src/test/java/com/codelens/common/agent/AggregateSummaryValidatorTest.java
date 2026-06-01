@@ -153,13 +153,32 @@ class AggregateSummaryValidatorTest {
     @Test
     void v6_riskOverview_emptyWithRisks() {
         AggregateSummaryInput input = inputWithPackage("com.example.test");
-        // highRiskCount > 0, riskOverview 为空
-        String json = jsonWithOverrides("highRiskCount", "2")
-                .replace("\"riskOverview\":\"\"", "\"riskOverview\":\"\"");
-        // 注：原始基础 json 里 riskOverview 是空字符串
+        // riskCategories 含 HIGH + MEDIUM, riskOverview 为空 → 自动生成概述
+        String json = "{"
+                + "\"packageName\":\"com.example.test\","
+                + "\"riskCategories\":["
+                + "  {\"category\":\"资源未关闭\",\"severity\":\"HIGH\",\"description\":\"泄漏\",\"affectedFiles\":[\"A.java\"]},"
+                + "  {\"category\":\"异常吞没\",\"severity\":\"MEDIUM\",\"description\":\"空catch\",\"affectedFiles\":[\"B.java\"]}"
+                + "],"
+                + "\"summary\":\"test\","
+                + "\"coreEntries\":[\"E1\"],"
+                + "\"coreResponsibilities\":[\"R1\"],"
+                + "\"crossPackageDeps\":[],"
+                + "\"riskOverview\":\"\","
+                + "\"totalFiles\":0,"
+                + "\"totalMethods\":5,"
+                + "\"highRiskCount\":0,"
+                + "\"mediumRiskCount\":0"
+                + "}";
         AggregateSummaryValidator validator = new AggregateSummaryValidator(input);
         ValidationResult result = validator.validate(json);
         assertTrue(result.isValid());
+        // riskOverview 应自动从 riskCategories 生成
+        String ro = validator.getLastOutput().getRiskOverview();
+        assertNotNull(ro);
+        assertFalse(ro.isEmpty());
+        assertTrue(ro.contains("资源未关闭") || ro.contains("异常吞没"),
+                "riskOverview should contain category names: " + ro);
     }
 
     // ========================================================================
@@ -225,6 +244,121 @@ class AggregateSummaryValidatorTest {
         String json = jsonWithOverrides("summary", "\"简短摘要\"");
         ValidationResult result = validator.validate(json);
         assertTrue(result.isValid());
+    }
+
+    // ========================================================================
+    // riskCategories → counts
+    // ========================================================================
+
+    @Test
+    void riskCategories_countsBackfilled() {
+        AggregateSummaryInput input = inputWithPackage("com.example.test");
+        // riskCategories: 2 HIGH + 1 MEDIUM → highRiskCount=2, mediumRiskCount=1
+        String json = "{"
+                + "\"packageName\":\"com.example.test\","
+                + "\"riskCategories\":["
+                + "  {\"category\":\"资源未关闭\",\"severity\":\"HIGH\",\"description\":\"泄漏\",\"affectedFiles\":[\"A.java\"]},"
+                + "  {\"category\":\"硬编码配置\",\"severity\":\"HIGH\",\"description\":\"密码\",\"affectedFiles\":[\"B.java\"]},"
+                + "  {\"category\":\"异常吞没\",\"severity\":\"MEDIUM\",\"description\":\"空catch\",\"affectedFiles\":[\"C.java\"]}"
+                + "],"
+                + "\"summary\":\"test\","
+                + "\"coreEntries\":[\"E1\"],"
+                + "\"coreResponsibilities\":[\"R1\"],"
+                + "\"crossPackageDeps\":[],"
+                + "\"riskOverview\":\"有风险\","
+                + "\"totalFiles\":0,"
+                + "\"totalMethods\":5,"
+                + "\"highRiskCount\":0,"
+                + "\"mediumRiskCount\":0"
+                + "}";
+        AggregateSummaryValidator validator = new AggregateSummaryValidator(input);
+        ValidationResult result = validator.validate(json);
+        assertTrue(result.isValid());
+        assertEquals(2, validator.getLastOutput().getHighRiskCount(),
+                "2 HIGH categories → highRiskCount=2");
+        assertEquals(1, validator.getLastOutput().getMediumRiskCount(),
+                "1 MEDIUM category → mediumRiskCount=1");
+    }
+
+    @Test
+    void riskCategories_emptyCountsZero() {
+        AggregateSummaryInput input = inputWithPackage("com.example.test");
+        // riskCategories 为空数组 → 计数归零（即使 JSON 中 highRiskCount 写的是 5）
+        String json = "{"
+                + "\"packageName\":\"com.example.test\","
+                + "\"riskCategories\":[],"
+                + "\"summary\":\"test\","
+                + "\"coreEntries\":[\"E1\"],"
+                + "\"coreResponsibilities\":[\"R1\"],"
+                + "\"crossPackageDeps\":[],"
+                + "\"riskOverview\":\"\","
+                + "\"totalFiles\":0,"
+                + "\"totalMethods\":5,"
+                + "\"highRiskCount\":5,"
+                + "\"mediumRiskCount\":3"
+                + "}";
+        AggregateSummaryValidator validator = new AggregateSummaryValidator(input);
+        ValidationResult result = validator.validate(json);
+        assertTrue(result.isValid());
+        assertEquals(0, validator.getLastOutput().getHighRiskCount(),
+                "Empty riskCategories → highRiskCount=0");
+        assertEquals(0, validator.getLastOutput().getMediumRiskCount(),
+                "Empty riskCategories → mediumRiskCount=0");
+    }
+
+    @Test
+    void riskCategories_nullCountsZero() {
+        AggregateSummaryInput input = inputWithPackage("com.example.test");
+        // riskCategories 为 null（JSON中不包含该字段）→ 计数归零
+        String json = "{"
+                + "\"packageName\":\"com.example.test\","
+                + "\"summary\":\"test\","
+                + "\"coreEntries\":[\"E1\"],"
+                + "\"coreResponsibilities\":[\"R1\"],"
+                + "\"crossPackageDeps\":[],"
+                + "\"riskOverview\":\"\","
+                + "\"totalFiles\":0,"
+                + "\"totalMethods\":5,"
+                + "\"highRiskCount\":3,"
+                + "\"mediumRiskCount\":2"
+                + "}";
+        AggregateSummaryValidator validator = new AggregateSummaryValidator(input);
+        ValidationResult result = validator.validate(json);
+        assertTrue(result.isValid());
+        assertEquals(0, validator.getLastOutput().getHighRiskCount(),
+                "Null riskCategories → highRiskCount=0");
+        assertEquals(0, validator.getLastOutput().getMediumRiskCount(),
+                "Null riskCategories → mediumRiskCount=0");
+    }
+
+    @Test
+    void riskCategories_invalidSeveritySkipped() {
+        AggregateSummaryInput input = inputWithPackage("com.example.test");
+        // INVALID_SEVERITY 应跳过，不影响计数
+        String json = "{"
+                + "\"packageName\":\"com.example.test\","
+                + "\"riskCategories\":["
+                + "  {\"category\":\"有效HIGH\",\"severity\":\"HIGH\",\"description\":\"a\",\"affectedFiles\":[\"A.java\"]},"
+                + "  {\"category\":\"无效SEV\",\"severity\":\"INVALID_SEVERITY\",\"description\":\"b\",\"affectedFiles\":[\"B.java\"]},"
+                + "  {\"category\":\"有效MEDIUM\",\"severity\":\"MEDIUM\",\"description\":\"c\",\"affectedFiles\":[\"C.java\"]}"
+                + "],"
+                + "\"summary\":\"test\","
+                + "\"coreEntries\":[\"E1\"],"
+                + "\"coreResponsibilities\":[\"R1\"],"
+                + "\"crossPackageDeps\":[],"
+                + "\"riskOverview\":\"\","
+                + "\"totalFiles\":0,"
+                + "\"totalMethods\":5,"
+                + "\"highRiskCount\":0,"
+                + "\"mediumRiskCount\":0"
+                + "}";
+        AggregateSummaryValidator validator = new AggregateSummaryValidator(input);
+        ValidationResult result = validator.validate(json);
+        assertTrue(result.isValid());
+        assertEquals(1, validator.getLastOutput().getHighRiskCount(),
+                "Only 1 valid HIGH → highRiskCount=1");
+        assertEquals(1, validator.getLastOutput().getMediumRiskCount(),
+                "Only 1 valid MEDIUM → mediumRiskCount=1");
     }
 
     // ========================================================================
@@ -295,4 +429,83 @@ class AggregateSummaryValidatorTest {
     private static String escapeJson(String s) {
         return s.replace("\\", "\\\\").replace("\"", "\\\"");
     }
+    // ========================================================================
+    // fileLayers → architectureLayer
+    // ========================================================================
+
+    @Test
+    void fileLayers_architectureLayerFromLlm() {
+        AggregateSummaryInput input = inputWithPackage("com.example.test");
+        String json = "{"
+                + "\"packageName\":\"com.example.test\","
+                + "\"fileLayers\":["
+                + "  {\"fileName\":\"A.java\",\"layer\":\"SERVICE\"},"
+                + "  {\"fileName\":\"B.java\",\"layer\":\"SERVICE\"},"
+                + "  {\"fileName\":\"C.java\",\"layer\":\"CONTROLLER\"}"
+                + "],"
+                + "\"riskCategories\":[],"
+                + "\"summary\":\"test\","
+                + "\"coreEntries\":[\"E1\"],"
+                + "\"coreResponsibilities\":[\"R1\"],"
+                + "\"crossPackageDeps\":[],"
+                + "\"riskOverview\":\"\","
+                + "\"totalFiles\":0,"
+                + "\"totalMethods\":5"
+                + "}";
+        AggregateSummaryValidator validator = new AggregateSummaryValidator(input);
+        ValidationResult result = validator.validate(json);
+        assertTrue(result.isValid());
+        assertEquals(com.codelens.common.models.ArchitectureLayer.SERVICE,
+                validator.getLastOutput().getArchitectureLayer(),
+                "2/3 SERVICE -> architectureLayer=SERVICE");
+    }
+
+    @Test
+    void fileLayers_invalidLayerSkipped() {
+        AggregateSummaryInput input = inputWithPackage("com.example.test");
+        String json = "{"
+                + "\"packageName\":\"com.example.test\","
+                + "\"fileLayers\":["
+                + "  {\"fileName\":\"A.java\",\"layer\":\"SERVICE\"},"
+                + "  {\"fileName\":\"B.java\",\"layer\":\"INVALID_LAYER\"}"
+                + "],"
+                + "\"riskCategories\":[],"
+                + "\"summary\":\"test\","
+                + "\"coreEntries\":[\"E1\"],"
+                + "\"coreResponsibilities\":[\"R1\"],"
+                + "\"crossPackageDeps\":[],"
+                + "\"riskOverview\":\"\","
+                + "\"totalFiles\":0,"
+                + "\"totalMethods\":5"
+                + "}";
+        AggregateSummaryValidator validator = new AggregateSummaryValidator(input);
+        ValidationResult result = validator.validate(json);
+        assertTrue(result.isValid());
+        assertEquals(com.codelens.common.models.ArchitectureLayer.SERVICE,
+                validator.getLastOutput().getArchitectureLayer(),
+                "1 valid SERVICE -> architectureLayer=SERVICE");
+    }
+
+    @Test
+    void fileLayers_empty_fallbackToDetector() {
+        AggregateSummaryInput input = inputWithPackage("com.example.test");
+        String json = "{"
+                + "\"packageName\":\"com.example.test\","
+                + "\"fileLayers\":[],"
+                + "\"riskCategories\":[],"
+                + "\"summary\":\"test\","
+                + "\"coreEntries\":[\"E1\"],"
+                + "\"coreResponsibilities\":[\"R1\"],"
+                + "\"crossPackageDeps\":[],"
+                + "\"riskOverview\":\"\","
+                + "\"totalFiles\":0,"
+                + "\"totalMethods\":5"
+                + "}";
+        AggregateSummaryValidator validator = new AggregateSummaryValidator(input);
+        ValidationResult result = validator.validate(json);
+        assertTrue(result.isValid());
+        assertEquals(com.codelens.common.models.ArchitectureLayer.UNKNOWN,
+                validator.getLastOutput().getArchitectureLayer());
+    }
+
 }
