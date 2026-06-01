@@ -38,11 +38,10 @@ public class DiffParser {
     private static final Pattern COMMENT_LINE = Pattern.compile("^[+-]\\s*(//|/\\*|\\*|\\*/)");
     private static final Pattern BLANK_LINE = Pattern.compile("^[+-]\\s*$");
 
-    // Known source root prefixes for className derivation
-    private static final String[] SOURCE_ROOTS = {
+    // Source root markers for className derivation (search anywhere in path)
+    private static final String[] SOURCE_ROOT_MARKERS = {
             "src/main/java/",
-            "src/test/java/",
-            "src/"
+            "src/test/java/"
     };
 
     private DiffParser() {
@@ -351,22 +350,28 @@ public class DiffParser {
 
     /**
      * 从文件路径推导类名。
-     * 去掉 source root 前缀和 .java 后缀，/ 替换为 .
+     * 找到 src/main/java/ 或 src/test/java/ 标记并取其之后的部分，
+     * 支持多模块路径如 fmp-bill/src/main/java/com/example/Service。
      */
     static String deriveClassName(String filePath) {
         if (filePath == null || filePath.isEmpty()) return "";
 
-        String withoutExt = filePath.replaceAll("\\.java$", "");
+        String normalized = filePath.replace('\\', '/');
+        String withoutExt = normalized.replaceAll("\\.java$", "");
 
-        // Try to strip known source roots
-        for (String root : SOURCE_ROOTS) {
-            if (withoutExt.startsWith(root)) {
-                withoutExt = withoutExt.substring(root.length());
-                break;
+        // Search for source root marker anywhere in the path (supports multi-module)
+        for (String marker : SOURCE_ROOT_MARKERS) {
+            int idx = withoutExt.indexOf(marker);
+            if (idx >= 0) {
+                withoutExt = withoutExt.substring(idx + marker.length());
+                return withoutExt.replace("/", ".");
             }
         }
-        // If still has "main/java/" or "test/java/" without src prefix
-        withoutExt = withoutExt.replaceAll("^(?:main|test)/java/", "");
+
+        // Fallback: try to strip leading src/ for flat projects
+        if (withoutExt.startsWith("src/")) {
+            withoutExt = withoutExt.substring("src/".length());
+        }
 
         return withoutExt.replace("/", ".");
     }

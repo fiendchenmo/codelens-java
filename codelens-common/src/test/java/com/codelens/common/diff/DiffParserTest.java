@@ -292,6 +292,13 @@ public class DiffParserTest {
                 DiffParser.deriveClassName("src/test/java/com/example/Test.java"));
         assertEquals("", DiffParser.deriveClassName(""));
         assertEquals("", DiffParser.deriveClassName(null));
+        // Multi-module paths
+        assertEquals("com.example.Service",
+                DiffParser.deriveClassName("fmp-bill/src/main/java/com/example/Service.java"));
+        assertEquals("com.example.Controller",
+                DiffParser.deriveClassName("fmp-bill/src/main/java/com/example/Controller.java"));
+        assertEquals("com.example.Test",
+                DiffParser.deriveClassName("fmp-bill/src/test/java/com/example/Test.java"));
     }
 
     @Test
