@@ -6,6 +6,8 @@ import com.codelens.common.models.ArchitectureLayer;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Test;
 
+import java.util.Arrays;
+import java.util.Collections;
 import java.util.List;
 
 import static org.junit.jupiter.api.Assertions.*;
@@ -45,7 +47,7 @@ public class ImpactAnalyzerTest {
                         ChangeType.MODIFIED, 10, 10));
 
         ImpactAnalyzer analyzer = new ImpactAnalyzer(index, 3);
-        ImpactReport report = analyzer.analyze(List.of(changedFile), "abc123");
+        ImpactReport report = analyzer.analyze(Collections.singletonList(changedFile), "abc123");
 
         // Verify
         assertEquals(1, report.impacts.size());
@@ -80,7 +82,7 @@ public class ImpactAnalyzerTest {
                         ChangeType.MODIFIED, 5, 5));
 
         ImpactAnalyzer analyzer = new ImpactAnalyzer(index, 3);
-        ImpactReport report = analyzer.analyze(List.of(changedFile), "abc123");
+        ImpactReport report = analyzer.analyze(Collections.singletonList(changedFile), "abc123");
 
         assertEquals(2, report.impacts.size());
 
@@ -121,7 +123,7 @@ public class ImpactAnalyzerTest {
 
         // maxHops=2
         ImpactAnalyzer analyzer = new ImpactAnalyzer(index, 2);
-        ImpactReport report = analyzer.analyze(List.of(changedFile), "abc123");
+        ImpactReport report = analyzer.analyze(Collections.singletonList(changedFile), "abc123");
 
         // Only hop≤2: B (hop=1), C (hop=2)
         assertEquals(2, report.impacts.size());
@@ -150,7 +152,7 @@ public class ImpactAnalyzerTest {
                         ChangeType.MODIFIED, 1, 1));
 
         ImpactAnalyzer analyzer = new ImpactAnalyzer(index, 3);
-        ImpactReport report = analyzer.analyze(List.of(changedFile), "abc123");
+        ImpactReport report = analyzer.analyze(Collections.singletonList(changedFile), "abc123");
 
         // 3 unique nodes: B (hop=1, DIRECT, HIGH), C (hop=2, INDIRECT, MEDIUM), D (hop=1, DIRECT, HIGH)
         assertEquals(3, report.impacts.size());
@@ -188,7 +190,7 @@ public class ImpactAnalyzerTest {
                         ChangeType.MODIFIED, 10, 10));
 
         ImpactAnalyzer analyzer = new ImpactAnalyzer(index, 3);
-        ImpactReport report = analyzer.analyze(List.of(changedFile), "abc123");
+        ImpactReport report = analyzer.analyze(Collections.singletonList(changedFile), "abc123");
 
         assertEquals(1, report.impacts.size());
         ImpactNode node = report.impacts.get(0);
@@ -213,7 +215,7 @@ public class ImpactAnalyzerTest {
                         ChangeType.MODIFIED, 5, 5));
 
         ImpactAnalyzer analyzer = new ImpactAnalyzer(index, 3);
-        ImpactReport report = analyzer.analyze(List.of(changedFile), "abc123");
+        ImpactReport report = analyzer.analyze(Collections.singletonList(changedFile), "abc123");
 
         assertEquals(1, report.impacts.size());
         ImpactNode node = report.impacts.get(0);
@@ -237,7 +239,7 @@ public class ImpactAnalyzerTest {
         // ADDED files have no changed methods per DiffParser spec
 
         ImpactAnalyzer analyzer = new ImpactAnalyzer(index, 3);
-        ImpactReport report = analyzer.analyze(List.of(changedFile), "abc123");
+        ImpactReport report = analyzer.analyze(Collections.singletonList(changedFile), "abc123");
 
         // No diffusion from ADDED files
         assertEquals(0, report.impacts.size());
@@ -260,7 +262,7 @@ public class ImpactAnalyzerTest {
                 ChangeType.DELETED, deletedMethod);
 
         ImpactAnalyzer analyzer = new ImpactAnalyzer(index, 3);
-        ImpactReport report = analyzer.analyze(List.of(changedFile), "abc123");
+        ImpactReport report = analyzer.analyze(Collections.singletonList(changedFile), "abc123");
 
         // OrderController.submit should be affected
         assertEquals(1, report.impacts.size());
@@ -287,7 +289,7 @@ public class ImpactAnalyzerTest {
 
         // CallIndex = null
         ImpactAnalyzer analyzer = new ImpactAnalyzer(null, 3);
-        ImpactReport report = analyzer.analyze(List.of(changedFile), "abc123");
+        ImpactReport report = analyzer.analyze(Collections.singletonList(changedFile), "abc123");
 
         // No impacts (degraded to file-level only)
         assertEquals(0, report.impacts.size());
@@ -322,7 +324,7 @@ public class ImpactAnalyzerTest {
                         ChangeType.MODIFIED, 1, 1));
 
         ImpactAnalyzer analyzer = new ImpactAnalyzer(index, 3);
-        ImpactReport report = analyzer.analyze(List.of(file1, file2), "abc123");
+        ImpactReport report = analyzer.analyze(Arrays.asList(file1, file2), "abc123");
 
         ImpactSummary s = report.summary;
         assertEquals(2, s.totalChangedFiles);
@@ -371,7 +373,7 @@ public class ImpactAnalyzerTest {
                         ChangeType.MODIFIED, 10, 10));
 
         ImpactAnalyzer analyzer = new ImpactAnalyzer(index, 3);
-        ImpactReport report = analyzer.analyze(List.of(changedFile), "abc123");
+        ImpactReport report = analyzer.analyze(Collections.singletonList(changedFile), "abc123");
 
         assertEquals(1, report.impacts.size());
         // "OrderController" → detectByClassName → CONTROLLER
