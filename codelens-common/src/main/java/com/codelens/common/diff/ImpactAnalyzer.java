@@ -147,10 +147,8 @@ public class ImpactAnalyzer {
                 );
 
                 // 去重：同一方法多条路径时保留最短 hop
-                ImpactNode existing = nodeMap.get(callerKey);
-                if (existing == null || newHop < existing.hopDistance) {
-                    nodeMap.put(callerKey, node);
-                }
+                // visited 已保证不重复处理，直接放入
+                nodeMap.put(callerKey, node);
 
                 // 入队继续扩散
                 BfsNode next = new BfsNode();
@@ -282,9 +280,9 @@ public class ImpactAnalyzer {
         int count = 0;
         for (ImpactNode node : sorted) {
             if (count >= 5) break;
-            // 只有高风险和中风险才放入列表
+            // 只取 HIGH(3) 和 MEDIUM(2)，跳过 LOW(1) 以下
             int score = riskScore(node);
-            if (score <= 0) break;
+            if (score <= 1) break;
             String prefix = score >= 3 ? "🔴 " : "🟡 ";
             String pathStr = prefix + String.join(" → ", node.impactPath);
             paths.add(pathStr);
