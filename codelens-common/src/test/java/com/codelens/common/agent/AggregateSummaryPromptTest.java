@@ -40,6 +40,7 @@ class AggregateSummaryPromptTest {
         assertTrue(systemPrompt.contains("totalFiles"));
         assertTrue(systemPrompt.contains("totalMethods"));
         assertTrue(systemPrompt.contains("riskCategories"));
+        assertTrue(systemPrompt.contains("fileLayers"));
         assertTrue(systemPrompt.contains("200 字"));
         assertTrue(systemPrompt.contains("1100"));
     }

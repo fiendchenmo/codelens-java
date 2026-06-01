@@ -128,16 +128,27 @@ public class AggregateSummaryValidator {
             output.setTotalFiles(input.getFileSummaries().size());
         }
 
-        // architectureLayer 用 input 的 layerDistribution 重新检测
-        if (input.getLayerDistribution() != null && !input.getLayerDistribution().isEmpty()) {
-            ArchitectureLayer detected = ArchitectureLayerDetector.detectPackageLayer(
-                    input.getLayerDistribution());
-            output.setArchitectureLayer(detected != null ? detected : ArchitectureLayer.UNKNOWN);
-            String composition = ArchitectureLayerDetector.getLayerComposition(
-                    input.getLayerDistribution());
-            output.setLayerComposition(composition);
-        } else if (output.getArchitectureLayer() == null) {
-            output.setArchitectureLayer(ArchitectureLayer.UNKNOWN);
+        // architectureLayer: 优先用LLM返回的fileLayers算众数，fallback到硬编码规则
+        if (output.getFileLayers() != null && !output.getFileLayers().isEmpty()) {
+            java.util.Map<ArchitectureLayer, Integer> llmLayerDist = new java.util.HashMap<>();
+            for (AggregateSummaryOutput.FileLayerEntry entry : output.getFileLayers()) {
+                try {
+                    ArchitectureLayer layer = ArchitectureLayer.valueOf(entry.getLayer());
+                    llmLayerDist.merge(layer, 1, Integer::sum);
+                } catch (IllegalArgumentException | NullPointerException ignored) {
+                    // LLM输出无效layer值，跳过
+                }
+            }
+            if (!llmLayerDist.isEmpty()) {
+                ArchitectureLayer detected = ArchitectureLayerDetector.detectPackageLayer(llmLayerDist);
+                output.setArchitectureLayer(detected != null ? detected : ArchitectureLayer.UNKNOWN);
+                String composition = ArchitectureLayerDetector.getLayerComposition(llmLayerDist);
+                output.setLayerComposition(composition);
+            } else {
+                fallbackToDetector(output);
+            }
+        } else {
+            fallbackToDetector(output);
         }
 
         // 从 riskCategories 反算 highRiskCount 和 mediumRiskCount
@@ -155,6 +166,22 @@ public class AggregateSummaryValidator {
         }
         output.setHighRiskCount(high);
         output.setMediumRiskCount(medium);
+    }
+
+    /**
+     * Fallback: 用 ArchitectureLayerDetector 硬编码规则推断 architectureLayer。
+     */
+    private void fallbackToDetector(AggregateSummaryOutput output) {
+        if (input != null && input.getLayerDistribution() != null && !input.getLayerDistribution().isEmpty()) {
+            ArchitectureLayer detected = ArchitectureLayerDetector.detectPackageLayer(
+                    input.getLayerDistribution());
+            output.setArchitectureLayer(detected != null ? detected : ArchitectureLayer.UNKNOWN);
+            String composition = ArchitectureLayerDetector.getLayerComposition(
+                    input.getLayerDistribution());
+            output.setLayerComposition(composition);
+        } else if (output.getArchitectureLayer() == null) {
+            output.setArchitectureLayer(ArchitectureLayer.UNKNOWN);
+        }
     }
 
     // ========================================================================

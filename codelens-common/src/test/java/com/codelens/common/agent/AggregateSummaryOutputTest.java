@@ -171,4 +171,23 @@ class AggregateSummaryOutputTest {
         assertNotNull(output.getRiskCategories().get(1).getAffectedFiles());
         assertEquals(1, output.getRiskCategories().get(1).getAffectedFiles().size());
     }
+    @Test
+    void fileLayerEntry_serialization() {
+        AggregateSummaryOutput.FileLayerEntry entry = new AggregateSummaryOutput.FileLayerEntry(
+                "Service.java", "SERVICE");
+
+        String json = GSON.toJson(entry);
+        assertTrue(json.contains("Service.java"));
+        assertTrue(json.contains("SERVICE"));
+    }
+
+    @Test
+    void fileLayerEntry_deserialization() {
+        String json = "{\"fileName\":\"Controller.java\",\"layer\":\"CONTROLLER\"}";
+        AggregateSummaryOutput.FileLayerEntry entry =
+                GSON.fromJson(json, AggregateSummaryOutput.FileLayerEntry.class);
+        assertNotNull(entry);
+        assertEquals("Controller.java", entry.getFileName());
+        assertEquals("CONTROLLER", entry.getLayer());
+    }
 }

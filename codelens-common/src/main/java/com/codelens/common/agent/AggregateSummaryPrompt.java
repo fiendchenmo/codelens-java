@@ -40,6 +40,7 @@ public class AggregateSummaryPrompt {
             "    - description: 该类风险的共性描述 (String, ≤100字)\n" +
             "    - affectedFiles: 受影响文件列表 (Array of String)\n" +
             "    无风险时输出空数组 []\n" +
+            "12. fileLayers: 各文件架构层列表 (Array of Object)，每项包含 fileName(String) 和 layer(String，可选值: CONTROLLER/SERVICE/REPOSITORY/HANDLER/CONFIG/CLIENT/MODEL/UTIL/UNKNOWN)。基于你的语义分析判断，可以修正输入中的建议值。\n" +
             "\n" +
             "约束：\n" +
             "- 仅输出 JSON，不要包含 ```json 标记\n" +
