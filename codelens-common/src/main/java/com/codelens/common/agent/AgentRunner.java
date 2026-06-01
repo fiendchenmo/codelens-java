@@ -113,7 +113,23 @@ public class AgentRunner {
     public AggregateSummaryOutput runAggregate(List<AnalysisTask<String, String>> fileTasks,
                                                  List<AggregateSummaryInput.CrossPackageDep> crossDeps,
                                                  String moduleName) {
-        AggregateSummaryInput input = buildAggregateInput(fileTasks, crossDeps);
+        return runAggregate(fileTasks, crossDeps, moduleName, "");
+    }
+
+    /**
+     * 执行包级聚合摘要（带包名）。
+     *
+     * @param fileTasks    已完成的文件级 SUMMARY 任务列表
+     * @param crossDeps    跨包依赖列表
+     * @param moduleName   模块名（用于缓存键）
+     * @param packageName  包名（用于覆盖 LLM 输出中的 packageName）
+     * @return 聚合摘要输出
+     */
+    public AggregateSummaryOutput runAggregate(List<AnalysisTask<String, String>> fileTasks,
+                                                 List<AggregateSummaryInput.CrossPackageDep> crossDeps,
+                                                 String moduleName,
+                                                 String packageName) {
+        AggregateSummaryInput input = buildAggregateInput(fileTasks, crossDeps, packageName);
         AggregateSummaryAgent agent = new AggregateSummaryAgent(llmClient, cache);
         return agent.execute(input);
     }
@@ -185,20 +201,34 @@ public class AgentRunner {
     }
 
     /**
-     * 将文件级任务列表组装为 AggregateSummaryInput。
+     * 将文件级任务列表组装为 AggregateSummaryInput（从第一个文件推断包名）。
      */
     private AggregateSummaryInput buildAggregateInput(
             List<AnalysisTask<String, String>> fileTasks,
             List<AggregateSummaryInput.CrossPackageDep> crossDeps) {
+        return buildAggregateInput(fileTasks, crossDeps, "");
+    }
+
+    /**
+     * 将文件级任务列表组装为 AggregateSummaryInput（使用传入包名）。
+     *
+     * @param fileTasks   已完成的文件级 SUMMARY 任务列表
+     * @param crossDeps   跨包依赖列表
+     * @param packageName 包名（为空时从第一个文件推断）
+     */
+    private AggregateSummaryInput buildAggregateInput(
+            List<AnalysisTask<String, String>> fileTasks,
+            List<AggregateSummaryInput.CrossPackageDep> crossDeps,
+            String packageName) {
         if (fileTasks == null || fileTasks.isEmpty()) {
-            return new AggregateSummaryInput("",
+            return new AggregateSummaryInput(
+                    packageName != null ? packageName : "",
                     new ArrayList<FileSummaryEntry>(),
                     crossDeps != null ? crossDeps : new ArrayList<AggregateSummaryInput.CrossPackageDep>(),
                     new HashMap<ArchitectureLayer, Integer>());
         }
 
-        // 从第一个文件的 packageName 推断
-        String packageName = "";
+        if (packageName == null) packageName = "";
         List<FileSummaryEntry> entries = new ArrayList<FileSummaryEntry>();
         Map<ArchitectureLayer, Integer> layerDist = new HashMap<ArchitectureLayer, Integer>();
 

@@ -1,5 +1,6 @@
 package com.codelens.common.agent;
 
+import com.codelens.common.analyzer.ArchitectureLayerDetector;
 import com.codelens.common.models.ArchitectureLayer;
 import com.google.gson.Gson;
 import com.google.gson.GsonBuilder;
@@ -50,6 +51,21 @@ public class AggregateSummaryValidator {
             return ValidationResult.fail("json", "JSON 解析结果为空");
         }
 
+        return validate(output);
+    }
+
+    /**
+     * 对已解析的 AggregateSummaryOutput 执行全部 9 条规则校验。
+     * WARN 规则会直接修改 output 对象。
+     */
+    public ValidationResult validate(AggregateSummaryOutput output) {
+        if (output == null) {
+            return ValidationResult.fail("output", "输出对象为空");
+        }
+
+        // ★ 在所有校验之前，先用实际值覆盖 LLM 不可信的统计字段
+        overrideStatisticsFromInput(output);
+
         // V1: packageName 非空且匹配 input
         ValidationResult v1 = validatePackageName(output);
         if (!v1.isValid()) return v1;
@@ -68,11 +84,11 @@ public class AggregateSummaryValidator {
         validateCoreResponsibilities(output);
 
         // V6: riskOverview 非空（有风险时）（WARN 补模板）
+        // 此时 highRiskCount/mediumRiskCount 已经过 overrideStatisticsFromInput 修正
         validateRiskOverview(output);
 
-        // V7: totalFiles == input.fileSummaries.size()
-        ValidationResult v7 = validateTotalFiles(output);
-        if (!v7.isValid()) return v7;
+        // V7: totalFiles 一致性检查（WARN 级别，自动修正）
+        validateTotalFiles(output);
 
         // V8: 风险计数与概述一致（WARN 以计数为准）
         alignRiskCounts(output);
@@ -82,6 +98,39 @@ public class AggregateSummaryValidator {
 
         return ValidationResult.ok();
     }
+
+    // ========================================================================
+    // 统计字段覆盖（校验前执行）
+    // ========================================================================
+
+    /**
+     * 用 input 的实际统计值覆盖 LLM 输出的计数字段。
+     * LLM 数数不可信，totalFiles/totalMethods 等必须以实际值为准。
+     */
+    private void overrideStatisticsFromInput(AggregateSummaryOutput output) {
+        if (input == null) return;
+
+        // totalFiles = 实际输入的文件摘要数
+        if (input.getFileSummaries() != null) {
+            output.setTotalFiles(input.getFileSummaries().size());
+        }
+
+        // architectureLayer 用 input 的 layerDistribution 重新检测
+        if (input.getLayerDistribution() != null && !input.getLayerDistribution().isEmpty()) {
+            ArchitectureLayer detected = ArchitectureLayerDetector.detectPackageLayer(
+                    input.getLayerDistribution());
+            output.setArchitectureLayer(detected != null ? detected : ArchitectureLayer.UNKNOWN);
+            String composition = ArchitectureLayerDetector.getLayerComposition(
+                    input.getLayerDistribution());
+            output.setLayerComposition(composition);
+        } else if (output.getArchitectureLayer() == null) {
+            output.setArchitectureLayer(ArchitectureLayer.UNKNOWN);
+        }
+    }
+
+    // ========================================================================
+    // V1-V9 校验规则
+    // ========================================================================
 
     /**
      * V1: packageName 非空且匹配 input。
@@ -166,7 +215,7 @@ public class AggregateSummaryValidator {
     }
 
     /**
-     * V7: totalFiles == input.fileSummaries.size()。
+     * V7: totalFiles 与实际值一致性检查（WARN 级别，覆盖后自动修正）。
      */
     ValidationResult validateTotalFiles(AggregateSummaryOutput output) {
         if (input == null || input.getFileSummaries() == null) {
@@ -174,28 +223,26 @@ public class AggregateSummaryValidator {
         }
         int expected = input.getFileSummaries().size();
         if (output.getTotalFiles() != expected) {
-            return ValidationResult.fail("totalFiles",
-                    "totalFiles 不匹配: 期望 " + expected + ", 实际 " + output.getTotalFiles());
+            // WARN: 覆盖后有差异，强制修正
+            output.setTotalFiles(expected);
         }
-        return ValidationResult.ok();
+        return ValidationResult.ok(); // 不再 FAIL
     }
 
     /**
      * V8: 风险计数与概述一致。以计数为准。
      */
     void alignRiskCounts(AggregateSummaryOutput output) {
-        // 计数本身来自 LLM 输出，以计数为准，不做修改
-        // 此规则确保概述与计数一致——由 LLM 保证，此处仅做一致性标记
         String overview = output.getRiskOverview();
         int highRisk = output.getHighRiskCount();
         int mediumRisk = output.getMediumRiskCount();
         if (overview != null && !overview.trim().isEmpty()) {
-            // 概述存在即可，不做字符串匹配，避免过于严格
+            // 概述存在即可，不做字符串匹配
         }
     }
 
     /**
-     * V9: Token 估算 ≤800。截断。
+     * V9: Token 估算 ≤800。超长时截断。
      */
     void truncateByTokenEstimate(AggregateSummaryOutput output) {
         // 估算当前输出 Token 数（粗略按 1 token ≈ 1.5 字符估算）

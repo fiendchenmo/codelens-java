@@ -119,9 +119,6 @@ public class CodeLensCli {
                     handleFull(args, noValidate, noCache, rawJson, schemaVersion);
                 }
                 break;
-            case "module":
-                handleModule(args);
-                break;
             case "--help":
             case "-h":
                 printUsage();
@@ -146,6 +143,8 @@ public class CodeLensCli {
                 options.put("temperature", arg.substring("--temperature=".length()));
             } else if (arg.startsWith("--dir=")) {
                 options.put("dir", arg.substring("--dir=".length()));
+            } else if (arg.startsWith("--source=")) {
+                options.put("source", arg.substring("--source=".length()));
             } else if (arg.startsWith("--module=")) {
                 options.put("module", arg.substring("--module=".length()));
             }
@@ -203,8 +202,8 @@ public class CodeLensCli {
         System.out.println("                              - 查询反向依赖关系");
         System.out.println("  java -jar codelens.jar full <Java文件路径> [API_KEY] [--api-url=URL] [--model=MODEL] [--temperature=TEMP]");
         System.out.println("                              - 一键完成 index + callers + analyze");
-        System.out.println("  java -jar codelens.jar module <模块目录> --module=<模块名>");
-        System.out.println("                              - 模块级分析（递归扫描 + 聚合摘要）");
+        System.out.println("  java -jar codelens.jar analyze --mode multi --source=<源码目录> --module=<模块名>");
+        System.out.println("                              - 模块级多Agent分析（递归扫描 + 方法分析 + 包级聚合）");
         System.out.println("  java -jar codelens.jar --help");
         System.out.println("                              - 显示帮助信息");
         System.out.println("  --no-color                   禁用颜色输出");
@@ -404,111 +403,73 @@ public class CodeLensCli {
     }
     
     private static void handleModule(String[] args) {
-        if (args.length < 2) {
-            System.out.println("[!] 请提供模块目录路径");
-            System.out.println("用法: java -jar codelens.jar module <模块目录> --module=<名称>");
-            return;
+        System.out.println("[!] module 命令已整合到 --mode multi 流程中");
+        System.out.println("用法: java -jar codelens.jar analyze --mode multi --source=<源码目录> --module=<模块名>");
+        System.out.println("示例: java -jar codelens.jar analyze --mode multi --source=C:\\workspace\\FMP --module=fmp-bill");
+    }
+
+    /**
+     * 缓存状态标签。
+     */
+    /**
+     * 文件级分析结果，关联文件名和对应的输出。
+     */
+    private static class FileAnalysisResult {
+        String fileName;
+        String packageName;
+        String summaryOutput;
+        com.codelens.common.models.ArchitectureLayer layer;
+
+        FileAnalysisResult(String fileName, String packageName,
+                            String summaryOutput,
+                            com.codelens.common.models.ArchitectureLayer layer) {
+            this.fileName = fileName;
+            this.packageName = packageName;
+            this.summaryOutput = summaryOutput;
+            this.layer = layer;
         }
+    }
 
-        String moduleDir = args[1];
-        File dir = new File(moduleDir);
-        if (!dir.exists() || !dir.isDirectory()) {
-            System.out.println("[!] 目录不存在: " + moduleDir);
-            return;
-        }
+    /**
+     * 从文件分析结果列表构建 AggregateSummaryInput。
+     */
+    private static com.codelens.common.agent.AggregateSummaryInput buildAggregateInputFromResults(
+            List<FileAnalysisResult> results,
+            String defaultPackage) {
 
-        Map<String, String> options = parseOptions(args);
-        String moduleName = options.get("module");
-        if (moduleName == null || moduleName.isEmpty()) {
-            moduleName = dir.getName();
-        }
+        List<com.codelens.common.agent.AggregateSummaryInput.FileSummaryEntry> entries =
+                new ArrayList<>();
+        Map<com.codelens.common.models.ArchitectureLayer, Integer> layerDist =
+                new HashMap<>();
+        String detectedPackage = defaultPackage;
 
-        String apiKey = args.length > 2 && !args[2].startsWith("--")
-                ? args[2] : System.getenv("CODELENS_API_KEY");
-        if (apiKey == null || apiKey.isEmpty()) {
-            System.out.println("[!] 请设置 CODELENS_API_KEY 环境变量或提供 API_KEY 参数");
-            return;
-        }
-
-        String apiUrl = getApiUrl(options);
-        String model = getModel(options);
-        double temperature = getTemperature(options);
-
-        System.out.println(ColorUtil.heading("━━━ Module Analysis: " + moduleName + " ━━━"));
-        System.out.println("目录: " + moduleDir);
-        printLlmConfig(apiUrl, model, temperature);
-
-        try {
-            // 递归扫描 .java 文件
-            List<File> javaFiles = new ArrayList<>();
-            scanJavaFiles(dir, javaFiles);
-            System.out.println("找到 " + javaFiles.size() + " 个 Java 文件");
-
-            if (javaFiles.isEmpty()) {
-                System.out.println("[!] 目录中没有 Java 文件");
-                return;
+        for (FileAnalysisResult r : results) {
+            if (r.summaryOutput == null) continue;
+            if (r.packageName != null && !r.packageName.isEmpty()) {
+                detectedPackage = r.packageName;
             }
 
-            // 逐个文件分析
-            com.codelens.common.llm.LLMClient llmClient =
-                    new CliLLMClient(apiKey, apiUrl, model, temperature);
-            List<com.codelens.common.agent.AnalysisTask<String, String>> summaryTasks =
-                    new ArrayList<>();
+            com.codelens.common.agent.AggregateSummaryInput.FileSummaryEntry entry =
+                    new com.codelens.common.agent.AggregateSummaryInput.FileSummaryEntry(
+                            r.fileName, r.layer, r.summaryOutput, "", "", "",
+                            new ArrayList<String>(), new ArrayList<String>());
+            entries.add(entry);
 
-            for (int i = 0; i < javaFiles.size(); i++) {
-                File f = javaFiles.get(i);
-                System.out.println(ColorUtil.heading("━━━ [" + (i + 1) + "/" + javaFiles.size()
-                        + "] " + f.getName() + " ━━━"));
-
-                String sourceCode = new String(java.nio.file.Files.readAllBytes(f.toPath()));
-                String metadata = "File: " + f.getName() + "\n";
-
-                String systemPrompt = new com.codelens.common.agent.SummaryPrompt().generateSystemPrompt();
-                String userPrompt = new com.codelens.common.agent.SummaryPrompt()
-                        .generateUserPrompt(sourceCode, metadata);
-
-                String llmOutput = llmClient.chat(systemPrompt, userPrompt);
-
-                com.codelens.common.agent.AnalysisTask<String, String> task =
-                        new com.codelens.common.agent.AnalysisTask<>(
-                                com.codelens.common.agent.TaskType.SUMMARY, sourceCode);
-                task.setOutput(llmOutput);
-                summaryTasks.add(task);
-
-                System.out.println("  ✓ " + f.getName() + " 分析完成");
-            }
-
-            // 聚合
-            System.out.println(ColorUtil.heading("━━━ 生成包级聚合摘要 ━━━"));
-            com.codelens.common.cache.CacheConfig cacheConfig =
-                    com.codelens.common.cache.CacheConfig.defaults(System.getProperty("user.home"));
-            com.codelens.common.cache.FileSystemCache fsc =
-                    new com.codelens.common.cache.FileSystemCache(cacheConfig);
-            com.codelens.common.cache.GranularCacheAdapter cacheAdapter =
-                    new com.codelens.common.cache.GranularCacheAdapter(fsc);
-            com.codelens.common.agent.AgentRunner runner = new com.codelens.common.agent.AgentRunner(
-                    llmClient, cacheAdapter);
-
-            com.codelens.common.agent.AggregateSummaryOutput aggOutput = runner.runAggregate(
-                    summaryTasks,
-                    new ArrayList<com.codelens.common.agent.AggregateSummaryInput.CrossPackageDep>(),
-                    moduleName);
-
-            // 写报告
-            System.out.println(ColorUtil.heading("━━━ 写入报告 ━━━"));
-            com.codelens.common.agent.ReportWriter reportWriter =
-                    new com.codelens.common.agent.ReportWriter();
-            reportWriter.writePackageSummary(aggOutput, moduleDir);
-
-            System.out.println(ColorUtil.heading("━━━ 完成 ━━━"));
-            System.out.println("聚合摘要: ");
-            System.out.println(new com.google.gson.GsonBuilder().setPrettyPrinting()
-                    .create().toJson(aggOutput));
-
-        } catch (Exception e) {
-            System.out.println("[!] Module 分析失败: " + e.getMessage());
-            LOGGER.log(java.util.logging.Level.SEVERE, "Module 分析失败", e);
+            Integer count = layerDist.get(r.layer);
+            layerDist.put(r.layer, count != null ? count + 1 : 1);
         }
+
+        return new com.codelens.common.agent.AggregateSummaryInput(
+                detectedPackage, entries,
+                new ArrayList<com.codelens.common.agent.AggregateSummaryInput.CrossPackageDep>(),
+                layerDist);
+    }
+
+    private static String cacheLabel(com.codelens.common.agent.ExecutionTrace trace) {
+        if (trace != null && trace.isCacheHit()) {
+            return " (缓存)";
+        }
+        return "";
     }
 
     /**
@@ -650,9 +611,18 @@ public class CodeLensCli {
     // ==================== Multi-Agent 模式 ====================
 
     private static void handleAnalyzeMulti(String[] args) {
+        // 检查 --source 标志：存在则进入模块级多Agent分析模式
+        Map<String, String> options = parseOptions(args);
+        String sourceDir = options.get("source");
+        if (sourceDir != null && !sourceDir.isEmpty()) {
+            handleModuleAnalysis(args, options, sourceDir);
+            return;
+        }
+
         if (args.length < 2) {
             System.out.println("[!] 请提供 Java 文件路径");
             System.out.println("用法: java -jar codelens.jar analyze <Java文件路径> [API_KEY] --mode=multi");
+            System.out.println("       java -jar codelens.jar analyze --mode multi --source=<目录> --module=<模块名>");
             return;
         }
 
@@ -671,7 +641,6 @@ public class CodeLensCli {
                 return;
             }
 
-            Map<String, String> options = parseOptions(args);
             String apiUrl = getApiUrl(options);
             String model = getModel(options);
             double temperature = getTemperature(options);
@@ -687,6 +656,180 @@ public class CodeLensCli {
         } catch (Exception e) {
             System.out.println("[!] Multi-Agent 分析失败: " + e.getMessage());
             LOGGER.log(Level.SEVERE, "Multi-Agent 分析失败", e);
+        }
+    }
+
+    /**
+     * 模块级多Agent分析：目录扫描 → 逐个文件多Agent → 包级聚合。
+     */
+    private static void handleModuleAnalysis(String[] args, Map<String, String> options,
+                                              String sourceDir) {
+        File dir = new File(sourceDir);
+        if (!dir.exists() || !dir.isDirectory()) {
+            System.out.println("[!] 源码目录不存在: " + sourceDir);
+            return;
+        }
+
+        String moduleName = options.get("module");
+        if (moduleName == null || moduleName.isEmpty()) {
+            moduleName = dir.getName();
+        }
+
+        String apiKey = args.length > 1 && !args[1].startsWith("--")
+                ? args[1] : System.getenv("CODELENS_API_KEY");
+        if (apiKey == null || apiKey.isEmpty()) {
+            System.out.println("[!] 请设置 CODELENS_API_KEY 环境变量或提供 API_KEY 参数");
+            return;
+        }
+
+        String apiUrl = getApiUrl(options);
+        String model = getModel(options);
+        double temperature = getTemperature(options);
+
+        System.out.println(ColorUtil.heading("━━━ Module Analysis (Multi-Agent): " + moduleName + " ━━━"));
+        System.out.println("源码目录: " + sourceDir);
+        printLlmConfig(apiUrl, model, temperature);
+        System.out.println("模式: 多Agent流水线 (SUMMARY → 并行METHOD_ANALYSIS → AGGREGATE_SUMMARY)");
+
+        try {
+            List<File> javaFiles = new ArrayList<>();
+            scanJavaFiles(dir, javaFiles);
+            System.out.println("找到 " + javaFiles.size() + " 个 Java 文件\n");
+            if (javaFiles.isEmpty()) return;
+
+            com.codelens.common.llm.LLMClient llmClient =
+                    new CliLLMClient(apiKey, apiUrl, model, temperature);
+            com.codelens.common.cache.CacheConfig cacheConfig =
+                    com.codelens.common.cache.CacheConfig.defaults(System.getProperty("user.home"));
+            com.codelens.common.cache.FileSystemCache fsCache =
+                    new com.codelens.common.cache.FileSystemCache(cacheConfig);
+            com.codelens.common.cache.GranularCacheAdapter granularCache =
+                    new com.codelens.common.cache.GranularCacheAdapter(fsCache);
+            com.codelens.common.agent.AgentRunner runner =
+                    new com.codelens.common.agent.AgentRunner(llmClient, granularCache);
+
+            List<FileAnalysisResult> fileResults = new ArrayList<>();
+
+            for (int i = 0; i < javaFiles.size(); i++) {
+                File f = javaFiles.get(i);
+                String fileName = f.getName();
+                System.out.println(ColorUtil.heading("━━━ [" + (i + 1) + "/" + javaFiles.size()
+                        + "] " + fileName + " ━━━"));
+
+                try {
+                    String sourceCode = new String(java.nio.file.Files.readAllBytes(f.toPath()));
+
+                    // STEP 1: SUMMARY
+                    com.codelens.common.agent.AnalysisTask<String, String> summaryTask =
+                            new com.codelens.common.agent.AnalysisTask<>(
+                                    com.codelens.common.agent.TaskType.SUMMARY, sourceCode);
+                    com.codelens.common.agent.ExecutionTrace st =
+                            runner.run(summaryTask, fileName);
+                    if (summaryTask.getOutput() == null) {
+                        System.out.println("  ⚠ " + fileName + " SUMMARY 失败，跳过");
+                        continue;
+                    }
+                    System.out.println("  ✓ SUMMARY" + cacheLabel(st));
+
+                    // STEP 2: METHOD_ANALYSIS
+                    List<JavaParserService.ClassInfo> classInfos =
+                            JavaParserService.parseFile(f);
+                    List<JavaParserService.MethodInfo> nonTrivialMethods = new ArrayList<>();
+                    for (JavaParserService.ClassInfo ci : classInfos) {
+                        for (JavaParserService.MethodInfo mi : ci.methods) {
+                            if (!MethodFilter.isTrivialCall(mi.name)) {
+                                nonTrivialMethods.add(mi);
+                            }
+                        }
+                    }
+
+                    if (!nonTrivialMethods.isEmpty()) {
+                        System.out.println("  方法分析 (" + nonTrivialMethods.size() + " 个):");
+                        java.util.concurrent.ExecutorService executor =
+                                java.util.concurrent.Executors.newFixedThreadPool(
+                                        Math.min(nonTrivialMethods.size(),
+                                                Runtime.getRuntime().availableProcessors()));
+                        List<java.util.concurrent.Future<?>> futures = new ArrayList<>();
+
+                        for (final JavaParserService.MethodInfo mi : nonTrivialMethods) {
+                            futures.add(executor.submit(new Runnable() {
+                                @Override
+                                public void run() {
+                                    try {
+                                        String methodBody =
+                                                JavaParserService.extractMethodBody(f, mi);
+                                        String methodSignature = mi.returnType + " "
+                                                + mi.name + "(" + mi.params + ")";
+
+                                        com.codelens.common.agent.AnalysisTask<String, String> mt =
+                                                new com.codelens.common.agent.AnalysisTask<>(
+                                                        com.codelens.common.agent.TaskType.METHOD_ANALYSIS,
+                                                        methodBody);
+                                        com.codelens.common.agent.ExecutionTrace met =
+                                                runner.runMethodAnalysis(mt, methodSignature,
+                                                        sourceCode, summaryTask.getOutput(), fileName);
+
+                                        if (met.getStatus()
+                                                != com.codelens.common.agent.ExecutionStatus.FAILED) {
+                                            System.out.println("    ✓ " + mi.name
+                                                    + cacheLabel(met));
+                                        } else {
+                                            System.out.println("    ⚠ " + mi.name + " 跳过");
+                                        }
+                                    } catch (Exception e) {
+                                        LOGGER.log(Level.WARNING, "方法分析失败: " + mi.name, e);
+                                    }
+                                }
+                            }));
+                        }
+                        for (java.util.concurrent.Future<?> future : futures) future.get();
+                        executor.shutdown();
+                    }
+
+                    // 收集文件分析结果用于后续聚合
+                    String className2 = fileName.replace(".java", "");
+                    String pkg2 = "";
+                    try {
+                        pkg2 = JavaParserService.getPackageName(f);
+                    } catch (Exception ignored) {}
+                    com.codelens.common.models.ArchitectureLayer layer2 =
+                            com.codelens.common.analyzer.ArchitectureLayerDetector.detectClassLayer(
+                                    null, className2, pkg2);
+                    fileResults.add(new FileAnalysisResult(
+                            fileName, pkg2, summaryTask.getOutput(), layer2));
+
+                } catch (Exception e) {
+                    System.out.println("  ✗ " + fileName + " 分析失败: " + e.getMessage());
+                    LOGGER.log(Level.WARNING, "文件分析失败: " + fileName, e);
+                }
+            }
+
+            // STEP 3: 包级聚合
+            if (!fileResults.isEmpty()) {
+                System.out.println(ColorUtil.heading("━━━ 生成包级聚合摘要 ━━━"));
+                System.out.println("收集了 " + fileResults.size() + " 个文件摘要");
+
+                com.codelens.common.agent.AggregateSummaryInput aggInput =
+                        buildAggregateInputFromResults(fileResults, moduleName);
+
+                com.codelens.common.agent.AggregateSummaryAgent aggAgent =
+                        new com.codelens.common.agent.AggregateSummaryAgent(llmClient, granularCache);
+                com.codelens.common.agent.AggregateSummaryOutput aggOutput =
+                        aggAgent.execute(aggInput);
+
+                System.out.println(ColorUtil.heading("━━━ 写入报告 ━━━"));
+                com.codelens.common.agent.ReportWriter reportWriter =
+                        new com.codelens.common.agent.ReportWriter();
+                reportWriter.writePackageSummary(aggOutput, sourceDir);
+
+                System.out.println(ColorUtil.heading("━━━ 完成 ━━━"));
+                System.out.println(new com.google.gson.GsonBuilder().setPrettyPrinting()
+                        .create().toJson(aggOutput));
+            }
+
+        } catch (Exception e) {
+            System.out.println("[!] Module 分析失败: " + e.getMessage());
+            LOGGER.log(java.util.logging.Level.SEVERE, "Module 分析失败", e);
         }
     }
 
