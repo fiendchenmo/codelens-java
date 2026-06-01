@@ -22,8 +22,11 @@ public class AggregateSummaryOutput {
     private String riskOverview;
     private int totalFiles;
     private int totalMethods;
+    /** 高风险数（由Validator从riskCategories反算，非LLM直接输出） */
     private int highRiskCount;
+    /** 中风险数（由Validator从riskCategories反算，非LLM直接输出） */
     private int mediumRiskCount;
+    private List<RiskCategoryEntry> riskCategories;
 
     public AggregateSummaryOutput() {
     }
@@ -122,6 +125,44 @@ public class AggregateSummaryOutput {
 
     public void setMediumRiskCount(int mediumRiskCount) {
         this.mediumRiskCount = mediumRiskCount;
+    }
+
+    public List<RiskCategoryEntry> getRiskCategories() {
+        return riskCategories;
+    }
+
+    public void setRiskCategories(List<RiskCategoryEntry> riskCategories) {
+        this.riskCategories = riskCategories;
+    }
+
+    /**
+     * 风险分类条目，由 LLM 根据语义分析归纳共性风险。
+     */
+    public static class RiskCategoryEntry {
+        private String category;
+        private String severity;    // HIGH / MEDIUM / LOW
+        private String description;
+        private List<String> affectedFiles;
+
+        public RiskCategoryEntry() {
+        }
+
+        public RiskCategoryEntry(String category, String severity,
+                                 String description, List<String> affectedFiles) {
+            this.category = category;
+            this.severity = severity;
+            this.description = description;
+            this.affectedFiles = affectedFiles;
+        }
+
+        public String getCategory() { return category; }
+        public void setCategory(String category) { this.category = category; }
+        public String getSeverity() { return severity; }
+        public void setSeverity(String severity) { this.severity = severity; }
+        public String getDescription() { return description; }
+        public void setDescription(String description) { this.description = description; }
+        public List<String> getAffectedFiles() { return affectedFiles; }
+        public void setAffectedFiles(List<String> affectedFiles) { this.affectedFiles = affectedFiles; }
     }
 
     /**
