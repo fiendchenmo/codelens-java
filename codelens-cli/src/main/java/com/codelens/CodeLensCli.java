@@ -6,6 +6,13 @@ import com.codelens.CallIndex;
 import com.codelens.CallerFinder;
 import com.codelens.common.agent.*;
 import com.codelens.common.cache.*;
+import com.codelens.common.diff.ChangedFile;
+import com.codelens.common.diff.DiffParser;
+import com.codelens.common.diff.ImpactAnalyzer;
+import com.codelens.common.diff.ImpactNode;
+import com.codelens.common.diff.ImpactReport;
+import com.codelens.common.diff.ImpactReportWriter;
+import com.codelens.common.diff.ImpactSummary;
 import com.codelens.common.models.SchemaVersion;
 import com.codelens.common.utils.MethodFilter;
 import com.google.gson.Gson;
@@ -13,7 +20,9 @@ import com.google.gson.JsonArray;
 import com.google.gson.JsonElement;
 import com.google.gson.JsonObject;
 
+import java.io.BufferedReader;
 import java.io.File;
+import java.io.InputStreamReader;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
@@ -119,6 +128,9 @@ public class CodeLensCli {
                     handleFull(args, noValidate, noCache, rawJson, schemaVersion);
                 }
                 break;
+            case "diff":
+                handleDiff(args);
+                break;
             case "--help":
             case "-h":
                 printUsage();
@@ -147,6 +159,12 @@ public class CodeLensCli {
                 options.put("source", arg.substring("--source=".length()));
             } else if (arg.startsWith("--module=")) {
                 options.put("module", arg.substring("--module=".length()));
+            } else if (arg.startsWith("--base=")) {
+                options.put("base", arg.substring("--base=".length()));
+            } else if (arg.startsWith("--max-hops=")) {
+                options.put("max-hops", arg.substring("--max-hops=".length()));
+            } else if (arg.startsWith("--format=")) {
+                options.put("format", arg.substring("--format=".length()));
             }
         }
         return options;
@@ -204,6 +222,8 @@ public class CodeLensCli {
         System.out.println("                              - 一键完成 index + callers + analyze");
         System.out.println("  java -jar codelens.jar analyze --mode multi --source=<源码目录> --module=<模块名>");
         System.out.println("                              - 模块级多Agent分析（递归扫描 + 方法分析 + 包级聚合）");
+        System.out.println("  java -jar codelens.jar diff --source=<目录> --base=<commit> [--max-hops=3] [--format=json|md|console]");
+        System.out.println("                              - Diff 影响分析（变更→调用链扩散→影响报告）");
         System.out.println("  java -jar codelens.jar --help");
         System.out.println("                              - 显示帮助信息");
         System.out.println("  --no-color                   禁用颜色输出");
@@ -1016,6 +1036,213 @@ public class CodeLensCli {
 
         // 9. STEP 4: Convert to V3-compatible JSON
         return ReportConverter.convert(report, traces);
+    }
+
+    // ==================== diff 命令 ====================
+
+    /**
+     * 处理 diff 命令：git diff → DiffParser → ImpactAnalyzer → 输出报告
+     */
+    private static void handleDiff(String[] args) {
+        Map<String, String> options = parseOptions(args);
+
+        String sourceDir = options.get("source");
+        String baseCommit = options.get("base");
+        int maxHops;
+        try {
+            maxHops = options.containsKey("max-hops")
+                    ? Integer.parseInt(options.get("max-hops")) : 3;
+        } catch (NumberFormatException e) {
+            System.out.println("[!] 无效的 max-hops 值: " + options.get("max-hops"));
+            return;
+        }
+        String format = options.getOrDefault("format", "console");
+
+        // 1. 验证参数
+        if (sourceDir == null || baseCommit == null) {
+            System.out.println("[!] 请提供 --source 和 --base 参数");
+            System.out.println("用法: java -jar codelens.jar diff --source=<目录> --base=<commit> [--max-hops=3] [--format=json|md|console]");
+            return;
+        }
+
+        Path repoPath = Paths.get(sourceDir).normalize();
+        if (!Files.exists(repoPath)) {
+            System.out.println("[!] 目录不存在: " + sourceDir);
+            return;
+        }
+
+        // 2. 验证是 git 仓库
+        if (!Files.exists(repoPath.resolve(".git"))) {
+            System.out.println("[!] 不是有效的 git 仓库: " + sourceDir);
+            return;
+        }
+
+        System.out.println(ColorUtil.heading("━━━ Diff 影响分析 ━━━"));
+        System.out.println("源目录: " + repoPath);
+        System.out.println("基准: " + baseCommit + " → HEAD");
+        System.out.println("最大跳数: " + maxHops);
+
+        // 3. 解析 diff
+        List<ChangedFile> changes;
+        try {
+            changes = DiffParser.parseDiffFromGit(repoPath, baseCommit);
+        } catch (IllegalArgumentException e) {
+            System.out.println("[!] 无效的基准 commit: " + baseCommit);
+            return;
+        } catch (IllegalStateException e) {
+            System.out.println("[!] " + e.getMessage());
+            return;
+        } catch (Exception e) {
+            System.out.println("[!] diff 解析失败: " + e.getMessage());
+            return;
+        }
+
+        if (changes.isEmpty()) {
+            System.out.println("No changes detected");
+            return;
+        }
+
+        // 4. 加载 CallIndex（可选）
+        com.codelens.common.callindex.CallIndex callIndex = null;
+        try {
+            com.codelens.common.callindex.CallIndexManager cim =
+                    new com.codelens.common.callindex.CallIndexManager(repoPath);
+            callIndex = cim.getIndex();
+        } catch (Exception e) {
+            System.out.println(ColorUtil.warning("⚠ CallIndex 缺失，仅文件级分析"));
+        }
+
+        // 5. 影响分析
+        ImpactAnalyzer analyzer = new ImpactAnalyzer(callIndex, maxHops);
+        String commitHash = getGitCommitHash(repoPath);
+        ImpactReport report = analyzer.analyze(changes, commitHash);
+
+        // 6. 输出
+        switch (format) {
+            case "json":
+                System.out.println(ImpactReportWriter.toJson(report));
+                break;
+            case "md":
+                System.out.println(ImpactReportWriter.toMarkdown(report));
+                break;
+            default: // console
+                printConsoleReport(report);
+                break;
+        }
+
+        // 7. 写文件到 .codelens/
+        try {
+            Path outputDir = repoPath.resolve(".codelens");
+            String writeFormat = "console".equals(format) ? "json" : format;
+            ImpactReportWriter.writeFiles(report, outputDir, writeFormat);
+            System.out.println("报告已写入 " + outputDir.resolve(
+                    "json".equals(writeFormat) ? "impact_report.json" : "impact_report.md"));
+        } catch (Exception e) {
+            System.out.println("[!] 写文件失败: " + e.getMessage());
+        }
+    }
+
+    /**
+     * 获取当前 HEAD 的 commit hash。
+     */
+    private static String getGitCommitHash(Path repoPath) {
+        try {
+            ProcessBuilder pb = new ProcessBuilder("git", "rev-parse", "HEAD");
+            pb.directory(repoPath.toFile());
+            pb.redirectErrorStream(true);
+            Process p = pb.start();
+            try (BufferedReader reader = new BufferedReader(
+                    new InputStreamReader(p.getInputStream()))) {
+                String hash = reader.readLine();
+                p.waitFor();
+                return hash != null ? hash.trim() : "unknown";
+            }
+        } catch (Exception e) {
+            return "unknown";
+        }
+    }
+
+    /**
+     * 控制台彩色输出影响分析报告。
+     */
+    private static void printConsoleReport(ImpactReport report) {
+        ImpactSummary summary = report.summary;
+
+        System.out.println();
+        System.out.println(ColorUtil.heading("━━━ Impact Report ━━━"));
+        System.out.println("基准: " + (report.commitHash != null ? report.commitHash : "?") + " → HEAD");
+
+        if (summary != null) {
+            System.out.println("变更文件: " + summary.totalChangedFiles
+                    + " | 变更方法: " + summary.totalChangedMethods);
+            if (summary.note != null && !summary.note.isEmpty()) {
+                System.out.println(ColorUtil.warning("  " + summary.note));
+            }
+        }
+
+        // 变更列表
+        System.out.println();
+        System.out.println(ColorUtil.heading("━━━ 变更列表 ━━━"));
+        for (ChangedFile file : report.changes) {
+            StringBuilder line = new StringBuilder();
+            switch (file.changeType) {
+                case ADDED:
+                    line.append(ColorUtil.info("  ADDED    "));
+                    break;
+                case DELETED:
+                    line.append(ColorUtil.error("  DELETED  "));
+                    break;
+                default:
+                    line.append(ColorUtil.warning("  MODIFIED "));
+                    break;
+            }
+            line.append(file.filePath);
+            if (file.changedMethods != null && !file.changedMethods.isEmpty()) {
+                line.append(" (");
+                for (int i = 0; i < file.changedMethods.size(); i++) {
+                    if (i > 0) line.append(", ");
+                    line.append(file.changedMethods.get(i).methodName);
+                }
+                line.append(")");
+            }
+            System.out.println(line.toString());
+        }
+
+        // 影响分析
+        if (report.impacts != null && !report.impacts.isEmpty()) {
+            System.out.println();
+            System.out.println(ColorUtil.heading("━━━ 影响分析 ━━━"));
+            System.out.println("直接影响: " + (summary != null ? summary.directImpactCount : 0)
+                    + " | 间接影响: " + (summary != null ? summary.indirectImpactCount : 0));
+
+            if (summary != null && summary.impactedLayerDist != null
+                    && !summary.impactedLayerDist.isEmpty()) {
+                StringBuilder layerStr = new StringBuilder("层分布: ");
+                boolean first = true;
+                for (Map.Entry<com.codelens.common.models.ArchitectureLayer, Integer> entry
+                        : summary.impactedLayerDist.entrySet()) {
+                    if (!first) layerStr.append(" ");
+                    first = false;
+                    layerStr.append(ColorUtil.info(entry.getKey() + "(" + entry.getValue() + ")"));
+                }
+                System.out.println(layerStr.toString());
+            }
+
+            // 高风险路径
+            if (summary != null && summary.highRiskPaths != null
+                    && !summary.highRiskPaths.isEmpty()) {
+                System.out.println();
+                for (String path : summary.highRiskPaths) {
+                    if (path.startsWith("🔴")) {
+                        System.out.println(path);
+                    } else {
+                        System.out.println(path.replace("🟡", ColorUtil.warning("🟡")));
+                    }
+                }
+            }
+        }
+
+        System.out.println();
     }
 
     // ==================== 格式化输出方法 ====================
