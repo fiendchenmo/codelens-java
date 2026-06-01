@@ -27,6 +27,7 @@ public class AggregateSummaryOutput {
     /** 中风险数（由Validator从riskCategories反算，非LLM直接输出） */
     private int mediumRiskCount;
     private List<RiskCategoryEntry> riskCategories;
+    private List<FileLayerEntry> fileLayers;
 
     public AggregateSummaryOutput() {
     }
@@ -133,6 +134,35 @@ public class AggregateSummaryOutput {
 
     public void setRiskCategories(List<RiskCategoryEntry> riskCategories) {
         this.riskCategories = riskCategories;
+    }
+
+    public List<FileLayerEntry> getFileLayers() {
+        return fileLayers;
+    }
+
+    public void setFileLayers(List<FileLayerEntry> fileLayers) {
+        this.fileLayers = fileLayers;
+    }
+
+    /**
+     * 文件架构层条目，由 LLM 根据语义分析判断各文件所属架构层。
+     */
+    public static class FileLayerEntry {
+        private String fileName;
+        private String layer;  // ArchitectureLayer 枚举值字符串
+
+        public FileLayerEntry() {
+        }
+
+        public FileLayerEntry(String fileName, String layer) {
+            this.fileName = fileName;
+            this.layer = layer;
+        }
+
+        public String getFileName() { return fileName; }
+        public void setFileName(String fileName) { this.fileName = fileName; }
+        public String getLayer() { return layer; }
+        public void setLayer(String layer) { this.layer = layer; }
     }
 
     /**

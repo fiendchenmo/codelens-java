@@ -429,4 +429,83 @@ class AggregateSummaryValidatorTest {
     private static String escapeJson(String s) {
         return s.replace("\\", "\\\\").replace("\"", "\\\"");
     }
+    // ========================================================================
+    // fileLayers → architectureLayer
+    // ========================================================================
+
+    @Test
+    void fileLayers_architectureLayerFromLlm() {
+        AggregateSummaryInput input = inputWithPackage("com.example.test");
+        String json = "{"
+                + "\"packageName\":\"com.example.test\","
+                + "\"fileLayers\":["
+                + "  {\"fileName\":\"A.java\",\"layer\":\"SERVICE\"},"
+                + "  {\"fileName\":\"B.java\",\"layer\":\"SERVICE\"},"
+                + "  {\"fileName\":\"C.java\",\"layer\":\"CONTROLLER\"}"
+                + "],"
+                + "\"riskCategories\":[],"
+                + "\"summary\":\"test\","
+                + "\"coreEntries\":[\"E1\"],"
+                + "\"coreResponsibilities\":[\"R1\"],"
+                + "\"crossPackageDeps\":[],"
+                + "\"riskOverview\":\"\","
+                + "\"totalFiles\":0,"
+                + "\"totalMethods\":5"
+                + "}";
+        AggregateSummaryValidator validator = new AggregateSummaryValidator(input);
+        ValidationResult result = validator.validate(json);
+        assertTrue(result.isValid());
+        assertEquals(com.codelens.common.models.ArchitectureLayer.SERVICE,
+                validator.getLastOutput().getArchitectureLayer(),
+                "2/3 SERVICE -> architectureLayer=SERVICE");
+    }
+
+    @Test
+    void fileLayers_invalidLayerSkipped() {
+        AggregateSummaryInput input = inputWithPackage("com.example.test");
+        String json = "{"
+                + "\"packageName\":\"com.example.test\","
+                + "\"fileLayers\":["
+                + "  {\"fileName\":\"A.java\",\"layer\":\"SERVICE\"},"
+                + "  {\"fileName\":\"B.java\",\"layer\":\"INVALID_LAYER\"}"
+                + "],"
+                + "\"riskCategories\":[],"
+                + "\"summary\":\"test\","
+                + "\"coreEntries\":[\"E1\"],"
+                + "\"coreResponsibilities\":[\"R1\"],"
+                + "\"crossPackageDeps\":[],"
+                + "\"riskOverview\":\"\","
+                + "\"totalFiles\":0,"
+                + "\"totalMethods\":5"
+                + "}";
+        AggregateSummaryValidator validator = new AggregateSummaryValidator(input);
+        ValidationResult result = validator.validate(json);
+        assertTrue(result.isValid());
+        assertEquals(com.codelens.common.models.ArchitectureLayer.SERVICE,
+                validator.getLastOutput().getArchitectureLayer(),
+                "1 valid SERVICE -> architectureLayer=SERVICE");
+    }
+
+    @Test
+    void fileLayers_empty_fallbackToDetector() {
+        AggregateSummaryInput input = inputWithPackage("com.example.test");
+        String json = "{"
+                + "\"packageName\":\"com.example.test\","
+                + "\"fileLayers\":[],"
+                + "\"riskCategories\":[],"
+                + "\"summary\":\"test\","
+                + "\"coreEntries\":[\"E1\"],"
+                + "\"coreResponsibilities\":[\"R1\"],"
+                + "\"crossPackageDeps\":[],"
+                + "\"riskOverview\":\"\","
+                + "\"totalFiles\":0,"
+                + "\"totalMethods\":5"
+                + "}";
+        AggregateSummaryValidator validator = new AggregateSummaryValidator(input);
+        ValidationResult result = validator.validate(json);
+        assertTrue(result.isValid());
+        assertEquals(com.codelens.common.models.ArchitectureLayer.UNKNOWN,
+                validator.getLastOutput().getArchitectureLayer());
+    }
+
 }
