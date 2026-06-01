@@ -4,6 +4,7 @@ import org.junit.jupiter.api.Disabled;
 import org.junit.jupiter.api.Test;
 
 import java.nio.file.Path;
+import java.nio.file.Paths;
 import java.util.List;
 
 import static org.junit.jupiter.api.Assertions.*;
@@ -269,7 +270,7 @@ public class DiffParserTest {
     @Test
     @Disabled("仅集成测试时手动执行，需要真实 git 仓库")
     void testParseFromGit() throws Exception {
-        Path repoPath = Path.of(".");
+        Path repoPath = Paths.get(".");
         // Use HEAD~1 to get recent changes
         List<ChangedFile> files = DiffParser.parseDiffFromGit(repoPath, "HEAD~1");
         assertNotNull(files);
