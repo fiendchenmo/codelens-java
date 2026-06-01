@@ -34,15 +34,19 @@ public class AggregateSummaryPrompt {
             "8. riskOverview: 风险概述 (String)，无风险时可为空字符串\n" +
             "9. totalFiles: 文件总数 (Number)\n" +
             "10. totalMethods: 方法总数 (Number)\n" +
-            "11. highRiskCount: 高风险数 (Number)\n" +
-            "12. mediumRiskCount: 中风险数 (Number)\n" +
+            "11. riskCategories: 风险分类列表 (Array of Object)，归纳包内共性风险，每项包含：\n" +
+            "    - category: 类别名 (String)，如\"资源未关闭\"、\"异常吞没\"、\"硬编码配置\"\n" +
+            "    - severity: 严重程度 (String)，可选值: HIGH / MEDIUM / LOW\n" +
+            "    - description: 该类风险的共性描述 (String, ≤100字)\n" +
+            "    - affectedFiles: 受影响文件列表 (Array of String)\n" +
+            "    无风险时输出空数组 []\n" +
             "\n" +
             "约束：\n" +
             "- 仅输出 JSON，不要包含 ```json 标记\n" +
             "- summary 不超过 200 字\n" +
             "- coreEntries 不超过 5 项\n" +
             "- coreResponsibilities 不超过 5 项\n" +
-            "- 总输出 Token 不超过 800";
+            "- 总输出 Token 不超过 1100";
 
     private static final String PACKAGE_USER_TEMPLATE =
             "请根据以下输入数据，生成包级别的聚合摘要。\n" +

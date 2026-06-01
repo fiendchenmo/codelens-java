@@ -121,4 +121,54 @@ class AggregateSummaryOutputTest {
         assertEquals("com.example.dao", parsed.getTargetPackage());
         assertEquals("incoming", parsed.getDirection());
     }
+
+    @Test
+    void riskCategoryEntry_serialization() {
+        AggregateSummaryOutput.RiskCategoryEntry entry = new AggregateSummaryOutput.RiskCategoryEntry(
+                "资源未关闭", "HIGH", "数据库连接未释放",
+                java.util.Arrays.asList("OrderService.java", "PaymentService.java"));
+
+        String json = GSON.toJson(entry);
+        assertTrue(json.contains("资源未关闭"));
+        assertTrue(json.contains("HIGH"));
+        assertTrue(json.contains("OrderService.java"));
+    }
+
+    @Test
+    void riskCategoryEntry_deserialization() {
+        String json = "{\"category\":\"异常吞没\",\"severity\":\"MEDIUM\","
+                + "\"description\":\"catch块空实现\","
+                + "\"affectedFiles\":[\"Handler.java\"]}";
+        AggregateSummaryOutput.RiskCategoryEntry entry =
+                GSON.fromJson(json, AggregateSummaryOutput.RiskCategoryEntry.class);
+        assertNotNull(entry);
+        assertEquals("异常吞没", entry.getCategory());
+        assertEquals("MEDIUM", entry.getSeverity());
+        assertEquals("catch块空实现", entry.getDescription());
+        assertNotNull(entry.getAffectedFiles());
+        assertEquals(1, entry.getAffectedFiles().size());
+        assertEquals("Handler.java", entry.getAffectedFiles().get(0));
+    }
+
+    @Test
+    void riskCategoryEntry_inFullJson() {
+        String json = "{"
+                + "\"packageName\":\"com.example.service\","
+                + "\"riskCategories\":["
+                + "  {\"category\":\"资源未关闭\",\"severity\":\"HIGH\",\"description\":\"连接泄漏\",\"affectedFiles\":[\"A.java\"]},"
+                + "  {\"category\":\"异常吞没\",\"severity\":\"MEDIUM\",\"description\":\"空catch\",\"affectedFiles\":[\"B.java\"]}"
+                + "],"
+                + "\"summary\":\"test\""
+                + "}";
+        AggregateSummaryOutput output = GSON.fromJson(json, AggregateSummaryOutput.class);
+        assertNotNull(output);
+        assertNotNull(output.getRiskCategories());
+        assertEquals(2, output.getRiskCategories().size());
+        assertEquals("资源未关闭", output.getRiskCategories().get(0).getCategory());
+        assertEquals("HIGH", output.getRiskCategories().get(0).getSeverity());
+        assertEquals("异常吞没", output.getRiskCategories().get(1).getCategory());
+        assertEquals("MEDIUM", output.getRiskCategories().get(1).getSeverity());
+        assertNotNull(output.getRiskCategories().get(1).getAffectedFiles());
+        assertEquals(1, output.getRiskCategories().get(1).getAffectedFiles().size());
+    }
 }
