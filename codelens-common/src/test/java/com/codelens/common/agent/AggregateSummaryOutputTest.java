@@ -182,6 +182,31 @@ class AggregateSummaryOutputTest {
     }
 
     @Test
+    void refactorOverview_serialization() {
+        AggregateSummaryOutput output = new AggregateSummaryOutput();
+        output.setRefactorOverview("该包存在资源未关闭（HIGH）和异常吞没（MEDIUM）风险。"
+                + "建议在finally块中释放数据库连接，并移除空catch块。"
+                + "不修复可能导致生产环境连接池耗尽和故障定位困难。");
+
+        String json = GSON.toJson(output);
+        assertTrue(json.contains("refactorOverview"));
+        assertTrue(json.contains("资源未关闭"));
+    }
+
+    @Test
+    void refactorOverview_inFullJson() {
+        String json = "{"
+                + "\"packageName\":\"com.example.service\","
+                + "\"refactorOverview\":\"该包主要风险是资源未关闭。建议统一使用try-with-resources。不修复可能导致连接泄漏。\","
+                + "\"summary\":\"test\""
+                + "}";
+        AggregateSummaryOutput output = GSON.fromJson(json, AggregateSummaryOutput.class);
+        assertNotNull(output);
+        assertNotNull(output.getRefactorOverview());
+        assertTrue(output.getRefactorOverview().contains("资源未关闭"));
+    }
+
+    @Test
     void fileLayerEntry_deserialization() {
         String json = "{\"fileName\":\"Controller.java\",\"layer\":\"CONTROLLER\"}";
         AggregateSummaryOutput.FileLayerEntry entry =
