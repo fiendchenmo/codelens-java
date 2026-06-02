@@ -21,7 +21,8 @@ public class AggregateSummaryValidator {
     static final int MAX_SUMMARY_CHARS = 200;
     static final int MAX_CORE_ENTRIES = 5;
     static final int MAX_CORE_RESPONSIBILITIES = 5;
-    static final int MAX_TOKEN_ESTIMATE = 1100;
+    static final int MAX_TOKEN_ESTIMATE = 1200;
+    static final int MAX_REFACTOR_OVERVIEW_CHARS = 500;
 
     private final AggregateSummaryInput input;
     // 测试用：最近一次校验的输出对象
@@ -39,7 +40,7 @@ public class AggregateSummaryValidator {
     }
 
     /**
-     * 对 LLM 输出的 JSON 字符串执行全部 9 条规则校验。
+     * 对 LLM 输出的 JSON 字符串执行全部 10 条规则校验。
      *
      * @param json LLM 返回的 JSON 字符串
      * @return 校验结果
@@ -64,7 +65,7 @@ public class AggregateSummaryValidator {
     }
 
     /**
-     * 对已解析的 AggregateSummaryOutput 执行全部 9 条规则校验。
+     * 对已解析的 AggregateSummaryOutput 执行全部 10 条规则校验。
      * WARN 规则会直接修改 output 对象。
      */
     public ValidationResult validate(AggregateSummaryOutput output) {
@@ -105,8 +106,11 @@ public class AggregateSummaryValidator {
         // V8: 风险计数与概述一致（WARN 以计数为准）
         alignRiskCounts(output);
 
-        // V9: Token 估算 ≤1100（WARN 截断）
+        // V9: Token 估算 ≤1200（WARN 截断）
         truncateByTokenEstimate(output);
+
+        // V10: refactorOverview 非空（有风险时）+ 长度限制
+        validateRefactorOverview(output);
 
         return ValidationResult.ok();
     }
@@ -310,7 +314,7 @@ public class AggregateSummaryValidator {
     }
 
     /**
-     * V9: Token 估算 ≤1100。超长时截断。
+     * V9: Token 估算 ≤1200。超长时截断。
      */
     void truncateByTokenEstimate(AggregateSummaryOutput output) {
         // 估算当前输出 Token 数（粗略按 1 token ≈ 1.5 字符估算）
@@ -322,5 +326,31 @@ public class AggregateSummaryValidator {
                 output.setSummary(summary.substring(0, 100) + "…");
             }
         }
+    }
+
+    /**
+     * V10: refactorOverview 校验。
+     * - 有风险时（riskCategories 含 HIGH/MEDIUM）不能为 null 或空字符串
+     * - 长度 ≤ 500 字符
+     * - 无风险时（riskCategories 为空或全 LOW）可以为空
+     */
+    void validateRefactorOverview(AggregateSummaryOutput output) {
+        String overview = output.getRefactorOverview();
+        int highRisk = output.getHighRiskCount();
+        int mediumRisk = output.getMediumRiskCount();
+
+        // 有风险时：refactorOverview 不能为空
+        if ((highRisk > 0 || mediumRisk > 0)
+                && (overview == null || overview.trim().isEmpty())) {
+            output.setRefactorOverview("该包存在 " + highRisk + " 个高风险、"
+                    + mediumRisk + " 个中风险问题，建议优先处理高风险项。");
+            return;
+        }
+
+        // 长度超限时截断
+        if (overview != null && overview.length() > MAX_REFACTOR_OVERVIEW_CHARS) {
+            output.setRefactorOverview(overview.substring(0, MAX_REFACTOR_OVERVIEW_CHARS));
+        }
+        // 无风险时 = 空字符串或 null 都不需要处理（自然保留为空）
     }
 }

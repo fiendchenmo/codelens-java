@@ -28,6 +28,8 @@ public class AggregateSummaryOutput {
     private int mediumRiskCount;
     private List<RiskCategoryEntry> riskCategories;
     private List<FileLayerEntry> fileLayers;
+    /** 包级重构建议与风险提示（自然语言，2-4句话） */
+    private String refactorOverview;
 
     public AggregateSummaryOutput() {
     }
@@ -142,6 +144,14 @@ public class AggregateSummaryOutput {
 
     public void setFileLayers(List<FileLayerEntry> fileLayers) {
         this.fileLayers = fileLayers;
+    }
+
+    public String getRefactorOverview() {
+        return refactorOverview;
+    }
+
+    public void setRefactorOverview(String refactorOverview) {
+        this.refactorOverview = refactorOverview;
     }
 
     /**
