@@ -41,8 +41,9 @@ class AggregateSummaryPromptTest {
         assertTrue(systemPrompt.contains("totalMethods"));
         assertTrue(systemPrompt.contains("riskCategories"));
         assertTrue(systemPrompt.contains("fileLayers"));
+        assertTrue(systemPrompt.contains("refactorOverview"));
         assertTrue(systemPrompt.contains("200 字"));
-        assertTrue(systemPrompt.contains("1100"));
+        assertTrue(systemPrompt.contains("1200"));
     }
 
     @Test

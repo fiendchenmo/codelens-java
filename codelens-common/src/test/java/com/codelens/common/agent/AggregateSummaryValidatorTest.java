@@ -234,7 +234,7 @@ class AggregateSummaryValidatorTest {
     }
 
     // ========================================================================
-    // V9: Token 估算 ≤800（WARN 截断）
+    // V9: Token 估算 ≤1200（WARN 截断）
     // ========================================================================
 
     @Test
@@ -429,6 +429,147 @@ class AggregateSummaryValidatorTest {
     private static String escapeJson(String s) {
         return s.replace("\\", "\\\\").replace("\"", "\\\"");
     }
+    // ========================================================================
+    // V10: refactorOverview — 有风险时非空 + 长度限制
+    // ========================================================================
+
+    @Test
+    void v10_refactorOverview_notEmptyWhenHasRisks() {
+        // riskCategories 含 HIGH+MEDIUM，refactorOverview 非空且包含关键建议
+        AggregateSummaryInput input = inputWithPackage("com.example.test");
+        String json = "{"
+                + "\"packageName\":\"com.example.test\","
+                + "\"riskCategories\":["
+                + "  {\"category\":\"资源未关闭\",\"severity\":\"HIGH\",\"description\":\"连接泄漏\",\"affectedFiles\":[\"A.java\"]},"
+                + "  {\"category\":\"异常吞没\",\"severity\":\"MEDIUM\",\"description\":\"空catch\",\"affectedFiles\":[\"B.java\"]}"
+                + "],"
+                + "\"summary\":\"test\","
+                + "\"coreEntries\":[\"E1\"],"
+                + "\"coreResponsibilities\":[\"R1\"],"
+                + "\"crossPackageDeps\":[],"
+                + "\"riskOverview\":\"有风险\","
+                + "\"refactorOverview\":\"最严重的风险是资源未关闭（HIGH），建议统一使用try-with-resources自动释放连接。此外异常吞没导致调试困难。不改可能导致生产环境连接池耗尽。\","
+                + "\"totalFiles\":0,"
+                + "\"totalMethods\":5"
+                + "}";
+        AggregateSummaryValidator validator = new AggregateSummaryValidator(input);
+        ValidationResult result = validator.validate(json);
+        assertTrue(result.isValid());
+        String ro = validator.getLastOutput().getRefactorOverview();
+        assertNotNull(ro);
+        assertFalse(ro.isEmpty());
+        assertTrue(ro.contains("资源未关闭"), "refactorOverview should mention highest risk: " + ro);
+        assertTrue(ro.contains("HIGH"), "refactorOverview should mention severity: " + ro);
+    }
+
+    @Test
+    void v10_refactorOverview_emptyWhenNoRisks() {
+        // riskCategories 为空 → refactorOverview 可为空
+        AggregateSummaryInput input = inputWithPackage("com.example.test");
+        String json = "{"
+                + "\"packageName\":\"com.example.test\","
+                + "\"riskCategories\":[],"
+                + "\"summary\":\"test\","
+                + "\"coreEntries\":[\"E1\"],"
+                + "\"coreResponsibilities\":[\"R1\"],"
+                + "\"crossPackageDeps\":[],"
+                + "\"riskOverview\":\"\","
+                + "\"refactorOverview\":\"\","
+                + "\"totalFiles\":0,"
+                + "\"totalMethods\":5"
+                + "}";
+        AggregateSummaryValidator validator = new AggregateSummaryValidator(input);
+        ValidationResult result = validator.validate(json);
+        assertTrue(result.isValid());
+        String ro = validator.getLastOutput().getRefactorOverview();
+        // 无风险时应保留空字符串
+        assertEquals("", ro);
+    }
+
+    @Test
+    void v10_refactorOverview_allLowRisksAllowedEmpty() {
+        // riskCategories 全 LOW → refactorOverview 可以为空
+        AggregateSummaryInput input = inputWithPackage("com.example.test");
+        String json = "{"
+                + "\"packageName\":\"com.example.test\","
+                + "\"riskCategories\":["
+                + "  {\"category\":\"代码风格\",\"severity\":\"LOW\",\"description\":\"命名不规范\",\"affectedFiles\":[\"A.java\"]}"
+                + "],"
+                + "\"summary\":\"test\","
+                + "\"coreEntries\":[\"E1\"],"
+                + "\"coreResponsibilities\":[\"R1\"],"
+                + "\"crossPackageDeps\":[],"
+                + "\"riskOverview\":\"\","
+                + "\"refactorOverview\":\"\","
+                + "\"totalFiles\":0,"
+                + "\"totalMethods\":5"
+                + "}";
+        AggregateSummaryValidator validator = new AggregateSummaryValidator(input);
+        ValidationResult result = validator.validate(json);
+        assertTrue(result.isValid());
+        assertEquals("", validator.getLastOutput().getRefactorOverview());
+    }
+
+    @Test
+    void v10_refactorOverview_fillsWhenNullWithRisks() {
+        // 有 HIGH 风险但 refactorOverview 为空 → 自动填充模板
+        AggregateSummaryInput input = inputWithPackage("com.example.test");
+        String json = "{"
+                + "\"packageName\":\"com.example.test\","
+                + "\"riskCategories\":["
+                + "  {\"category\":\"资源未关闭\",\"severity\":\"HIGH\",\"description\":\"泄漏\",\"affectedFiles\":[\"A.java\"]}"
+                + "],"
+                + "\"summary\":\"test\","
+                + "\"coreEntries\":[\"E1\"],"
+                + "\"coreResponsibilities\":[\"R1\"],"
+                + "\"crossPackageDeps\":[],"
+                + "\"riskOverview\":\"\","
+                + "\"totalFiles\":0,"
+                + "\"totalMethods\":5"
+                + "}";  // 不包含 refactorOverview 字段
+        AggregateSummaryValidator validator = new AggregateSummaryValidator(input);
+        ValidationResult result = validator.validate(json);
+        assertTrue(result.isValid());
+        String ro = validator.getLastOutput().getRefactorOverview();
+        assertNotNull(ro);
+        assertFalse(ro.isEmpty());
+        assertTrue(ro.contains("高风险"), "auto-filled refactorOverview should mention high risk");
+    }
+
+    @Test
+    void v10_refactorOverview_truncated() {
+        // refactorOverview 超过 500 字符 → 截断
+        StringBuilder sb = new StringBuilder();
+        for (int i = 0; i < 60; i++) {
+            sb.append("这是超长重构建议测试内容。");
+        }
+        String longOverview = sb.toString();
+        assertTrue(longOverview.length() > 500);
+
+        AggregateSummaryInput input = inputWithPackage("com.example.test");
+        // jsonWithOverrides 不支持 refactorOverview（因为它不在 base 模板中），用完整 JSON
+        String json = "{"
+                + "\"packageName\":\"com.example.test\","
+                + "\"riskCategories\":["
+                + "  {\"category\":\"资源未关闭\",\"severity\":\"HIGH\",\"description\":\"泄漏\",\"affectedFiles\":[\"A.java\"]}"
+                + "],"
+                + "\"summary\":\"test\","
+                + "\"coreEntries\":[\"E1\"],"
+                + "\"coreResponsibilities\":[\"R1\"],"
+                + "\"crossPackageDeps\":[],"
+                + "\"riskOverview\":\"有风险\","
+                + "\"refactorOverview\":\"" + escapeJson(longOverview) + "\","
+                + "\"totalFiles\":0,"
+                + "\"totalMethods\":5"
+                + "}";
+        AggregateSummaryValidator validator = new AggregateSummaryValidator(input);
+        ValidationResult result = validator.validate(json);
+        assertTrue(result.isValid());
+        String ro = validator.getLastOutput().getRefactorOverview();
+        assertNotNull(ro);
+        assertTrue(ro.length() <= 500, "refactorOverview should be truncated to 500 chars, got " + ro.length());
+    }
+
     // ========================================================================
     // fileLayers → architectureLayer
     // ========================================================================
