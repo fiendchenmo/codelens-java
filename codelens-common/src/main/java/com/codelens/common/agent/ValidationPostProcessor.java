@@ -9,6 +9,11 @@ import com.google.gson.JsonElement;
 import com.google.gson.JsonObject;
 import com.google.gson.JsonParser;
 
+import java.util.HashSet;
+import java.util.Set;
+
+// SYNC_VERSION: 2026-06-03-v0.6.6
+// IMPACT: LOGIC_CHANGE
 /**
  * METHOD_ANALYSIS 输出后处理器。
  * <p>
@@ -63,6 +68,9 @@ public class ValidationPostProcessor {
             l2Confidence.addProperty("overallScore", toScore(overall));
             l2Confidence.addProperty("reasoningBasis", toBasis(overall));
             l2Confidence.add("riskIndicators", buildEnrichedRisks(l2Confidence, vr));
+
+            // 5. 回写 l1Evidence.calls[].status — 标记校验通过的 call
+            markCallStatusFromValidation(l1Evidence, vr);
 
             return methodObj.toString();
 
@@ -163,6 +171,38 @@ public class ValidationPostProcessor {
             enriched.add(issue.toString());
         }
         return enriched;
+    }
+
+    /**
+     * 根据 EvidenceValidator 的校验结果回写 l1Evidence.calls[].status。
+     * <p>
+     * vr.issues 只记录失败项，不在 issues 中的 call 即为校验通过 → status=1。
+     * buildWrappedJson 中 calls 排在 fieldsUsed 前面拼接成 dependencies 数组，
+     * 所以 calls 的 index 直接对应 dependencies 数组的前 calls.size() 个位置。
+     * </p>
+     */
+    static void markCallStatusFromValidation(JsonObject l1Evidence, ValidationResult vr) {
+        JsonArray callsArr = l1Evidence.getAsJsonArray("calls");
+        if (callsArr == null || callsArr.size() == 0) return;
+
+        // 收集 dependencies 分类下的失败索引
+        Set<Integer> failedDepIndices = new HashSet<>();
+        for (EvidenceValidator.ValidationIssue issue : vr.issues) {
+            if ("dependencies".equals(issue.category) && issue.index >= 0) {
+                failedDepIndices.add(issue.index);
+            }
+        }
+
+        // calls 在 dependencies 数组中排在 fieldsUsed 前面，
+        // 因此 indices 0..callsCount-1 对应 calls
+        int callsCount = callsArr.size();
+        for (int i = 0; i < callsCount; i++) {
+            JsonElement callEl = callsArr.get(i);
+            if (callEl.isJsonObject()) {
+                int status = failedDepIndices.contains(i) ? 0 : 1;
+                callEl.getAsJsonObject().addProperty("status", status);
+            }
+        }
     }
 
     /**
