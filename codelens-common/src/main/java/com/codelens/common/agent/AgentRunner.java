@@ -25,10 +25,16 @@ public class AgentRunner {
 
     private final LLMClient llmClient;
     private final GranularCache cache;
+    private final boolean noValidate;
 
     public AgentRunner(LLMClient llmClient, GranularCache cache) {
+        this(llmClient, cache, false);
+    }
+
+    public AgentRunner(LLMClient llmClient, GranularCache cache, boolean noValidate) {
         this.llmClient = llmClient;
         this.cache = cache;
+        this.noValidate = noValidate;
     }
 
     /**
@@ -301,14 +307,24 @@ public class AgentRunner {
         long latencyMs = System.currentTimeMillis() - start;
 
         if (success) {
-            task.setOutput(llmOutput);
+            // Post-validation for METHOD_ANALYSIS: validate claims against source code
+            String finalOutput = llmOutput;
+            if (!noValidate && task.getTaskType() == TaskType.METHOD_ANALYSIS && cacheInput != null) {
+                try {
+                    finalOutput = ValidationPostProcessor.process(llmOutput, cacheInput);
+                } catch (Exception e) {
+                    // Post-validation failure must NOT break main flow
+                }
+            }
+
+            task.setOutput(finalOutput);
             CacheGranule granule = CacheGranule.builder()
                     .taskType(task.getTaskType())
                     .version("1.0")
                     .contentType("json")
                     .contentHash(contentHash)
                     .modelId("stub")
-                    .output(llmOutput)
+                    .output(finalOutput)
                     .createdAt(System.currentTimeMillis())
                     .invalidatedBy(Collections.<String>emptyList())
                     .build();
