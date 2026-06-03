@@ -12,7 +12,7 @@ import com.google.gson.JsonParser;
 import java.util.HashSet;
 import java.util.Set;
 
-// SYNC_VERSION: 2026-06-03-v0.6.6
+// SYNC_VERSION: 2026-06-03-v0.6.7
 // IMPACT: LOGIC_CHANGE
 /**
  * METHOD_ANALYSIS 输出后处理器。
@@ -70,7 +70,7 @@ public class ValidationPostProcessor {
             l2Confidence.add("riskIndicators", buildEnrichedRisks(l2Confidence, vr));
 
             // 5. 回写 l1Evidence.calls[].status — 标记校验通过的 call
-            markCallStatusFromValidation(l1Evidence, vr);
+            markCallStatusFromValidation(l1Evidence, vr, sourceLines);
 
             return methodObj.toString();
 
@@ -148,6 +148,11 @@ public class ValidationPostProcessor {
             if (name == null || name.isEmpty()) continue;
 
             int line = findLineInSource(name, sourceLines);
+            if (line == 0) {
+                // 跨文件引用或名称不匹配，当前文件无法验证 → 跳过
+                // 不计入 totalChecked，不产生 L0 行号越界风险
+                continue;
+            }
             JsonObject dep = new JsonObject();
             dep.addProperty("name", name);
             dep.addProperty("line", line);
@@ -178,14 +183,15 @@ public class ValidationPostProcessor {
      * <p>
      * vr.issues 只记录失败项，不在 issues 中的 call 即为校验通过 → status=1。
      * buildWrappedJson 中 calls 排在 fieldsUsed 前面拼接成 dependencies 数组，
-     * 所以 calls 的 index 直接对应 dependencies 数组的前 calls.size() 个位置。
+     * 但跨文件调用（line==0）已被跳过不加入 deps，因此需要跟踪实际的 deps 索引。
      * </p>
      */
-    static void markCallStatusFromValidation(JsonObject l1Evidence, ValidationResult vr) {
+    static void markCallStatusFromValidation(JsonObject l1Evidence, ValidationResult vr,
+                                              String[] sourceLines) {
         JsonArray callsArr = l1Evidence.getAsJsonArray("calls");
         if (callsArr == null || callsArr.size() == 0) return;
 
-        // 收集 dependencies 分类下的失败索引
+        // 收集 dependencies 分类下的失败索引（指向 deps 数组）
         Set<Integer> failedDepIndices = new HashSet<>();
         for (EvidenceValidator.ValidationIssue issue : vr.issues) {
             if ("dependencies".equals(issue.category) && issue.index >= 0) {
@@ -193,30 +199,61 @@ public class ValidationPostProcessor {
             }
         }
 
-        // calls 在 dependencies 数组中排在 fieldsUsed 前面，
-        // 因此 indices 0..callsCount-1 对应 calls
         int callsCount = callsArr.size();
+        int depIdx = 0;  // 实际在 deps 数组中的位置（跳过未验证的 call）
         for (int i = 0; i < callsCount; i++) {
             JsonElement callEl = callsArr.get(i);
-            if (callEl.isJsonObject()) {
-                int status = failedDepIndices.contains(i) ? 0 : 1;
-                callEl.getAsJsonObject().addProperty("status", status);
-            }
+            if (!callEl.isJsonObject()) continue;
+
+            // 与 addClaimsToDeps 保持一致的跳过逻辑
+            JsonObject obj = callEl.getAsJsonObject();
+            JsonElement targetEl = obj.get("target");
+            String target = (targetEl != null && targetEl.isJsonPrimitive()) ? targetEl.getAsString() : null;
+            if (target == null || target.isEmpty()) continue;
+
+            int line = findLineInSource(target, sourceLines);
+            if (line == 0) continue;  // 跨文件调用，未加入 deps → 不写 status
+
+            obj.addProperty("status", failedDepIndices.contains(depIdx) ? 0 : 1);
+            depIdx++;
         }
     }
 
     /**
      * 在源码行中搜索 name，返回 1-indexed 行号。
      * 使用 {@code String.contains()} 做模糊匹配。
+     * <p>
+     * 匹配策略：
+     * <ol>
+     *   <li>全名匹配（优先）：name 直接出现在源码行中</li>
+     *   <li>短名匹配（降级）：取 name 最后一个 {@code .} 后的部分匹配</li>
+     * </ol>
+     * 示例：{@code fileBillCmLogService.selectPageDataByMap} → 全名失败
+     * → 短名 {@code selectPageDataByMap} → 匹配成功。
      *
      * @param name        要搜索的字段名/方法名
      * @param sourceLines 源码行数组
      * @return 1-indexed 行号，未找到返回 0
      */
     static int findLineInSource(String name, String[] sourceLines) {
+        // 1. 全名匹配
         for (int i = 0; i < sourceLines.length; i++) {
             if (sourceLines[i].contains(name)) {
                 return i + 1;
+            }
+        }
+        // 2. 短名匹配：取最后一个 . 后的部分
+        //    "fileBillCmLogService.selectPageDataByMap" → "selectPageDataByMap"
+        //    "EcsBillFileException." → "EcsBillFileException"
+        int lastDot = name.lastIndexOf('.');
+        if (lastDot >= 0) {
+            String shortName = name.substring(lastDot + 1);
+            if (!shortName.isEmpty()) {
+                for (int i = 0; i < sourceLines.length; i++) {
+                    if (sourceLines[i].contains(shortName)) {
+                        return i + 1;
+                    }
+                }
             }
         }
         return 0;
