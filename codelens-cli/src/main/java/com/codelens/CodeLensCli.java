@@ -111,7 +111,7 @@ public class CodeLensCli {
         switch (command) {
             case "analyze":
                 if (multiMode) {
-                    handleAnalyzeMulti(args);
+                    handleAnalyzeMulti(args, noValidate);
                 } else {
                     handleAnalyze(args, noValidate, noCache, rawJson, schemaVersion);
                 }
@@ -124,7 +124,7 @@ public class CodeLensCli {
                 break;
             case "full":
                 if (multiMode) {
-                    handleFullMulti(args);
+                    handleFullMulti(args, noValidate);
                 } else {
                     handleFull(args, noValidate, noCache, rawJson, schemaVersion);
                 }
@@ -631,12 +631,12 @@ public class CodeLensCli {
 
     // ==================== Multi-Agent 模式 ====================
 
-    private static void handleAnalyzeMulti(String[] args) {
+    private static void handleAnalyzeMulti(String[] args, boolean noValidate) {
         // 检查 --source 标志：存在则进入模块级多Agent分析模式
         Map<String, String> options = parseOptions(args);
         String sourceDir = options.get("source");
         if (sourceDir != null && !sourceDir.isEmpty()) {
-            handleModuleAnalysis(args, options, sourceDir);
+            handleModuleAnalysis(args, options, sourceDir, noValidate);
             return;
         }
 
@@ -670,7 +670,7 @@ public class CodeLensCli {
             System.out.println("文件: " + filePath);
             printLlmConfig(apiUrl, model, temperature);
 
-            String jsonResult = runMultiAgent(sourceFile, apiKey, apiUrl, model, temperature);
+            String jsonResult = runMultiAgent(sourceFile, apiKey, apiUrl, model, temperature, noValidate);
             System.out.println(ColorUtil.heading("━━━ 分析结果 ━━━"));
             System.out.println(jsonResult);
 
@@ -684,7 +684,7 @@ public class CodeLensCli {
      * 模块级多Agent分析：目录扫描 → 逐个文件多Agent → 包级聚合。
      */
     private static void handleModuleAnalysis(String[] args, Map<String, String> options,
-                                              String sourceDir) {
+                                              String sourceDir, boolean noValidate) {
         File dir = new File(sourceDir);
         if (!dir.exists() || !dir.isDirectory()) {
             System.out.println("[!] 源码目录不存在: " + sourceDir);
@@ -727,7 +727,7 @@ public class CodeLensCli {
             com.codelens.common.cache.GranularCacheAdapter granularCache =
                     new com.codelens.common.cache.GranularCacheAdapter(fsCache);
             com.codelens.common.agent.AgentRunner runner =
-                    new com.codelens.common.agent.AgentRunner(llmClient, granularCache);
+                    new com.codelens.common.agent.AgentRunner(llmClient, granularCache, noValidate);
 
             List<FileAnalysisResult> fileResults = new ArrayList<>();
 
@@ -854,7 +854,7 @@ public class CodeLensCli {
         }
     }
 
-    private static void handleFullMulti(String[] args) {
+    private static void handleFullMulti(String[] args, boolean noValidate) {
         if (args.length < 2) {
             System.out.println("[!] 请提供 Java 文件路径");
             System.out.println("用法: java -jar codelens.jar full <Java文件路径> [API_KEY] --mode=multi");
@@ -905,7 +905,7 @@ public class CodeLensCli {
 
                 // Multi-Agent 分析
                 System.out.println(ColorUtil.heading("━━━ Multi-Agent 分析 ━━━"));
-                String jsonResult = runMultiAgent(sourceFile, apiKey, apiUrl, model, temperature);
+                String jsonResult = runMultiAgent(sourceFile, apiKey, apiUrl, model, temperature, noValidate);
 
                 System.out.println(ColorUtil.heading("━━━ 分析结果 ━━━"));
                 System.out.println(jsonResult);
@@ -939,7 +939,8 @@ public class CodeLensCli {
      * 流程: SUMMARY → METHOD_ANALYSIS × N → ReportMerger → ReportConverter
      */
     private static String runMultiAgent(File sourceFile, String apiKey, String apiUrl,
-                                        String model, double temperature) throws Exception {
+                                        String model, double temperature,
+                                        boolean noValidate) throws Exception {
         String sourceCode = new String(Files.readAllBytes(sourceFile.toPath()));
 
         // 1. 创建 CliLLMClient
@@ -952,7 +953,7 @@ public class CodeLensCli {
         GranularCache granularCache = new GranularCacheAdapter(fsCache);
 
         // 3. 创建 AgentRunner
-        AgentRunner runner = new AgentRunner(llmClient, granularCache);
+        AgentRunner runner = new AgentRunner(llmClient, granularCache, noValidate);
         List<ExecutionTrace> traces = new ArrayList<>();
 
         // 4. STEP 1: SUMMARY
