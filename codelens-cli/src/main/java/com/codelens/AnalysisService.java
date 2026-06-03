@@ -42,12 +42,12 @@ public class AnalysisService {
     private static FileSystemCache cachedCache;
     private static String cachedProjectRoot;
 
-    private static FileSystemCache getCache(Path projectRoot, boolean noCache) {
+    private static FileSystemCache getCache(Path projectRoot) {
         String root = projectRoot.toString();
         if (cachedCache != null && root.equals(cachedProjectRoot)) {
             return cachedCache;
         }
-        CacheConfig cacheConfig = !noCache ? CacheConfig.defaults(root) : CacheConfig.disabled();
+        CacheConfig cacheConfig = CacheConfig.defaults(root);
         cachedCache = new FileSystemCache(cacheConfig);
         cachedProjectRoot = root;
         return cachedCache;
@@ -120,7 +120,7 @@ public class AnalysisService {
             // 检查缓存
             Path projectRoot = JavaParserService.findProjectRoot(filePath);
             if (projectRoot == null) projectRoot = filePath.getParent();
-            FileSystemCache cache = getCache(projectRoot, noCache);
+            FileSystemCache cache = getCache(projectRoot);
             CacheEntry cachedEntry = cache.lookup(filePath.toString(), sourceCode, model);
             String cachedSummary = (cachedEntry != null) ? cachedEntry.getResult() : null;
             
