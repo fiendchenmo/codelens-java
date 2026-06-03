@@ -8,6 +8,7 @@ import com.codelens.common.agent.*;
 import com.codelens.common.cache.*;
 import com.codelens.common.diff.ChangedFile;
 import com.codelens.common.diff.DiffParser;
+import com.codelens.common.diff.JGitDiffAdapter;
 import com.codelens.common.diff.ImpactAnalyzer;
 import com.codelens.common.diff.ImpactNode;
 import com.codelens.common.diff.ImpactReport;
@@ -1082,10 +1083,10 @@ public class CodeLensCli {
         System.out.println("基准: " + baseCommit + " → HEAD");
         System.out.println("最大跳数: " + maxHops);
 
-        // 3. 解析 diff
+        // 3. 解析 diff（JGit 优先，失败时降级到 DiffParser）
         List<ChangedFile> changes;
         try {
-            changes = DiffParser.parseDiffFromGit(repoPath, baseCommit);
+            changes = JGitDiffAdapter.parseDiff(repoPath, baseCommit);
         } catch (IllegalArgumentException e) {
             System.out.println("[!] 无效的基准 commit: " + baseCommit);
             return;
@@ -1093,8 +1094,19 @@ public class CodeLensCli {
             System.out.println("[!] " + e.getMessage());
             return;
         } catch (Exception e) {
-            System.out.println("[!] diff 解析失败: " + e.getMessage());
-            return;
+            System.out.println(ColorUtil.warning("⚠ JGit 解析失败，降级到 DiffParser: " + e.getMessage()));
+            try {
+                changes = DiffParser.parseDiffFromGit(repoPath, baseCommit);
+            } catch (IllegalArgumentException e2) {
+                System.out.println("[!] 无效的基准 commit: " + baseCommit);
+                return;
+            } catch (IllegalStateException e2) {
+                System.out.println("[!] " + e2.getMessage());
+                return;
+            } catch (Exception e2) {
+                System.out.println("[!] diff 解析失败: " + e2.getMessage());
+                return;
+            }
         }
 
         if (changes.isEmpty()) {
