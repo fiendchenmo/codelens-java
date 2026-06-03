@@ -28,7 +28,7 @@ public class ReportConverterTest {
     @Test
     public void testConvertSingleMethod() {
         L1Evidence l1 = new L1Evidence(
-                Arrays.asList("validate", "save"),
+                Arrays.asList(new L1Call("validate"), new L1Call("save")),
                 Collections.singletonList("handle"),
                 Collections.singletonList("repository"));
 

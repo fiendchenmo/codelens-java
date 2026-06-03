@@ -5,6 +5,7 @@ import com.codelens.common.validators.EvidenceValidator;
 import com.codelens.common.validators.EvidenceValidator.Confidence;
 import com.codelens.common.validators.EvidenceValidator.ValidationResult;
 import com.google.gson.JsonArray;
+import com.google.gson.JsonElement;
 import com.google.gson.JsonObject;
 import com.google.gson.JsonParser;
 
@@ -112,11 +113,32 @@ public class ValidationPostProcessor {
     /**
      * 将 LLM 声明的 calls/fieldsUsed 映射到 dependencies 数组。
      * 每项在源码中查找真实行号，找不到时 line=0（触发 EvidenceValidator 的越界检测）。
+     * <p>
+     * 兼容两种输入格式：
+     * <ul>
+     *   <li>JsonObject（calls 新格式）：取 {@code target} 字段作为方法名</li>
+     *   <li>JsonPrimitive（fieldsUsed / 旧版 calls）：直接取字符串</li>
+     * </ul>
+     * </p>
      */
     private static void addClaimsToDeps(JsonArray deps, JsonArray claims, String[] sourceLines) {
         if (claims == null) return;
         for (int i = 0; i < claims.size(); i++) {
-            String name = claims.get(i).getAsString();
+            JsonElement item = claims.get(i);
+            String name;
+            if (item.isJsonObject()) {
+                // L1Call 对象格式：取 target 字段
+                JsonObject obj = item.getAsJsonObject();
+                JsonElement target = obj.get("target");
+                name = (target != null && target.isJsonPrimitive()) ? target.getAsString() : null;
+            } else if (item.isJsonPrimitive()) {
+                // 字符串格式：直接使用
+                name = item.getAsString();
+            } else {
+                continue;
+            }
+            if (name == null || name.isEmpty()) continue;
+
             int line = findLineInSource(name, sourceLines);
             JsonObject dep = new JsonObject();
             dep.addProperty("name", name);
