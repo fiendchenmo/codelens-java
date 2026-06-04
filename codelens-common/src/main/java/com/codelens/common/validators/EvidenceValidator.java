@@ -6,6 +6,7 @@
 package com.codelens.common.validators;
 
 import java.util.*;
+import java.util.regex.Pattern;
 
 /**
  * L1 证据校验器
@@ -98,6 +99,50 @@ public class EvidenceValidator {
         return result;
     }
 
+    /**
+     * 多级名称匹配：判断 name 是否在 lineContent 中出现。
+     * <p>
+     * 匹配策略（按优先级）：
+     * <ol>
+     *   <li>全名 contains — name 直接出现在行中</li>
+     *   <li>末2段 contains — 取最后两个 . 分段匹配（如 {@code "StringUtil.equals"}）</li>
+     *   <li>末1段 word boundary — 取最后一个 . 后的部分，用 {@code \b} 包裹匹配，
+     *       防止 {@code "get"} 误匹配 {@code "getCode"} 等</li>
+     * </ol>
+     *
+     * @return true 表示匹配成功
+     */
+    static boolean matchesNameInLine(String name, String lineContent) {
+        // 1. 全名 contains
+        if (lineContent.contains(name)) return true;
+
+        // 2. 末2段 contains
+        int lastDot = name.lastIndexOf('.');
+        if (lastDot > 0) {
+            int secondDot = name.lastIndexOf('.', lastDot - 1);
+            String lastTwo = (secondDot >= 0) ? name.substring(secondDot + 1) : name.substring(lastDot + 1);
+            if (!lastTwo.isEmpty() && lineContent.contains(lastTwo)) return true;
+        }
+
+        // 3. 末1段 word boundary
+        if (lastDot >= 0) {
+            String shortName = name.substring(lastDot + 1);
+            if (!shortName.isEmpty()) {
+                try {
+                    if (Pattern.compile("\\b" + Pattern.quote(shortName) + "\\b")
+                            .matcher(lineContent).find()) {
+                        return true;
+                    }
+                } catch (Exception e) {
+                    // Pattern 出错时降级为普通 contains
+                    if (lineContent.contains(shortName)) return true;
+                }
+            }
+        }
+
+        return false;
+    }
+
     private static void validateDependencies(String json, String[] sourceLines, ValidationResult result) {
         String arrayContent = extractJsonArray(json, "dependencies");
         if (arrayContent == null) return;
@@ -115,7 +160,7 @@ public class EvidenceValidator {
                             "行号超出源码范围（源码共 " + sourceLines.length + " 行）", Confidence.LOW);
                 } else {
                     String actualLine = sourceLines[claimedLine - 1];
-                    if (actualLine.contains(name) || (name.endsWith("Mapper") && actualLine.contains("@Mapper"))) {
+                    if (matchesNameInLine(name, actualLine) || (name.endsWith("Mapper") && actualLine.contains("@Mapper"))) {
                         result.passedCount++;
                     } else {
                         // @Autowired 容错：向前查找最多 2 行，跳过注解行
@@ -127,7 +172,7 @@ public class EvidenceValidator {
                             if (lineContent.startsWith("@Autowired") || lineContent.startsWith("@Resource") || lineContent.startsWith("@Inject")) {
                                 continue;
                             }
-                            if (lineContent.contains(name)) {
+                            if (matchesNameInLine(name, lineContent)) {
                                 foundNearby = true;
                                 break;
                             }
