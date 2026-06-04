@@ -19,7 +19,10 @@ public class ValidationPostProcessorTest {
             "{\n" +
             "  \"method\": \"processOrder\",\n" +
             "  \"l1Evidence\": {\n" +
-            "    \"calls\": [\"validateOrder\", \"saveOrder\"],\n" +
+            "    \"calls\": [\n" +
+            "      {\"target\": \"validateOrder\", \"line\": 4},\n" +
+            "      {\"target\": \"saveOrder\", \"line\": 5}\n" +
+            "    ],\n" +
             "    \"calledBy\": [\"handleRequest\"],\n" +
             "    \"fieldsUsed\": [\"orderRepository\"]\n" +
             "  },\n" +
@@ -61,23 +64,31 @@ public class ValidationPostProcessorTest {
 
     @Test
     void testValidation_ClaimsNotFound_LowScore() {
-        String methodJson = VALID_METHOD_JSON
-                .replace("\"calls\": [\"validateOrder\", \"saveOrder\"]",
-                         "\"calls\": [\"nonExistentMethod\"]")
-                .replace("\"fieldsUsed\": [\"orderRepository\"]",
-                         "\"fieldsUsed\": []")
-                .replace("\"riskIndicators\": [\"complex logic flow\"]",
-                         "\"riskIndicators\": []");
+        // 字符串格式的 nonExistentMethod，无 LLM line → 不加入 deps
+        String methodJson =
+                "{\n" +
+                "  \"method\": \"processOrder\",\n" +
+                "  \"l1Evidence\": {\n" +
+                "    \"calls\": [\"nonExistentMethod\"],\n" +
+                "    \"calledBy\": [\"handleRequest\"],\n" +
+                "    \"fieldsUsed\": []\n" +
+                "  },\n" +
+                "  \"l2Confidence\": {\n" +
+                "    \"overallScore\": 0.95,\n" +
+                "    \"reasoningBasis\": \"SOLID_ANALYSIS\",\n" +
+                "    \"riskIndicators\": []\n" +
+                "  }\n" +
+                "}";
 
         String enriched = ValidationPostProcessor.process(methodJson, VALID_SOURCE);
         JsonObject result = JsonParser.parseString(enriched).getAsJsonObject();
         JsonObject l2 = result.getAsJsonObject("l2Confidence");
 
-        // nonExistentMethod not found in source → line=0 → EvidenceValidator 判越界 → LOW
+        // nonExistentMethod 是字符串格式，无 LLM 声称行号 → 不加入 deps → totalChecked=0 → UNKNOWN
         double score = l2.get("overallScore").getAsDouble();
         String basis = l2.get("reasoningBasis").getAsString();
-        assertEquals(0.2, score, 0.001, "Claims not found should produce LOW → 0.2");
-        assertEquals("PARTIAL", basis);
+        assertEquals(0.0, score, 0.001, "String claims without line → UNKNOWN → 0.0");
+        assertEquals("UNKNOWN", basis);
     }
 
     // ==================== TC-03: sourceCode = null → 返回原始 JSON ====================
