@@ -52,9 +52,6 @@ public class ValidationPostProcessor {
             }
 
             String[] sourceLines = sourceCode.split("\n");
-            String methodName = methodObj.has("method") ? methodObj.get("method").getAsString() : "";
-            int methodStartLine = findMethodStartLine(methodName, sourceLines);
-            JsonArray methodRisks = methodObj.getAsJsonArray("risks");
 
             // 1. 包装为 EvidenceValidator 期望的格式
             JsonObject wrapped = buildWrappedJson(l1Evidence, l2Confidence, sourceLines);
@@ -74,21 +71,6 @@ public class ValidationPostProcessor {
 
             // 5. 回写 l1Evidence.calls[].status — 标记校验通过的 call
             markCallStatusFromValidation(l1Evidence, vr);
-
-            // 6. methodRisks 偏移行号 → 文件绝对行号转换（原地修改 methodObj.risks）
-            if (methodRisks != null && methodStartLine > 0) {
-                for (JsonElement riskEl : methodRisks) {
-                    if (riskEl.isJsonObject()) {
-                        JsonObject riskObj = riskEl.getAsJsonObject();
-                        if (riskObj.has("line")) {
-                            int offsetLine = riskObj.get("line").getAsInt();
-                            if (offsetLine > 0) {
-                                riskObj.addProperty("line", methodStartLine + offsetLine - 1);
-                            }
-                        }
-                    }
-                }
-            }
 
             return methodObj.toString();
 
@@ -253,38 +235,6 @@ public class ValidationPostProcessor {
     static int findLineInSource(String name, String[] sourceLines) {
         for (int i = 0; i < sourceLines.length; i++) {
             if (EvidenceValidator.matchesNameInLine(name, sourceLines[i])) {
-                return i + 1;
-            }
-        }
-        return 0;
-    }
-
-    /**
-     * 在源码行中搜索 methodName 对应的方法签名，返回方法起始行号（1-indexed）。
-     * <p>
-     * 用于将 LLM 输出的方法体偏移行号转换为文件绝对行号。
-     * 提取简单方法名（去掉类前缀和参数列表），匹配包含方法声明关键字的行。
-     * </p>
-     *
-     * @param methodName  方法名（可含类前缀和参数）
-     * @param sourceLines 源码行数组
-     * @return 1-indexed 方法起始行号，未找到返回 0
-     */
-    private static int findMethodStartLine(String methodName, String[] sourceLines) {
-        if (methodName == null || methodName.isEmpty()) return 0;
-        // 提取简单方法名（去掉类前缀和参数）
-        String simpleName = methodName.contains(".") ?
-            methodName.substring(methodName.lastIndexOf('.') + 1) : methodName;
-        // 去掉参数列表
-        if (simpleName.contains("(")) {
-            simpleName = simpleName.substring(0, simpleName.indexOf('('));
-        }
-        if (simpleName.isEmpty()) return 0;
-        for (int i = 0; i < sourceLines.length; i++) {
-            String line = sourceLines[i].trim();
-            if (line.contains(simpleName) && (line.contains("void ") || line.contains("public ") ||
-                line.contains("private ") || line.contains("protected ") || line.contains("static ") ||
-                line.contains("def ") || line.contains("fun "))) {
                 return i + 1;
             }
         }
