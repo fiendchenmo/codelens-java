@@ -24,7 +24,7 @@ public class ValidationPostProcessorTest {
             "      {\"target\": \"saveOrder\", \"line\": 5}\n" +
             "    ],\n" +
             "    \"calledBy\": [\"handleRequest\"],\n" +
-            "    \"fieldsUsed\": [\"orderRepository\"]\n" +
+            "    \"fieldsUsed\": [{\"target\": \"orderRepository\", \"line\": 2}]\n" +
             "  },\n" +
             "  \"l2Confidence\": {\n" +
             "    \"overallScore\": 0.95,\n" +
@@ -52,7 +52,7 @@ public class ValidationPostProcessorTest {
         JsonObject result = JsonParser.parseString(enriched).getAsJsonObject();
         JsonObject l2 = result.getAsJsonObject("l2Confidence");
 
-        // validateOrder (line 4), saveOrder (line 5), orderRepository (line 2) — all found
+        // validateOrder (line 4), saveOrder (line 5), orderRepository (line 2) — all pass
         double score = l2.get("overallScore").getAsDouble();
         String basis = l2.get("reasoningBasis").getAsString();
 
@@ -84,11 +84,11 @@ public class ValidationPostProcessorTest {
         JsonObject result = JsonParser.parseString(enriched).getAsJsonObject();
         JsonObject l2 = result.getAsJsonObject("l2Confidence");
 
-        // nonExistentMethod 是字符串格式，无 LLM 声称行号 → 不加入 deps → totalChecked=0 → UNKNOWN
+        // nonExistentMethod 字符串格式 → line=0 → 越界失败 → 0/1 → LOW
         double score = l2.get("overallScore").getAsDouble();
         String basis = l2.get("reasoningBasis").getAsString();
-        assertEquals(0.0, score, 0.001, "String claims without line → UNKNOWN → 0.0");
-        assertEquals("UNKNOWN", basis);
+        assertEquals(0.2, score, 0.001, "String claims without line → line=0 → LOW → 0.2");
+        assertEquals("PARTIAL", basis);
     }
 
     // ==================== TC-03: sourceCode = null → 返回原始 JSON ====================
