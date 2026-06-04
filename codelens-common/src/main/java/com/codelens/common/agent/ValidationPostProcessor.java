@@ -52,9 +52,10 @@ public class ValidationPostProcessor {
             }
 
             String[] sourceLines = sourceCode.split("\n");
+            JsonArray methodRisks = methodObj.getAsJsonArray("risks");
 
             // 1. 包装为 EvidenceValidator 期望的格式
-            JsonObject wrapped = buildWrappedJson(l1Evidence, l2Confidence, sourceLines);
+            JsonObject wrapped = buildWrappedJson(l1Evidence, l2Confidence, methodRisks, sourceLines);
             String wrappedStr = wrapped.toString();
 
             // 2. L1 证据校验
@@ -81,16 +82,18 @@ public class ValidationPostProcessor {
     }
 
     /**
-     * 将 method 级别的 l1Evidence / l2Confidence 包装为 EvidenceValidator 期望的完整 JSON 格式。
+     * 将 method 级别的 l1Evidence / l2Confidence / methodRisks 包装为 EvidenceValidator
+     * 期望的完整 JSON 格式。
      * <ul>
      *   <li>{@code l1Evidence.calls} + {@code l1Evidence.fieldsUsed} → {@code dependencies} 数组
      *       每条含 {@code name} 和源码中找到的 {@code line}（找不到时 line=0）</li>
-     *   <li>{@code l2Confidence.riskIndicators} → {@code risks} 数组（虚拟 line=1，保证通过范围检查）</li>
+     *   <li>{@code methodJson.risks}（LLM 原始输出，含真实行号）优先 → {@code risks} 数组；
+     *       回退 {@code l2Confidence.riskIndicators}（纯字符串，虚拟 line=1）</li>
      *   <li>{@code keyMethods} = 空数组（方法级无需校验本方法的行号）</li>
      * </ul>
      */
     static JsonObject buildWrappedJson(JsonObject l1Evidence, JsonObject l2Confidence,
-                                        String[] sourceLines) {
+                                        JsonArray methodRisks, String[] sourceLines) {
         JsonObject wrapped = new JsonObject();
 
         // calls + fieldsUsed → dependencies
@@ -99,15 +102,26 @@ public class ValidationPostProcessor {
         addClaimsToDeps(deps, l1Evidence.getAsJsonArray("fieldsUsed"), sourceLines);
         wrapped.add("dependencies", deps);
 
-        // riskIndicators → risks（虚拟 line=1 保证通过范围检查）
+        // 优先使用 methodJson.risks（LLM 原始输出，含真实行号）
         JsonArray risks = new JsonArray();
-        JsonArray riskIndicators = l2Confidence.getAsJsonArray("riskIndicators");
-        if (riskIndicators != null) {
-            for (int i = 0; i < riskIndicators.size(); i++) {
-                JsonObject risk = new JsonObject();
-                risk.addProperty("description", riskIndicators.get(i).getAsString());
-                risk.addProperty("line", 1);
-                risks.add(risk);
+        if (methodRisks != null && methodRisks.size() > 0) {
+            for (int i = 0; i < methodRisks.size(); i++) {
+                JsonElement riskEl = methodRisks.get(i);
+                if (riskEl.isJsonObject()) {
+                    risks.add(riskEl.getAsJsonObject());
+                }
+            }
+        }
+        // 回退：l2Confidence.riskIndicators（纯字符串，虚拟行号）
+        if (risks.size() == 0) {
+            JsonArray riskIndicators = l2Confidence.getAsJsonArray("riskIndicators");
+            if (riskIndicators != null) {
+                for (int i = 0; i < riskIndicators.size(); i++) {
+                    JsonObject risk = new JsonObject();
+                    risk.addProperty("description", riskIndicators.get(i).getAsString());
+                    risk.addProperty("line", 1);
+                    risks.add(risk);
+                }
             }
         }
         wrapped.add("risks", risks);
