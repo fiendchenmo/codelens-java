@@ -73,7 +73,7 @@ public class ValidationPostProcessor {
             l2Confidence.add("riskIndicators", buildEnrichedRisks(l2Confidence, vr));
 
             // 5. 回写 l1Evidence.calls[].status — 标记校验通过的 call
-            markCallStatusFromValidation(l1Evidence, vr, sourceLines);
+            markCallStatusFromValidation(l1Evidence, vr);
 
             // 6. methodRisks 偏移行号 → 文件绝对行号转换（原地修改 methodObj.risks）
             if (methodRisks != null && methodStartLine > 0) {
@@ -102,7 +102,7 @@ public class ValidationPostProcessor {
      * 将 method 级别的 l1Evidence 包装为 EvidenceValidator 期望的完整 JSON 格式。
      * <ul>
      *   <li>{@code l1Evidence.calls} + {@code l1Evidence.fieldsUsed} → {@code dependencies} 数组
-     *       每条含 {@code name} 和源码中找到的 {@code line}（找不到时 line=0）</li>
+     *       使用 LLM 原始声称行号，不自行修正</li>
      * </ul>
      */
     static JsonObject buildWrappedJson(JsonObject l1Evidence, JsonObject l2Confidence,
@@ -111,8 +111,8 @@ public class ValidationPostProcessor {
 
         // calls + fieldsUsed → dependencies
         JsonArray deps = new JsonArray();
-        addClaimsToDeps(deps, l1Evidence.getAsJsonArray("calls"), sourceLines);
-        addClaimsToDeps(deps, l1Evidence.getAsJsonArray("fieldsUsed"), sourceLines);
+        addClaimsToDeps(deps, l1Evidence.getAsJsonArray("calls"));
+        addClaimsToDeps(deps, l1Evidence.getAsJsonArray("fieldsUsed"));
         wrapped.add("dependencies", deps);
 
         return wrapped;
@@ -120,39 +120,46 @@ public class ValidationPostProcessor {
 
     /**
      * 将 LLM 声明的 calls/fieldsUsed 映射到 dependencies 数组。
-     * 每项在源码中查找真实行号，找不到时 line=0（触发 EvidenceValidator 的越界检测）。
+     * <p>
+     * 使用 LLM 原始声称行号（l1Evidence.calls[].line），不自行修正。
+     * LLM 未声称行号的（字符串格式或 line=0）不加入验证集，
+     * 避免修正后的行号造成循环论证（L2 永远 1.0）。
+     * </p>
      * <p>
      * 兼容两种输入格式：
      * <ul>
-     *   <li>JsonObject（calls 新格式）：取 {@code target} 字段作为方法名</li>
-     *   <li>JsonPrimitive（fieldsUsed / 旧版 calls）：直接取字符串</li>
+     *   <li>JsonObject（L1Call 格式）：取 {@code target} + {@code line}</li>
+     *   <li>JsonPrimitive（fieldsUsed / 旧版 calls）：纯字符串，无行号 → 跳过</li>
      * </ul>
      * </p>
      */
-    private static void addClaimsToDeps(JsonArray deps, JsonArray claims, String[] sourceLines) {
+    private static void addClaimsToDeps(JsonArray deps, JsonArray claims) {
         if (claims == null) return;
         for (int i = 0; i < claims.size(); i++) {
             JsonElement item = claims.get(i);
             String name;
+            int claimedLine = 0;
             if (item.isJsonObject()) {
-                // L1Call 对象格式：取 target 字段
                 JsonObject obj = item.getAsJsonObject();
                 JsonElement target = obj.get("target");
                 name = (target != null && target.isJsonPrimitive()) ? target.getAsString() : null;
+                // 用 LLM 原始声称行号，不自己修正
+                JsonElement lineEl = obj.get("line");
+                if (lineEl != null && lineEl.isJsonPrimitive()) {
+                    try { claimedLine = lineEl.getAsInt(); } catch (NumberFormatException e) { claimedLine = 0; }
+                }
             } else if (item.isJsonPrimitive()) {
-                // 字符串格式：直接使用
                 name = item.getAsString();
+                // 字符串格式：LLM 没声称行号，无法校验
             } else {
                 continue;
             }
             if (name == null || name.isEmpty()) continue;
+            if (claimedLine == 0) continue;  // LLM 没声称行号，无法校验，跳过
 
-            int line = findLineInSource(name, sourceLines);
-            // line=0 也写入 dep，让 EvidenceValidator 判行号越界（计入 totalChecked 但不通过）
-            // 这样跨文件调用占比越高 → passRate 越低 → L2 confidence 有区分度
             JsonObject dep = new JsonObject();
             dep.addProperty("name", name);
-            dep.addProperty("line", line);
+            dep.addProperty("line", claimedLine);  // LLM 的原始声称行号
             deps.add(dep);
         }
     }
@@ -178,15 +185,14 @@ public class ValidationPostProcessor {
     /**
      * 根据 EvidenceValidator 的校验结果回写 l1Evidence.calls[].status。
      * <p>
-     * vr.issues 只记录失败项，不在 issues 中的 call 即为校验通过 → status=1。
-     * buildWrappedJson 中 calls 排在 fieldsUsed 前面拼接成 dependencies 数组，
-     * 但跨文件调用（line==0）已被跳过不加入 deps，因此需要跟踪实际的 deps 索引。
+     * 使用 LLM 原始 claimedLine 判断是否参与校验。
+     * claimedLine > 0 且不在 failedDepIndices 中 → status=1（校验通过）。
+     * 其他情况（无行号/校验失败）→ status=0。
      * </p>
      * <p>兼容两种输入格式：L1Call 对象格式和字符串格式。
-     * 字符串格式自动转为对象格式并写入 status/line/sourceLine。</p>
+     * 字符串格式自动转为对象格式。</p>
      */
-    static void markCallStatusFromValidation(JsonObject l1Evidence, ValidationResult vr,
-                                              String[] sourceLines) {
+    static void markCallStatusFromValidation(JsonObject l1Evidence, ValidationResult vr) {
         JsonArray callsArr = l1Evidence.getAsJsonArray("calls");
         if (callsArr == null || callsArr.size() == 0) return;
 
@@ -201,34 +207,39 @@ public class ValidationPostProcessor {
         int depIdx = 0;
         for (int i = 0; i < callsArr.size(); i++) {
             JsonElement callEl = callsArr.get(i);
-            String target;
-            int line;
 
             if (callEl.isJsonObject()) {
-                // L1Call 对象格式
+                // L1Call 对象格式：用 LLM 原始 claimedLine
                 JsonObject obj = callEl.getAsJsonObject();
                 JsonElement targetEl = obj.get("target");
-                target = (targetEl != null && targetEl.isJsonPrimitive()) ? targetEl.getAsString() : null;
+                String target = (targetEl != null && targetEl.isJsonPrimitive()) ? targetEl.getAsString() : null;
                 if (target == null || target.isEmpty()) continue;
-                line = findLineInSource(target, sourceLines);
-                // line=0 也设 status=0（跨文件调用，无法验证）
-                obj.addProperty("status", (line > 0 && !failedDepIndices.contains(depIdx)) ? 1 : 0);
+
+                JsonElement lineEl = obj.get("line");
+                int claimedLine = 0;
+                if (lineEl != null && lineEl.isJsonPrimitive()) {
+                    try { claimedLine = lineEl.getAsInt(); } catch (NumberFormatException e) {}
+                }
+                if (claimedLine > 0 && !failedDepIndices.contains(depIdx)) {
+                    obj.addProperty("status", 1);
+                } else {
+                    obj.addProperty("status", 0);
+                }
+                if (claimedLine > 0) depIdx++;
             } else if (callEl.isJsonPrimitive()) {
-                // 字符串格式 → 转为对象格式，写入 status/line/sourceLine
-                target = callEl.getAsString();
+                // 字符串格式 → 转为对象，status=0（无 LLM 行号，无法验证）
+                String target = callEl.getAsString();
                 if (target == null || target.isEmpty()) continue;
-                line = findLineInSource(target, sourceLines);
-                // line=0 也转为对象，status=0（跨文件调用，无法验证）
                 JsonObject obj = new JsonObject();
                 obj.addProperty("target", target);
-                obj.addProperty("line", line);
-                obj.addProperty("sourceLine", line);
-                obj.addProperty("status", (line > 0 && !failedDepIndices.contains(depIdx)) ? 1 : 0);
+                obj.addProperty("line", 0);
+                obj.addProperty("sourceLine", 0);
+                obj.addProperty("status", 0);
                 callsArr.set(i, obj);
+                // 无行号不计入 depIdx
             } else {
                 continue;
             }
-            depIdx++;
         }
     }
 
