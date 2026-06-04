@@ -199,6 +199,8 @@ public class ValidationPostProcessor {
      * buildWrappedJson 中 calls 排在 fieldsUsed 前面拼接成 dependencies 数组，
      * 但跨文件调用（line==0）已被跳过不加入 deps，因此需要跟踪实际的 deps 索引。
      * </p>
+     * <p>兼容两种输入格式：L1Call 对象格式和字符串格式。
+     * 字符串格式自动转为对象格式并写入 status/line/sourceLine。</p>
      */
     static void markCallStatusFromValidation(JsonObject l1Evidence, ValidationResult vr,
                                               String[] sourceLines) {
@@ -213,22 +215,36 @@ public class ValidationPostProcessor {
             }
         }
 
-        int callsCount = callsArr.size();
-        int depIdx = 0;  // 实际在 deps 数组中的位置（跳过未验证的 call）
-        for (int i = 0; i < callsCount; i++) {
+        int depIdx = 0;
+        for (int i = 0; i < callsArr.size(); i++) {
             JsonElement callEl = callsArr.get(i);
-            if (!callEl.isJsonObject()) continue;
+            String target;
+            int line;
 
-            // 与 addClaimsToDeps 保持一致的跳过逻辑
-            JsonObject obj = callEl.getAsJsonObject();
-            JsonElement targetEl = obj.get("target");
-            String target = (targetEl != null && targetEl.isJsonPrimitive()) ? targetEl.getAsString() : null;
-            if (target == null || target.isEmpty()) continue;
-
-            int line = findLineInSource(target, sourceLines);
-            if (line == 0) continue;  // 跨文件调用，未加入 deps → 不写 status
-
-            obj.addProperty("status", failedDepIndices.contains(depIdx) ? 0 : 1);
+            if (callEl.isJsonObject()) {
+                // L1Call 对象格式
+                JsonObject obj = callEl.getAsJsonObject();
+                JsonElement targetEl = obj.get("target");
+                target = (targetEl != null && targetEl.isJsonPrimitive()) ? targetEl.getAsString() : null;
+                if (target == null || target.isEmpty()) continue;
+                line = findLineInSource(target, sourceLines);
+                if (line == 0) continue;
+                obj.addProperty("status", failedDepIndices.contains(depIdx) ? 0 : 1);
+            } else if (callEl.isJsonPrimitive()) {
+                // 字符串格式 → 转为对象格式，写入 status/line/sourceLine
+                target = callEl.getAsString();
+                if (target == null || target.isEmpty()) continue;
+                line = findLineInSource(target, sourceLines);
+                if (line == 0) continue;  // 跨文件调用，不加入 deps
+                JsonObject obj = new JsonObject();
+                obj.addProperty("target", target);
+                obj.addProperty("line", line);
+                obj.addProperty("sourceLine", line);
+                obj.addProperty("status", failedDepIndices.contains(depIdx) ? 0 : 1);
+                callsArr.set(i, obj);  // 替换字符串为对象
+            } else {
+                continue;
+            }
             depIdx++;
         }
     }
