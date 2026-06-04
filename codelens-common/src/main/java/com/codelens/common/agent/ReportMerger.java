@@ -77,6 +77,34 @@ public class ReportMerger {
             method.setL2Confidence(l2);
         }
 
+        // risks（LLM 原始风险项，带行号）
+        JsonElement risksEl = json.get("risks");
+        if (risksEl != null && risksEl.isJsonArray()) {
+            List<RiskItem> riskItems = new ArrayList<>();
+            JsonArray risksArr = risksEl.getAsJsonArray();
+            for (int i = 0; i < risksArr.size(); i++) {
+                JsonElement riskEl = risksArr.get(i);
+                if (riskEl.isJsonObject()) {
+                    JsonObject riskObj = riskEl.getAsJsonObject();
+                    RiskItem ri = new RiskItem();
+                    ri.setType(getStringSafe(riskObj, "type"));
+                    ri.setDescription(getStringSafe(riskObj, "description"));
+                    ri.setLine(getIntSafe(riskObj, "line"));
+                    ri.setSeverity(getStringSafe(riskObj, "severity"));
+                    ri.setImpact(getStringSafe(riskObj, "impact"));
+                    ri.setSuggestion(getStringSafe(riskObj, "suggestion"));
+                    JsonElement confEl = riskObj.get("confidence");
+                    if (confEl != null && confEl.isJsonPrimitive()) {
+                        try {
+                            ri.setConfidence(confEl.getAsDouble());
+                        } catch (NumberFormatException ignored) {}
+                    }
+                    riskItems.add(ri);
+                }
+            }
+            method.setRisks(riskItems);
+        }
+
         return method;
     }
 
