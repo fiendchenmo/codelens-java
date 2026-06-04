@@ -111,8 +111,8 @@ public class ValidationPostProcessor {
 
         // calls + fieldsUsed → dependencies
         JsonArray deps = new JsonArray();
-        addClaimsToDeps(deps, l1Evidence.getAsJsonArray("calls"));
-        addClaimsToDeps(deps, l1Evidence.getAsJsonArray("fieldsUsed"));
+        addClaimsToDeps(deps, l1Evidence.getAsJsonArray("calls"), sourceLines);
+        addClaimsToDeps(deps, l1Evidence.getAsJsonArray("fieldsUsed"), sourceLines);
         wrapped.add("dependencies", deps);
 
         return wrapped;
@@ -121,19 +121,14 @@ public class ValidationPostProcessor {
     /**
      * 将 LLM 声明的 calls/fieldsUsed 映射到 dependencies 数组。
      * <p>
-     * 使用 LLM 原始声称行号（l1Evidence.calls[].line），不自行修正。
-     * line=0（无行号或越界）也写入 dep，让 EvidenceValidator 判行号越界失败。
-     * 避免修正后的行号造成循环论证（L2 永远 1.0）。
-     * </p>
-     * <p>
-     * 兼容两种输入格式：
+     * 混合策略：
      * <ul>
-     *   <li>JsonObject（L1Call 格式）：取 {@code target} + {@code line}</li>
-     *   <li>JsonPrimitive（fieldsUsed / 旧版 calls）：纯字符串，line=0 → 判越界失败</li>
+     *   <li>LLM 提供了 {@code line}（L1Call 对象格式）→ 用原始值（打破循环论证）</li>
+     *   <li>LLM 未提供 line（字符串格式）→ {@code findLineInSource} 解析行号</li>
      * </ul>
      * </p>
      */
-    private static void addClaimsToDeps(JsonArray deps, JsonArray claims) {
+    private static void addClaimsToDeps(JsonArray deps, JsonArray claims, String[] sourceLines) {
         if (claims == null) return;
         for (int i = 0; i < claims.size(); i++) {
             JsonElement item = claims.get(i);
@@ -144,22 +139,26 @@ public class ValidationPostProcessor {
                 JsonObject obj = item.getAsJsonObject();
                 JsonElement target = obj.get("target");
                 name = (target != null && target.isJsonPrimitive()) ? target.getAsString() : null;
-                // 用 LLM 原始声称行号，不自己修正
+                // LLM 提供了 line → 用原始值（打破循环论证）
                 JsonElement lineEl = obj.get("line");
                 if (lineEl != null && lineEl.isJsonPrimitive()) {
                     try { claimedLine = lineEl.getAsInt(); } catch (NumberFormatException e) { claimedLine = 0; }
                 }
             } else if (item.isJsonPrimitive()) {
                 name = item.getAsString();
-                // 字符串格式：LLM 没声称行号 → line=0 → 校验器判越界失败
             } else {
                 continue;
             }
             if (name == null || name.isEmpty()) continue;
 
+            // LLM 未声称行号 → findLineInSource 解析（验证 call 是否存在于当前文件）
+            if (claimedLine == 0) {
+                claimedLine = findLineInSource(name, sourceLines);
+            }
+
             JsonObject dep = new JsonObject();
             dep.addProperty("name", name);
-            dep.addProperty("line", claimedLine);  // LLM 有 line 用原始值，没有 line=0 → 失败
+            dep.addProperty("line", claimedLine);
             deps.add(dep);
         }
     }
