@@ -6,6 +6,7 @@ import com.codelens.common.agent.MethodReport;
 import com.codelens.common.agent.L1Call;
 import com.codelens.common.agent.L1Evidence;
 import com.codelens.common.agent.L2Confidence;
+import com.codelens.common.agent.RiskItem;
 import com.google.gson.Gson;
 import com.google.gson.GsonBuilder;
 import com.google.gson.JsonArray;
@@ -110,8 +111,12 @@ public class ReportConverter {
         }
         m.add("calls", callsArray);
 
-        // risks (empty for now — risks come from L2 riskIndicators)
-        m.add("risks", new JsonArray());
+        // risks from MethodReport
+        if (mr.getRisks() != null && !mr.getRisks().isEmpty()) {
+            m.add("risks", toRiskItemJsonArray(mr.getRisks()));
+        } else {
+            m.add("risks", new JsonArray());
+        }
 
         // l1 evidence (multi-agent specific)
         if (mr.getL1Evidence() != null) {
@@ -153,6 +158,24 @@ public class ReportConverter {
                 obj.addProperty("line", call.getLine());
                 obj.addProperty("sourceLine", call.getSourceLine());
                 obj.addProperty("status", call.getStatus());
+                arr.add(obj);
+            }
+        }
+        return arr;
+    }
+
+    private static JsonArray toRiskItemJsonArray(List<RiskItem> risks) {
+        JsonArray arr = new JsonArray();
+        if (risks != null) {
+            for (RiskItem r : risks) {
+                JsonObject obj = new JsonObject();
+                obj.addProperty("type", r.getType());
+                obj.addProperty("description", r.getDescription());
+                obj.addProperty("line", r.getLine());
+                obj.addProperty("severity", r.getSeverity());
+                if (r.getImpact() != null) obj.addProperty("impact", r.getImpact());
+                if (r.getSuggestion() != null) obj.addProperty("suggestion", r.getSuggestion());
+                obj.addProperty("confidence", r.getConfidence());
                 arr.add(obj);
             }
         }
