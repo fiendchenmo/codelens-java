@@ -73,12 +73,11 @@ public class ValidationPostProcessorTest {
         JsonObject result = JsonParser.parseString(enriched).getAsJsonObject();
         JsonObject l2 = result.getAsJsonObject("l2Confidence");
 
-        // nonExistentMethod not found in source → 被跳过（line=0 不加入 deps）
-        // deps 为空 → totalChecked=0 → UNKNOWN → 0.0
+        // nonExistentMethod not found in source → line=0 → EvidenceValidator 判越界 → LOW
         double score = l2.get("overallScore").getAsDouble();
         String basis = l2.get("reasoningBasis").getAsString();
-        assertEquals(0.0, score, 0.001, "Claims not found skip validation → UNKNOWN → 0.0");
-        assertEquals("UNKNOWN", basis);
+        assertEquals(0.2, score, 0.001, "Claims not found should produce LOW → 0.2");
+        assertEquals("PARTIAL", basis);
     }
 
     // ==================== TC-03: sourceCode = null → 返回原始 JSON ====================
