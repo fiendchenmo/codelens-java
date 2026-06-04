@@ -221,39 +221,16 @@ public class ValidationPostProcessor {
 
     /**
      * 在源码行中搜索 name，返回 1-indexed 行号。
-     * 使用 {@code String.contains()} 做模糊匹配。
-     * <p>
-     * 匹配策略：
-     * <ol>
-     *   <li>全名匹配（优先）：name 直接出现在源码行中</li>
-     *   <li>短名匹配（降级）：取 name 最后一个 {@code .} 后的部分匹配</li>
-     * </ol>
-     * 示例：{@code fileBillCmLogService.selectPageDataByMap} → 全名失败
-     * → 短名 {@code selectPageDataByMap} → 匹配成功。
+     * 委托给 {@link EvidenceValidator#matchesNameInLine} 做多级名称匹配。
      *
      * @param name        要搜索的字段名/方法名
      * @param sourceLines 源码行数组
      * @return 1-indexed 行号，未找到返回 0
      */
     static int findLineInSource(String name, String[] sourceLines) {
-        // 1. 全名匹配
         for (int i = 0; i < sourceLines.length; i++) {
-            if (sourceLines[i].contains(name)) {
+            if (EvidenceValidator.matchesNameInLine(name, sourceLines[i])) {
                 return i + 1;
-            }
-        }
-        // 2. 短名匹配：取最后一个 . 后的部分
-        //    "fileBillCmLogService.selectPageDataByMap" → "selectPageDataByMap"
-        //    "EcsBillFileException." → "EcsBillFileException"
-        int lastDot = name.lastIndexOf('.');
-        if (lastDot >= 0) {
-            String shortName = name.substring(lastDot + 1);
-            if (!shortName.isEmpty()) {
-                for (int i = 0; i < sourceLines.length; i++) {
-                    if (sourceLines[i].contains(shortName)) {
-                        return i + 1;
-                    }
-                }
             }
         }
         return 0;

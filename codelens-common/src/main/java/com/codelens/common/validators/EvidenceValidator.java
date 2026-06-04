@@ -112,7 +112,7 @@ public class EvidenceValidator {
      *
      * @return true 表示匹配成功
      */
-    static boolean matchesNameInLine(String name, String lineContent) {
+    public static boolean matchesNameInLine(String name, String lineContent) {
         // 1. 全名 contains
         if (lineContent.contains(name)) return true;
 
