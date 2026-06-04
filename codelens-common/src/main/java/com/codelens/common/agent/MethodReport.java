@@ -1,5 +1,7 @@
 package com.codelens.common.agent;
 
+import java.util.List;
+
 /**
  * 方法报告数据类。
  */
@@ -10,6 +12,7 @@ public class MethodReport {
     private int line;
     private L1Evidence l1Evidence;
     private L2Confidence l2Confidence;
+    private List<RiskItem> risks;
 
     public MethodReport() {}
 
@@ -32,4 +35,6 @@ public class MethodReport {
     public void setL1Evidence(L1Evidence l1Evidence) { this.l1Evidence = l1Evidence; }
     public L2Confidence getL2Confidence() { return l2Confidence; }
     public void setL2Confidence(L2Confidence l2Confidence) { this.l2Confidence = l2Confidence; }
+    public List<RiskItem> getRisks() { return risks; }
+    public void setRisks(List<RiskItem> risks) { this.risks = risks; }
 }
