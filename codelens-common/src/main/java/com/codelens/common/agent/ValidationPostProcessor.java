@@ -148,11 +148,8 @@ public class ValidationPostProcessor {
             if (name == null || name.isEmpty()) continue;
 
             int line = findLineInSource(name, sourceLines);
-            if (line == 0) {
-                // 跨文件引用或名称不匹配，当前文件无法验证 → 跳过
-                // 不计入 totalChecked，不产生 L0 行号越界风险
-                continue;
-            }
+            // line=0 也写入 dep，让 EvidenceValidator 判行号越界（计入 totalChecked 但不通过）
+            // 这样跨文件调用占比越高 → passRate 越低 → L2 confidence 有区分度
             JsonObject dep = new JsonObject();
             dep.addProperty("name", name);
             dep.addProperty("line", line);
@@ -214,20 +211,20 @@ public class ValidationPostProcessor {
                 target = (targetEl != null && targetEl.isJsonPrimitive()) ? targetEl.getAsString() : null;
                 if (target == null || target.isEmpty()) continue;
                 line = findLineInSource(target, sourceLines);
-                if (line == 0) continue;
-                obj.addProperty("status", failedDepIndices.contains(depIdx) ? 0 : 1);
+                // line=0 也设 status=0（跨文件调用，无法验证）
+                obj.addProperty("status", (line > 0 && !failedDepIndices.contains(depIdx)) ? 1 : 0);
             } else if (callEl.isJsonPrimitive()) {
                 // 字符串格式 → 转为对象格式，写入 status/line/sourceLine
                 target = callEl.getAsString();
                 if (target == null || target.isEmpty()) continue;
                 line = findLineInSource(target, sourceLines);
-                if (line == 0) continue;  // 跨文件调用，不加入 deps
+                // line=0 也转为对象，status=0（跨文件调用，无法验证）
                 JsonObject obj = new JsonObject();
                 obj.addProperty("target", target);
                 obj.addProperty("line", line);
                 obj.addProperty("sourceLine", line);
-                obj.addProperty("status", failedDepIndices.contains(depIdx) ? 0 : 1);
-                callsArr.set(i, obj);  // 替换字符串为对象
+                obj.addProperty("status", (line > 0 && !failedDepIndices.contains(depIdx)) ? 1 : 0);
+                callsArr.set(i, obj);
             } else {
                 continue;
             }
