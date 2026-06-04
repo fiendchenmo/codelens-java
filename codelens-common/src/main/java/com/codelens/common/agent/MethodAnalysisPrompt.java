@@ -35,7 +35,8 @@ public class MethodAnalysisPrompt {
             "- overallScore 必须在 0.0 到 1.0 之间\n" +
             "- reasoningBasis 必须是枚举值之一\n" +
             "- calls / calledBy / fieldsUsed 至少有一个非空\n" +
-            "- risks 中每条风险必须指定精确的 line 行号";
+            "- risks 中每条风险的 line 为 1-indexed 行号（从文件第 1 行开始计数），必须对应方法源码中的实际行号\n" +
+            "- 示例：if (paraMap == null) return; 的 null check 风险应标注为该 if 语句所在行号";
 
     private static final String USER_PROMPT_TEMPLATE =
             "请分析以下方法：\n" +
@@ -50,7 +51,17 @@ public class MethodAnalysisPrompt {
             "{{fileSummary}}\n" +
             "\n" +
             "=== 索引元数据 ===\n" +
-            "{{metadata}}";
+            "{{metadata}}\n" +
+            "\n" +
+            "输出示例（仅作参考，请根据实际代码分析）：\n" +
+            "{\n" +
+            "  \"method\": \"processOrder\",\n" +
+            "  \"l1Evidence\": { \"calls\": [\"validateOrder\"], \"calledBy\": [], \"fieldsUsed\": [] },\n" +
+            "  \"l2Confidence\": { \"overallScore\": 0.8, \"reasoningBasis\": \"SOLID_ANALYSIS\", \"riskIndicators\": [\"缺少参数校验\"] },\n" +
+            "  \"risks\": [\n" +
+            "    { \"type\": \"SECURITY\", \"description\": \"缺少参数校验\", \"line\": 28, \"severity\": \"HIGH\", \"suggestion\": \"添加参数非空校验\" }\n" +
+            "  ]\n" +
+            "}";
 
     /**
      * 生成 system prompt。
