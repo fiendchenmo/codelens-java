@@ -3,6 +3,7 @@ package com.codelens.common.agent;
 import com.codelens.common.models.ArchitectureLayer;
 
 import java.util.List;
+import java.util.Map;
 
 /**
  * 聚合摘要的输出数据模型。
@@ -30,6 +31,18 @@ public class AggregateSummaryOutput {
     private List<FileLayerEntry> fileLayers;
     /** 包级重构建议与风险提示（自然语言，2-4句话） */
     private String refactorOverview;
+
+    // === 扩展统计字段（P1） ===
+    private double avgComplexity;
+    private double l1PassRate;
+    private long analysisElapsedMs;
+    private int lowRiskCount;
+    private Map<String, Integer> complexityDistribution;
+    private Map<String, Integer> visibilityDistribution;
+
+    // === 扩展数据字段（P0） ===
+    private List<ClassEntry> classEntries;
+    private List<InternalDep> internalDeps;
 
     public AggregateSummaryOutput() {
     }
@@ -154,6 +167,23 @@ public class AggregateSummaryOutput {
         this.refactorOverview = refactorOverview;
     }
 
+    public double getAvgComplexity() { return avgComplexity; }
+    public void setAvgComplexity(double avgComplexity) { this.avgComplexity = avgComplexity; }
+    public double getL1PassRate() { return l1PassRate; }
+    public void setL1PassRate(double l1PassRate) { this.l1PassRate = l1PassRate; }
+    public long getAnalysisElapsedMs() { return analysisElapsedMs; }
+    public void setAnalysisElapsedMs(long analysisElapsedMs) { this.analysisElapsedMs = analysisElapsedMs; }
+    public int getLowRiskCount() { return lowRiskCount; }
+    public void setLowRiskCount(int lowRiskCount) { this.lowRiskCount = lowRiskCount; }
+    public Map<String, Integer> getComplexityDistribution() { return complexityDistribution; }
+    public void setComplexityDistribution(Map<String, Integer> complexityDistribution) { this.complexityDistribution = complexityDistribution; }
+    public Map<String, Integer> getVisibilityDistribution() { return visibilityDistribution; }
+    public void setVisibilityDistribution(Map<String, Integer> visibilityDistribution) { this.visibilityDistribution = visibilityDistribution; }
+    public List<ClassEntry> getClassEntries() { return classEntries; }
+    public void setClassEntries(List<ClassEntry> classEntries) { this.classEntries = classEntries; }
+    public List<InternalDep> getInternalDeps() { return internalDeps; }
+    public void setInternalDeps(List<InternalDep> internalDeps) { this.internalDeps = internalDeps; }
+
     /**
      * 文件架构层条目，由 LLM 根据语义分析判断各文件所属架构层。
      */
@@ -203,6 +233,51 @@ public class AggregateSummaryOutput {
         public void setDescription(String description) { this.description = description; }
         public List<String> getAffectedFiles() { return affectedFiles; }
         public void setAffectedFiles(List<String> affectedFiles) { this.affectedFiles = affectedFiles; }
+    }
+
+    /**
+     * 类卡片条目，包级别分析中单个类的摘要信息。
+     */
+    public static class ClassEntry {
+        private String className;
+        private int methodCount;
+        private int highRiskCount;
+        private int mediumRiskCount;
+        private double avgComplexity;
+        private String filePath;
+
+        public ClassEntry() {}
+
+        public String getClassName() { return className; }
+        public void setClassName(String className) { this.className = className; }
+        public int getMethodCount() { return methodCount; }
+        public void setMethodCount(int methodCount) { this.methodCount = methodCount; }
+        public int getHighRiskCount() { return highRiskCount; }
+        public void setHighRiskCount(int highRiskCount) { this.highRiskCount = highRiskCount; }
+        public int getMediumRiskCount() { return mediumRiskCount; }
+        public void setMediumRiskCount(int mediumRiskCount) { this.mediumRiskCount = mediumRiskCount; }
+        public double getAvgComplexity() { return avgComplexity; }
+        public void setAvgComplexity(double avgComplexity) { this.avgComplexity = avgComplexity; }
+        public String getFilePath() { return filePath; }
+        public void setFilePath(String filePath) { this.filePath = filePath; }
+    }
+
+    /**
+     * 包内依赖条目，记录源类到目标类的调用关系及次数。
+     */
+    public static class InternalDep {
+        private String sourceClass;
+        private String targetClass;
+        private int callCount;
+
+        public InternalDep() {}
+
+        public String getSourceClass() { return sourceClass; }
+        public void setSourceClass(String sourceClass) { this.sourceClass = sourceClass; }
+        public String getTargetClass() { return targetClass; }
+        public void setTargetClass(String targetClass) { this.targetClass = targetClass; }
+        public int getCallCount() { return callCount; }
+        public void setCallCount(int callCount) { this.callCount = callCount; }
     }
 
     /**
