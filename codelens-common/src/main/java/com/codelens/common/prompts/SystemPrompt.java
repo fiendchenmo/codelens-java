@@ -71,7 +71,12 @@ public class SystemPrompt {
                 + "- methods[].risks 已覆盖的风险不在顶层重复\n"
                 + "- 顶层 risks 用于放跨方法、跨字段或需要全局视角才能发现的风险（如跨方法调用的数据流安全、多个方法共享的缺陷模式）\n"
                 + "- [AUDIT] 风险标记 confidence: \"POSSIBLE\"（因为依赖跨方法推理）\n"
-                + "- 基于代码事实可直接确认的标记 confidence: \"CERTAIN\"\n";
+                + "- 基于代码事实可直接确认的标记 confidence: \"CERTAIN\"\n"
+                + "\n"
+                + "### 必填约束\n"
+                + "- 每条 risk 必须包含 impact 字段说明影响面\n"
+                + "- 每个 method 必须包含 params 数组（即使为空数组也必须输出）\n"
+                + "- 每个 method 必须包含 description 和 logic_summary 字段\n";
         }
 
         return base;
