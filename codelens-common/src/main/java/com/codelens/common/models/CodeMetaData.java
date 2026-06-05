@@ -159,7 +159,8 @@ public class CodeMetaData {
             + "    {\n"
             + "      \"name\": \"方法名\",\n"
             + "      \"line\": 行号,\n"
-            + "      \"complexity\": \"复杂度(LOW|MEDIUM|HIGH)\",\n"
+            + "      \"complexity\": \"复杂度(LOW|MEDIUM|HIGH)\",\n" +
+            "      \"complexity_value\": \"复杂度数值(1-10, LOW≈1-3, MEDIUM≈4-6, HIGH≈7-10)\",\n"
             + "      \"signature\": \"方法签名(含参数类型)\",\n"
             + "      \"visibility\": \"可见性(public|private|protected)\",\n"
             + "      \"annotations\": \"关键注解(@Transactional/@Async/@Scheduled等)\",\n"
