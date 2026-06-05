@@ -1,5 +1,6 @@
 // SYNC_SOURCE: codelens-common/models/CodeMetaData.java (JSON_SCHEMA + CORE_RULES)
-// SYNC_VERSION: 2026-05-26-v1
+// SYNC_VERSION: 2026-06-05-v2
+// IMPACT: PROMPT_ONLY
 // 维护方：喵呜（CLI端），prompt/校验器相关由喵呜拍板
 // 说明：共享 prompt 模板，buildBase() 提供两端共用的基础 prompt
 // C-3: buildBase(SchemaVersion) 支持版本化
@@ -73,10 +74,18 @@ public class SystemPrompt {
                 + "- [AUDIT] 风险标记 confidence: \"POSSIBLE\"（因为依赖跨方法推理）\n"
                 + "- 基于代码事实可直接确认的标记 confidence: \"CERTAIN\"\n"
                 + "\n"
-                + "### 必填约束\n"
-                + "- 每条 risk 必须包含 impact 字段说明影响面\n"
-                + "- 每个 method 必须包含 params 数组（即使为空数组也必须输出）\n"
-                + "- 每个 method 必须包含 description 和 logic_summary 字段\n";
+                + "【字段完整性规则】\n"
+                + "1. 每个 method 的 description 和 logic_summary 绝不能为空或 N/A，需根据方法签名和代码逻辑推断\n"
+                + "2. 每个 method 必须包含 params 数组，即使只有 name 和 type\n"
+                + "3. 每个 risk 必须包含 impact 字段说明影响面\n"
+                + "4. 每个 param 尽可能提供 usage（使用场景）和 sample（示例值）\n\n"
+                + "【推断规则】\n"
+                + "- 方法名以 get/set/is 开头 → description 描述获取/设置什么数据\n"
+                + "- 方法名以 save/create/update/delete 开头 → logic_summary 描述 CRUD 操作流程\n"
+                + "- 参数类型 Long/Integer 且名称含 Id → usage 填'数据主键标识'\n"
+                + "- 参数类型 List → usage 填'批量操作数据列表'\n"
+                + "- 参数类型 String 且名称含 name/code → usage 填'业务标识'\n"
+                + "- 返回值类型非 void → businessMeaning 描述返回数据的业务含义\n";
         }
 
         return base;
