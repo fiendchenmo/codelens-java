@@ -14,10 +14,13 @@ public class SummaryPromptTest {
         assertNotNull(systemPrompt);
         assertTrue(systemPrompt.contains("className"), "应包含 className 字段说明");
         assertTrue(systemPrompt.contains("stereotype"), "应包含 stereotype 字段说明");
+        assertTrue(systemPrompt.contains("summary"), "应包含 summary 字段说明");
+        assertTrue(systemPrompt.contains("frameworkDesc"), "应包含 frameworkDesc 字段说明");
+        assertTrue(systemPrompt.contains("fields"), "应包含 fields 字段说明");
         assertTrue(systemPrompt.contains("keyMethods"), "应包含 keyMethods 字段说明");
         assertTrue(systemPrompt.contains("dependencies"), "应包含 dependencies 字段说明");
         assertTrue(systemPrompt.contains("complexity"), "应包含 complexity 字段说明");
-        assertTrue(systemPrompt.contains("500 token"), "应包含 token 限制说明");
+        assertTrue(systemPrompt.contains("800 token"), "应包含 token 限制说明");
     }
 
     @Test
