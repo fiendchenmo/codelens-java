@@ -82,6 +82,26 @@ public class SummaryValidator {
             return ValidationResult.fail("complexity", "complexity 字段缺失或为空");
         }
 
+        // 校验 summary（新增 R2.2-1）
+        JsonElement summary = json.get("summary");
+        if (summary == null || summary.isJsonNull() || !summary.isJsonPrimitive()
+                || summary.getAsString().trim().isEmpty()) {
+            return ValidationResult.fail("summary", "summary 字段缺失或为空");
+        }
+
+        // 校验 frameworkDesc（新增 R2.2-1b）
+        JsonElement frameworkDesc = json.get("frameworkDesc");
+        if (frameworkDesc == null || frameworkDesc.isJsonNull() || !frameworkDesc.isJsonPrimitive()
+                || frameworkDesc.getAsString().trim().isEmpty()) {
+            return ValidationResult.fail("frameworkDesc", "frameworkDesc 字段缺失或为空");
+        }
+
+        // 校验 fields（新增 R2.2-2）
+        JsonElement fields = json.get("fields");
+        if (fields == null || fields.isJsonNull() || !fields.isJsonArray()) {
+            return ValidationResult.fail("fields", "fields 字段缺失或不是数组");
+        }
+
         return ValidationResult.ok();
     }
 }

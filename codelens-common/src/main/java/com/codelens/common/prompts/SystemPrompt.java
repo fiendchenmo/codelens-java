@@ -82,6 +82,7 @@ public class SystemPrompt {
                 + "【推断规则】\n"
                 + "- 方法名以 get/set/is 开头 → description 描述获取/设置什么数据\n"
                 + "- 方法名以 save/create/update/delete 开头 → logic_summary 描述 CRUD 操作流程\n"
+                + "- 源码有 Javadoc 时 → description 必须取 Javadoc 第一句话，不得自行编造\n"
                 + "- 参数类型 Long/Integer 且名称含 Id → usage 填'数据主键标识'\n"
                 + "- 参数类型 List → usage 填'批量操作数据列表'\n"
                 + "- 参数类型 String 且名称含 name/code → usage 填'业务标识'\n"
