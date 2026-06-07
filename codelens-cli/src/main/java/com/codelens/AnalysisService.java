@@ -1,5 +1,6 @@
 package com.codelens;
 
+import com.codelens.common.agent.AnalysisRouter;
 import com.codelens.common.cache.CacheConfig;
 import com.codelens.common.cache.CacheEntry;
 import com.codelens.common.cache.FileSystemCache;
@@ -117,7 +118,16 @@ public class AnalysisService {
             
             // 取第一个类作为主类
             JavaParserService.ClassInfo mainClass = classInfos.get(0);
-            
+
+            // 路由决策：根据文件大小和方法数选择分析模式
+            int loc = sourceCode.split("\n").length;
+            int methodCount = 0;
+            for (JavaParserService.ClassInfo ci : classInfos) {
+                methodCount += ci.methods.size();
+            }
+            AnalysisRouter.Mode mode = AnalysisRouter.decide(loc, methodCount);
+            LOGGER.info(AnalysisRouter.describe(loc, methodCount, mode));
+
             // 构建结构化上下文
             String structContext = JavaParserService.buildStructContext(packageName, classInfos);
             
