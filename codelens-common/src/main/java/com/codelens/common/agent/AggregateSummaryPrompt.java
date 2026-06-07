@@ -42,12 +42,30 @@ public class AggregateSummaryPrompt {
             "    无风险时输出空数组 []\n" +
             "12. fileLayers: 各文件架构层列表 (Array of Object)，每项包含 fileName(String) 和 layer(String，可选值: CONTROLLER/SERVICE/REPOSITORY/HANDLER/CONFIG/CLIENT/MODEL/UTIL/UNKNOWN)。基于你的语义分析判断，可以修正输入中的建议值。\n" +
             "13. refactorOverview: 一段自然语言（2-4句话），基于 riskCategories 和 fileLayers 总结这个包的主要重构建议和风险提示。格式要求：先说最严重的风险是什么，再说建议怎么改，最后说不改会怎样。\n" +
+            "14. responsibilities: 包的核心职责列表 (Array of String, 3-5条自然语言描述)\n" +
+            "15. auxiliaryClasses: 辅助类名列表 (Array of String)\n" +
+            "16. dependencies: 依赖的其他包名列表 (Array of String)\n" +
+            "17. dependents: 被哪些包依赖 (Array of String)\n" +
+            "18. riskIndicators: 风险提示文本列表 (Array of String)\n" +
+            "19. classEntries: 类卡片列表 (Array of Object)，每项包含：\n" +
+            "    - className: 类名 (String)\n" +
+            "    - summary: 类摘要 (String, ≤50字)\n" +
+            "    - role: 角色描述 (String)\n" +
+            "    - keyMethods: 核心方法名列表 (Array of String)\n" +
+            "    - architectureLayer: 架构层 (String)，枚举值：CONTROLLER / SERVICE / REPOSITORY / HANDLER / CONFIG / CLIENT / MODEL / UTIL / UNKNOWN\n" +
+            "    - methodCount: 方法数 (Number)\n" +
+            "    - highRiskCount: 高风险数 (Number)\n" +
+            "    - mediumRiskCount: 中风险数 (Number)\n" +
+            "    - avgComplexity: 平均复杂度 (Number)\n" +
+            "    - filePath: 文件路径 (String)\n" +
             "\n" +
             "约束：\n" +
             "- 仅输出 JSON，不要包含 ```json 标记\n" +
             "- summary 不超过 200 字\n" +
             "- coreEntries 不超过 5 项\n" +
             "- coreResponsibilities 不超过 5 项\n" +
+            "- responsibilities 每条不超过 30 字\n" +
+            "- classEntries 不超过 10 项，优先列核心类\n" +
             "- 总输出 Token 不超过 1200";
 
     private static final String PACKAGE_USER_TEMPLATE =
