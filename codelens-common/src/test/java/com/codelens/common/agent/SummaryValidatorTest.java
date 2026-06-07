@@ -13,6 +13,11 @@ public class SummaryValidatorTest {
         String validJson = "{\n" +
                 "  \"className\": \"com.example.OrderService\",\n" +
                 "  \"stereotype\": \"SERVICE\",\n" +
+                "  \"summary\": \"订单处理服务，负责订单的创建和支付\",\n" +
+                "  \"frameworkDesc\": \"Spring Service\",\n" +
+                "  \"fields\": [\n" +
+                "    {\"name\": \"orderRepo\", \"type\": \"OrderRepository\", \"injectType\": \"AUTOWIRED\", \"description\": \"订单仓库\", \"line\": 25}\n" +
+                "  ],\n" +
                 "  \"keyMethods\": [\n" +
                 "    {\"name\": \"processOrder\", \"role\": \"核心业务入口\", \"complexity\": 8}\n" +
                 "  ],\n" +

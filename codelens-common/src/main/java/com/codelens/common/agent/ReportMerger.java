@@ -29,6 +29,9 @@ public class ReportMerger {
         AnalysisReport report = new AnalysisReport();
         report.setClassName(getStringSafe(summary, "className"));
         report.setStereotype(getStringSafe(summary, "stereotype"));
+        report.setSummary(getStringSafe(summary, "summary"));
+        report.setFrameworkDesc(getStringSafe(summary, "frameworkDesc"));
+        report.setFields(extractFields(summary));
         report.setOverallComplexity(getStringSafe(summary, "complexity"));
         report.setDependencies(extractStringArray(summary, "dependencies"));
 
@@ -51,13 +54,22 @@ public class ReportMerger {
         MethodReport method = new MethodReport();
         method.setMethodName(getStringSafe(json, "method"));
         method.setSignature(getStringSafe(json, "method"));
+        method.setDescription(getStringSafe(json, "description"));
+        method.setLogicSummary(getStringSafe(json, "logicSummary"));
+        method.setParams(extractParams(json));
+        method.setReturnInfo(extractReturnInfo(json));
+        method.setExceptions(extractExceptions(json));
+        method.setComplexity(getStringSafe(json, "complexity"));
+        method.setComplexityValue(getIntSafe(json, "complexity_value"));
+        method.setVisibility(getStringSafe(json, "visibility"));
+        method.setAnnotations(extractStringArray(json, "annotations"));
 
         // L1 证据
         JsonElement l1El = json.get("l1Evidence");
         if (l1El != null && l1El.isJsonObject()) {
             JsonObject l1Obj = l1El.getAsJsonObject();
             L1Evidence l1 = new L1Evidence();
-            l1.setCalls(extractStringArray(l1Obj, "calls"));
+            l1.setCalls(extractL1Calls(l1Obj));
             l1.setCalledBy(extractStringArray(l1Obj, "calledBy"));
             l1.setFieldsUsed(extractStringArray(l1Obj, "fieldsUsed"));
             method.setL1Evidence(l1);
@@ -77,7 +89,154 @@ public class ReportMerger {
             method.setL2Confidence(l2);
         }
 
+        // risks（LLM 原始风险项，带行号）
+        JsonElement risksEl = json.get("risks");
+        if (risksEl != null && risksEl.isJsonArray()) {
+            List<RiskItem> riskItems = new ArrayList<>();
+            JsonArray risksArr = risksEl.getAsJsonArray();
+            for (int i = 0; i < risksArr.size(); i++) {
+                JsonElement riskEl = risksArr.get(i);
+                if (riskEl.isJsonObject()) {
+                    JsonObject riskObj = riskEl.getAsJsonObject();
+                    RiskItem ri = new RiskItem();
+                    ri.setType(getStringSafe(riskObj, "type"));
+                    ri.setDescription(getStringSafe(riskObj, "description"));
+                    ri.setLine(getIntSafe(riskObj, "line"));
+                    ri.setSeverity(getStringSafe(riskObj, "severity"));
+                    ri.setImpact(getStringSafe(riskObj, "impact"));
+                    ri.setSuggestion(getStringSafe(riskObj, "suggestion"));
+                    JsonElement confEl = riskObj.get("confidence");
+                    if (confEl != null && confEl.isJsonPrimitive()) {
+                        try {
+                            ri.setConfidence(confEl.getAsDouble());
+                        } catch (NumberFormatException ignored) {}
+                    }
+                    riskItems.add(ri);
+                }
+            }
+            method.setRisks(riskItems);
+        }
+
         return method;
+    }
+
+    /**
+     * 从 JSON 对象的 calls 字段解析 L1Call 列表。
+     * 兼容两种 LLM 输出格式：
+     * <ul>
+     *   <li>{@code {"target": "method", "line": 42, "sourceLine": 40, "status": 1}} → 完整对象</li>
+     *   <li>{@code "method"} → 纯字符串，降级创建 L1Call(target=method, line=0, status=0)</li>
+     * </ul>
+     */
+    private List<L1Call> extractL1Calls(JsonObject obj) {
+        List<L1Call> result = new ArrayList<>();
+        JsonElement el = obj.get("calls");
+        if (el != null && el.isJsonArray()) {
+            JsonArray arr = el.getAsJsonArray();
+            for (int i = 0; i < arr.size(); i++) {
+                JsonElement item = arr.get(i);
+                if (item.isJsonObject()) {
+                    JsonObject callObj = item.getAsJsonObject();
+                    L1Call call = new L1Call();
+                    call.setTarget(getStringSafe(callObj, "target"));
+                    call.setLine(getIntSafe(callObj, "line"));
+                    call.setSourceLine(getIntSafe(callObj, "sourceLine"));
+                    call.setStatus(getIntSafe(callObj, "status"));
+                    result.add(call);
+                } else if (item.isJsonPrimitive()) {
+                    // 字符串格式降级
+                    result.add(new L1Call(item.getAsString()));
+                }
+            }
+        }
+        return result;
+    }
+
+    /**
+     * 从 JSON 对象的 fields 字段解析 FieldReport 列表。
+     */
+    private List<FieldReport> extractFields(JsonObject obj) {
+        List<FieldReport> result = new ArrayList<>();
+        JsonElement el = obj.get("fields");
+        if (el != null && el.isJsonArray()) {
+            JsonArray arr = el.getAsJsonArray();
+            for (int i = 0; i < arr.size(); i++) {
+                JsonElement item = arr.get(i);
+                if (item.isJsonObject()) {
+                    JsonObject fieldObj = item.getAsJsonObject();
+                    FieldReport field = new FieldReport();
+                    field.setName(getStringSafe(fieldObj, "name"));
+                    field.setType(getStringSafe(fieldObj, "type"));
+                    field.setInjectType(getStringSafe(fieldObj, "injectType"));
+                    field.setDescription(getStringSafe(fieldObj, "description"));
+                    field.setLine(getIntSafe(fieldObj, "line"));
+                    result.add(field);
+                }
+            }
+        }
+        return result;
+    }
+
+    /**
+     * 从 JSON 对象的 params 字段解析 ParamReport 列表。
+     */
+    private List<ParamReport> extractParams(JsonObject obj) {
+        List<ParamReport> result = new ArrayList<>();
+        JsonElement el = obj.get("params");
+        if (el != null && el.isJsonArray()) {
+            JsonArray arr = el.getAsJsonArray();
+            for (int i = 0; i < arr.size(); i++) {
+                JsonElement item = arr.get(i);
+                if (item.isJsonObject()) {
+                    JsonObject paramObj = item.getAsJsonObject();
+                    ParamReport param = new ParamReport();
+                    param.setName(getStringSafe(paramObj, "name"));
+                    param.setType(getStringSafe(paramObj, "type"));
+                    param.setUsage(getStringSafe(paramObj, "usage"));
+                    param.setSample(getStringSafe(paramObj, "sample"));
+                    result.add(param);
+                }
+            }
+        }
+        return result;
+    }
+
+    /**
+     * 从 JSON 对象的 return 字段解析 ReturnReport。
+     */
+    private ReturnReport extractReturnInfo(JsonObject obj) {
+        JsonElement el = obj.get("return");
+        if (el != null && el.isJsonObject()) {
+            JsonObject retObj = el.getAsJsonObject();
+            ReturnReport ret = new ReturnReport();
+            ret.setType(getStringSafe(retObj, "type"));
+            ret.setBusinessMeaning(getStringSafe(retObj, "businessMeaning"));
+            return ret;
+        }
+        return null;
+    }
+
+    /**
+     * 从 JSON 对象的 exceptions 字段解析 ExceptionReport 列表。
+     */
+    private List<ExceptionReport> extractExceptions(JsonObject obj) {
+        List<ExceptionReport> result = new ArrayList<>();
+        JsonElement el = obj.get("exceptions");
+        if (el != null && el.isJsonArray()) {
+            JsonArray arr = el.getAsJsonArray();
+            for (int i = 0; i < arr.size(); i++) {
+                JsonElement item = arr.get(i);
+                if (item.isJsonObject()) {
+                    JsonObject exObj = item.getAsJsonObject();
+                    ExceptionReport ex = new ExceptionReport();
+                    ex.setType(getStringSafe(exObj, "type"));
+                    ex.setHandling(getStringSafe(exObj, "handling"));
+                    ex.setLine(getIntSafe(exObj, "line"));
+                    result.add(ex);
+                }
+            }
+        }
+        return result;
     }
 
     private String getStringSafe(JsonObject obj, String field) {
@@ -86,6 +245,18 @@ public class ReportMerger {
             return el.getAsString();
         }
         return null;
+    }
+
+    private int getIntSafe(JsonObject obj, String field) {
+        JsonElement el = obj.get(field);
+        if (el != null && el.isJsonPrimitive()) {
+            try {
+                return el.getAsInt();
+            } catch (NumberFormatException e) {
+                return 0;
+            }
+        }
+        return 0;
     }
 
     private List<String> extractStringArray(JsonObject obj, String field) {

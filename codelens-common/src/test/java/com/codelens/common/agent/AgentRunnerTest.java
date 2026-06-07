@@ -57,6 +57,9 @@ public class AgentRunnerTest {
     private static final String VALID_SUMMARY = "{\n" +
             "  \"className\": \"com.example.OrderService\",\n" +
             "  \"stereotype\": \"SERVICE\",\n" +
+            "  \"summary\": \"订单处理服务\",\n" +
+            "  \"frameworkDesc\": \"Spring Service\",\n" +
+            "  \"fields\": [{\"name\": \"orderRepo\", \"type\": \"OrderRepository\", \"injectType\": \"AUTOWIRED\", \"description\": \"订单仓库\", \"line\": 25}],\n" +
             "  \"keyMethods\": [{\"name\": \"processOrder\", \"role\": \"core\", \"complexity\": 5}],\n" +
             "  \"dependencies\": [\"OrderRepository\"],\n" +
             "  \"complexity\": \"MEDIUM\"\n" +
