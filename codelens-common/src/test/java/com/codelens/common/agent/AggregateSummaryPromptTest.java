@@ -31,19 +31,17 @@ class AggregateSummaryPromptTest {
         String systemPrompt = prompt.buildPackageSystemPrompt();
         assertNotNull(systemPrompt);
         assertTrue(systemPrompt.contains("packageName"));
-        assertTrue(systemPrompt.contains("architectureLayer"));
         assertTrue(systemPrompt.contains("summary"));
-        assertTrue(systemPrompt.contains("coreEntries"));
         assertTrue(systemPrompt.contains("coreResponsibilities"));
         assertTrue(systemPrompt.contains("crossPackageDeps"));
         assertTrue(systemPrompt.contains("riskOverview"));
-        assertTrue(systemPrompt.contains("totalFiles"));
-        assertTrue(systemPrompt.contains("totalMethods"));
         assertTrue(systemPrompt.contains("riskCategories"));
         assertTrue(systemPrompt.contains("fileLayers"));
         assertTrue(systemPrompt.contains("refactorOverview"));
+        assertTrue(systemPrompt.contains("responsibilities"));
+        assertTrue(systemPrompt.contains("classEntries"));
         assertTrue(systemPrompt.contains("200 字"));
-        assertTrue(systemPrompt.contains("1200"));
+        assertTrue(systemPrompt.contains("1500"));
     }
 
     @Test

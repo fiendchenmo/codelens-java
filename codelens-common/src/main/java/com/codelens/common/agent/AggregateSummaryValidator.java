@@ -21,7 +21,7 @@ public class AggregateSummaryValidator {
     static final int MAX_SUMMARY_CHARS = 200;
     static final int MAX_CORE_ENTRIES = 5;
     static final int MAX_CORE_RESPONSIBILITIES = 5;
-    static final int MAX_TOKEN_ESTIMATE = 1200;
+    static final int MAX_TOKEN_ESTIMATE = 1500;
     static final int MAX_REFACTOR_OVERVIEW_CHARS = 500;
 
     private final AggregateSummaryInput input;
