@@ -7,7 +7,8 @@
     <parent>
         <groupId>com.github.fiendchenmo</groupId>
         <artifactId>codelens</artifactId>
-        <version>0.6.24</version>
+        <version>0.6.25</version>
+    <relativePath>../pom.xml</relativePath>
     </parent>
 
     <artifactId>codelens-cli</artifactId>
@@ -17,7 +18,7 @@
         <dependency>
             <groupId>com.github.fiendchenmo</groupId>
             <artifactId>codelens-common</artifactId>
-            <version>0.6.24</version>
+            <version>0.6.25</version>
         </dependency>
         <dependency>
             <groupId>com.github.javaparser</groupId>

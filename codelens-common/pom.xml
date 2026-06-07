@@ -8,6 +8,7 @@
         <groupId>com.github.fiendchenmo</groupId>
         <artifactId>codelens</artifactId>
         <version>0.6.25</version>
+    <relativePath>../pom.xml</relativePath>
     </parent>
 
     <artifactId>codelens-common</artifactId>
