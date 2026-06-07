@@ -1,6 +1,7 @@
 package com.codelens.common.agent;
 
 import com.codelens.common.models.ArchitectureLayer;
+import com.google.gson.annotations.SerializedName;
 
 import java.util.List;
 import java.util.Map;
@@ -31,6 +32,18 @@ public class AggregateSummaryOutput {
     private List<FileLayerEntry> fileLayers;
     /** 包级重构建议与风险提示（自然语言，2-4句话） */
     private String refactorOverview;
+
+    // === 需求014补齐字段 ===
+    @SerializedName("responsibilities")
+    private List<String> responsibilities;
+    @SerializedName("auxiliary_classes")
+    private List<String> auxiliaryClasses;
+    @SerializedName("dependencies")
+    private List<String> dependencies;
+    @SerializedName("dependents")
+    private List<String> dependents;
+    @SerializedName("risk_indicators")
+    private List<String> riskIndicators;
 
     // === 扩展统计字段（P1） ===
     private double avgComplexity;
@@ -167,6 +180,17 @@ public class AggregateSummaryOutput {
         this.refactorOverview = refactorOverview;
     }
 
+    public List<String> getResponsibilities() { return responsibilities; }
+    public void setResponsibilities(List<String> responsibilities) { this.responsibilities = responsibilities; }
+    public List<String> getAuxiliaryClasses() { return auxiliaryClasses; }
+    public void setAuxiliaryClasses(List<String> auxiliaryClasses) { this.auxiliaryClasses = auxiliaryClasses; }
+    public List<String> getDependencies() { return dependencies; }
+    public void setDependencies(List<String> dependencies) { this.dependencies = dependencies; }
+    public List<String> getDependents() { return dependents; }
+    public void setDependents(List<String> dependents) { this.dependents = dependents; }
+    public List<String> getRiskIndicators() { return riskIndicators; }
+    public void setRiskIndicators(List<String> riskIndicators) { this.riskIndicators = riskIndicators; }
+
     public double getAvgComplexity() { return avgComplexity; }
     public void setAvgComplexity(double avgComplexity) { this.avgComplexity = avgComplexity; }
     public double getL1PassRate() { return l1PassRate; }
@@ -246,6 +270,16 @@ public class AggregateSummaryOutput {
         private double avgComplexity;
         private String filePath;
 
+        // 需求014补齐字段
+        @SerializedName("summary")
+        private String summary;
+        @SerializedName("role")
+        private String role;
+        @SerializedName("key_methods")
+        private List<String> keyMethods;
+        @SerializedName("architecture_layer")
+        private String architectureLayer;
+
         public ClassEntry() {}
 
         public String getClassName() { return className; }
@@ -260,6 +294,14 @@ public class AggregateSummaryOutput {
         public void setAvgComplexity(double avgComplexity) { this.avgComplexity = avgComplexity; }
         public String getFilePath() { return filePath; }
         public void setFilePath(String filePath) { this.filePath = filePath; }
+        public String getSummary() { return summary; }
+        public void setSummary(String summary) { this.summary = summary; }
+        public String getRole() { return role; }
+        public void setRole(String role) { this.role = role; }
+        public List<String> getKeyMethods() { return keyMethods; }
+        public void setKeyMethods(List<String> keyMethods) { this.keyMethods = keyMethods; }
+        public String getArchitectureLayer() { return architectureLayer; }
+        public void setArchitectureLayer(String architectureLayer) { this.architectureLayer = architectureLayer; }
     }
 
     /**
