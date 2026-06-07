@@ -18,6 +18,9 @@ public class AnalysisReport {
 
     private String className;
     private String stereotype;
+    private String summary;
+    private String frameworkDesc;
+    private List<FieldReport> fields;
     private List<MethodReport> methods;
     private List<String> dependencies;
     private String overallComplexity;
@@ -41,6 +44,12 @@ public class AnalysisReport {
     public void setClassName(String className) { this.className = className; }
     public String getStereotype() { return stereotype; }
     public void setStereotype(String stereotype) { this.stereotype = stereotype; }
+    public String getSummary() { return summary; }
+    public void setSummary(String summary) { this.summary = summary; }
+    public String getFrameworkDesc() { return frameworkDesc; }
+    public void setFrameworkDesc(String frameworkDesc) { this.frameworkDesc = frameworkDesc; }
+    public List<FieldReport> getFields() { return fields; }
+    public void setFields(List<FieldReport> fields) { this.fields = fields; }
     public List<MethodReport> getMethods() { return methods; }
     public void setMethods(List<MethodReport> methods) { this.methods = methods; }
     public List<String> getDependencies() { return dependencies; }

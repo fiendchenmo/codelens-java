@@ -1,5 +1,6 @@
 package com.codelens;
 
+import com.codelens.common.agent.AnalysisRouter;
 import com.codelens.common.cache.CacheConfig;
 import com.codelens.common.cache.CacheEntry;
 import com.codelens.common.cache.FileSystemCache;
@@ -9,6 +10,10 @@ import com.codelens.common.validators.ConfidenceAnnotator;
 import com.codelens.common.normalizers.OutputNormalizer;
 import com.codelens.common.prompts.SystemPrompt;
 import com.codelens.ColorUtil;
+import com.google.gson.JsonArray;
+import com.google.gson.JsonElement;
+import com.google.gson.JsonObject;
+import com.google.gson.JsonParser;
 
 import java.io.File;
 import java.nio.file.Files;
@@ -42,12 +47,12 @@ public class AnalysisService {
     private static FileSystemCache cachedCache;
     private static String cachedProjectRoot;
 
-    private static FileSystemCache getCache(Path projectRoot, boolean noCache) {
+    private static FileSystemCache getCache(Path projectRoot) {
         String root = projectRoot.toString();
         if (cachedCache != null && root.equals(cachedProjectRoot)) {
             return cachedCache;
         }
-        CacheConfig cacheConfig = !noCache ? CacheConfig.defaults(root) : CacheConfig.disabled();
+        CacheConfig cacheConfig = CacheConfig.defaults(root);
         cachedCache = new FileSystemCache(cacheConfig);
         cachedProjectRoot = root;
         return cachedCache;
@@ -113,14 +118,23 @@ public class AnalysisService {
             
             // 取第一个类作为主类
             JavaParserService.ClassInfo mainClass = classInfos.get(0);
-            
+
+            // 路由决策：根据文件大小和方法数选择分析模式
+            int loc = sourceCode.split("\n").length;
+            int methodCount = 0;
+            for (JavaParserService.ClassInfo ci : classInfos) {
+                methodCount += ci.methods.size();
+            }
+            AnalysisRouter.Mode mode = AnalysisRouter.decide(loc, methodCount);
+            LOGGER.info(AnalysisRouter.describe(loc, methodCount, mode));
+
             // 构建结构化上下文
             String structContext = JavaParserService.buildStructContext(packageName, classInfos);
             
             // 检查缓存
             Path projectRoot = JavaParserService.findProjectRoot(filePath);
             if (projectRoot == null) projectRoot = filePath.getParent();
-            FileSystemCache cache = getCache(projectRoot, noCache);
+            FileSystemCache cache = getCache(projectRoot);
             CacheEntry cachedEntry = cache.lookup(filePath.toString(), sourceCode, model);
             String cachedSummary = (cachedEntry != null) ? cachedEntry.getResult() : null;
             
@@ -149,12 +163,15 @@ public class AnalysisService {
                         ConfidenceAnnotator.AnnotatedResult ar = ConfidenceAnnotator.annotate(mergedResult, vr, sourceLines);
                         System.out.println(ColorUtil.heading("━━━ L2 置信度标注 ━━━") + "\n");
                         System.out.println(ar.formatReport());
+
+                        // 回写 risks 验证状态
+                        mergedResult = writeBackRisksValidation(mergedResult, vr);
                     } catch (Exception e) {
                         LOGGER.log(Level.WARNING, "验证/标注失败: " + e.getMessage(), e);
                         System.out.println("[!] 验证/标注失败: " + e.getMessage());
                     }
                 }
-                
+
                 return "CACHED_DISPLAYED:" + mergedResult;
             }
             
@@ -194,6 +211,9 @@ public class AnalysisService {
                     ConfidenceAnnotator.AnnotatedResult ar = ConfidenceAnnotator.annotate(mergedResult, vr, sourceLines);
                     System.out.println(ColorUtil.heading("━━━ L2 置信度标注 ━━━") + "\n");
                     System.out.println(ar.formatReport());
+
+                    // 回写 risks 验证状态
+                    mergedResult = writeBackRisksValidation(mergedResult, vr);
                 } catch (Exception e) {
                     // 校验失败不影响主流程
                 }
@@ -275,6 +295,44 @@ public class AnalysisService {
         } catch (Exception e) {
             LOGGER.log(Level.SEVERE, "LLM 调用失败", e);
             throw new LLMException(LLMException.ErrorType.UNKNOWN, "LLM 调用准备失败: " + e.getMessage(), e);
+        }
+    }
+
+    /**
+     * 根据 EvidenceValidator 校验结果回写顶层 risks[] 的状态。
+     * <p>
+     * vr.issues 中 category="risks" 的项对应校验失败的风险，
+     * 为其添加 {@code verified: false} 标记；未失败的添加 {@code verified: true}。
+     * </p>
+     *
+     * @param json  V3 兼容 JSON 字符串
+     * @param vr    EvidenceValidator 校验结果
+     * @return 注入了 verified 标记的 JSON 字符串
+     */
+    private static String writeBackRisksValidation(String json, EvidenceValidator.ValidationResult vr) {
+        try {
+            JsonObject root = JsonParser.parseString(json).getAsJsonObject();
+            if (!root.has("risks") || !root.get("risks").isJsonArray()) return json;
+
+            // 收集 risks 分类下的失败索引
+            java.util.Set<Integer> failedIndices = new java.util.HashSet<>();
+            for (EvidenceValidator.ValidationIssue issue : vr.issues) {
+                if ("risks".equals(issue.category) && issue.index >= 0) {
+                    failedIndices.add(issue.index);
+                }
+            }
+
+            JsonArray risksArr = root.getAsJsonArray("risks");
+            for (int i = 0; i < risksArr.size(); i++) {
+                JsonElement riskEl = risksArr.get(i);
+                if (riskEl.isJsonObject()) {
+                    riskEl.getAsJsonObject().addProperty("verified", !failedIndices.contains(i));
+                }
+            }
+
+            return root.toString();
+        } catch (Exception e) {
+            return json;
         }
     }
 }

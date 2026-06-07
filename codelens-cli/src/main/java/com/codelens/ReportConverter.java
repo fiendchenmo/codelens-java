@@ -3,8 +3,10 @@ package com.codelens;
 import com.codelens.common.agent.AnalysisReport;
 import com.codelens.common.agent.ExecutionTrace;
 import com.codelens.common.agent.MethodReport;
+import com.codelens.common.agent.L1Call;
 import com.codelens.common.agent.L1Evidence;
 import com.codelens.common.agent.L2Confidence;
+import com.codelens.common.agent.RiskItem;
 import com.google.gson.Gson;
 import com.google.gson.GsonBuilder;
 import com.google.gson.JsonArray;
@@ -99,23 +101,27 @@ public class ReportConverter {
         // calls from L1 evidence
         JsonArray callsArray = new JsonArray();
         if (mr.getL1Evidence() != null && mr.getL1Evidence().getCalls() != null) {
-            for (String call : mr.getL1Evidence().getCalls()) {
+            for (L1Call call : mr.getL1Evidence().getCalls()) {
                 JsonObject callObj = new JsonObject();
-                callObj.addProperty("target", call);
-                callObj.addProperty("line", 0);
+                callObj.addProperty("target", call.getTarget());
+                callObj.addProperty("line", call.getLine());
                 callObj.addProperty("type", "same_file");
                 callsArray.add(callObj);
             }
         }
         m.add("calls", callsArray);
 
-        // risks (empty for now — risks come from L2 riskIndicators)
-        m.add("risks", new JsonArray());
+        // risks from MethodReport
+        if (mr.getRisks() != null && !mr.getRisks().isEmpty()) {
+            m.add("risks", toRiskItemJsonArray(mr.getRisks()));
+        } else {
+            m.add("risks", new JsonArray());
+        }
 
         // l1 evidence (multi-agent specific)
         if (mr.getL1Evidence() != null) {
             JsonObject l1 = new JsonObject();
-            l1.add("calls", toJsonArray(mr.getL1Evidence().getCalls()));
+            l1.add("calls", toL1CallJsonArray(mr.getL1Evidence().getCalls()));
             l1.add("calledBy", toJsonArray(mr.getL1Evidence().getCalledBy()));
             l1.add("fieldsUsed", toJsonArray(mr.getL1Evidence().getFieldsUsed()));
             m.add("l1", l1);
@@ -138,6 +144,39 @@ public class ReportConverter {
         if (list != null) {
             for (String s : list) {
                 arr.add(s);
+            }
+        }
+        return arr;
+    }
+
+    private static JsonArray toL1CallJsonArray(List<L1Call> calls) {
+        JsonArray arr = new JsonArray();
+        if (calls != null) {
+            for (L1Call call : calls) {
+                JsonObject obj = new JsonObject();
+                obj.addProperty("target", call.getTarget());
+                obj.addProperty("line", call.getLine());
+                obj.addProperty("sourceLine", call.getSourceLine());
+                obj.addProperty("status", call.getStatus());
+                arr.add(obj);
+            }
+        }
+        return arr;
+    }
+
+    private static JsonArray toRiskItemJsonArray(List<RiskItem> risks) {
+        JsonArray arr = new JsonArray();
+        if (risks != null) {
+            for (RiskItem r : risks) {
+                JsonObject obj = new JsonObject();
+                obj.addProperty("type", r.getType());
+                obj.addProperty("description", r.getDescription());
+                obj.addProperty("line", r.getLine());
+                obj.addProperty("severity", r.getSeverity());
+                if (r.getImpact() != null) obj.addProperty("impact", r.getImpact());
+                if (r.getSuggestion() != null) obj.addProperty("suggestion", r.getSuggestion());
+                obj.addProperty("confidence", r.getConfidence());
+                arr.add(obj);
             }
         }
         return arr;

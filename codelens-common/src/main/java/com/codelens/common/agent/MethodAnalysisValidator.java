@@ -53,6 +53,13 @@ public class MethodAnalysisValidator {
             return ValidationResult.fail("method", "方法名不匹配: 期望 " + expectedMethod + "，实际 " + actualMethod);
         }
 
+        // 可选校验 description（新增 R2.2-3）
+        JsonElement descEl = json.get("description");
+        if (descEl != null && !descEl.isJsonNull() && descEl.isJsonPrimitive()
+                && descEl.getAsString().trim().isEmpty()) {
+            return ValidationResult.fail("description", "description 字段为空");
+        }
+
         // 校验 L1 证据
         JsonElement l1El = json.get("l1Evidence");
         if (l1El == null || l1El.isJsonNull() || !l1El.isJsonObject()) {

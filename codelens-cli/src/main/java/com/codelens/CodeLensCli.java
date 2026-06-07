@@ -8,6 +8,7 @@ import com.codelens.common.agent.*;
 import com.codelens.common.cache.*;
 import com.codelens.common.diff.ChangedFile;
 import com.codelens.common.diff.DiffParser;
+import com.codelens.common.diff.JGitDiffAdapter;
 import com.codelens.common.diff.ImpactAnalyzer;
 import com.codelens.common.diff.ImpactNode;
 import com.codelens.common.diff.ImpactReport;
@@ -110,7 +111,7 @@ public class CodeLensCli {
         switch (command) {
             case "analyze":
                 if (multiMode) {
-                    handleAnalyzeMulti(args);
+                    handleAnalyzeMulti(args, noValidate);
                 } else {
                     handleAnalyze(args, noValidate, noCache, rawJson, schemaVersion);
                 }
@@ -123,7 +124,7 @@ public class CodeLensCli {
                 break;
             case "full":
                 if (multiMode) {
-                    handleFullMulti(args);
+                    handleFullMulti(args, noValidate);
                 } else {
                     handleFull(args, noValidate, noCache, rawJson, schemaVersion);
                 }
@@ -630,12 +631,12 @@ public class CodeLensCli {
 
     // ==================== Multi-Agent 模式 ====================
 
-    private static void handleAnalyzeMulti(String[] args) {
+    private static void handleAnalyzeMulti(String[] args, boolean noValidate) {
         // 检查 --source 标志：存在则进入模块级多Agent分析模式
         Map<String, String> options = parseOptions(args);
         String sourceDir = options.get("source");
         if (sourceDir != null && !sourceDir.isEmpty()) {
-            handleModuleAnalysis(args, options, sourceDir);
+            handleModuleAnalysis(args, options, sourceDir, noValidate);
             return;
         }
 
@@ -669,7 +670,7 @@ public class CodeLensCli {
             System.out.println("文件: " + filePath);
             printLlmConfig(apiUrl, model, temperature);
 
-            String jsonResult = runMultiAgent(sourceFile, apiKey, apiUrl, model, temperature);
+            String jsonResult = runMultiAgent(sourceFile, apiKey, apiUrl, model, temperature, noValidate);
             System.out.println(ColorUtil.heading("━━━ 分析结果 ━━━"));
             System.out.println(jsonResult);
 
@@ -683,7 +684,7 @@ public class CodeLensCli {
      * 模块级多Agent分析：目录扫描 → 逐个文件多Agent → 包级聚合。
      */
     private static void handleModuleAnalysis(String[] args, Map<String, String> options,
-                                              String sourceDir) {
+                                              String sourceDir, boolean noValidate) {
         File dir = new File(sourceDir);
         if (!dir.exists() || !dir.isDirectory()) {
             System.out.println("[!] 源码目录不存在: " + sourceDir);
@@ -726,7 +727,7 @@ public class CodeLensCli {
             com.codelens.common.cache.GranularCacheAdapter granularCache =
                     new com.codelens.common.cache.GranularCacheAdapter(fsCache);
             com.codelens.common.agent.AgentRunner runner =
-                    new com.codelens.common.agent.AgentRunner(llmClient, granularCache);
+                    new com.codelens.common.agent.AgentRunner(llmClient, granularCache, noValidate);
 
             List<FileAnalysisResult> fileResults = new ArrayList<>();
 
@@ -853,7 +854,7 @@ public class CodeLensCli {
         }
     }
 
-    private static void handleFullMulti(String[] args) {
+    private static void handleFullMulti(String[] args, boolean noValidate) {
         if (args.length < 2) {
             System.out.println("[!] 请提供 Java 文件路径");
             System.out.println("用法: java -jar codelens.jar full <Java文件路径> [API_KEY] --mode=multi");
@@ -904,7 +905,7 @@ public class CodeLensCli {
 
                 // Multi-Agent 分析
                 System.out.println(ColorUtil.heading("━━━ Multi-Agent 分析 ━━━"));
-                String jsonResult = runMultiAgent(sourceFile, apiKey, apiUrl, model, temperature);
+                String jsonResult = runMultiAgent(sourceFile, apiKey, apiUrl, model, temperature, noValidate);
 
                 System.out.println(ColorUtil.heading("━━━ 分析结果 ━━━"));
                 System.out.println(jsonResult);
@@ -938,7 +939,8 @@ public class CodeLensCli {
      * 流程: SUMMARY → METHOD_ANALYSIS × N → ReportMerger → ReportConverter
      */
     private static String runMultiAgent(File sourceFile, String apiKey, String apiUrl,
-                                        String model, double temperature) throws Exception {
+                                        String model, double temperature,
+                                        boolean noValidate) throws Exception {
         String sourceCode = new String(Files.readAllBytes(sourceFile.toPath()));
 
         // 1. 创建 CliLLMClient
@@ -951,7 +953,7 @@ public class CodeLensCli {
         GranularCache granularCache = new GranularCacheAdapter(fsCache);
 
         // 3. 创建 AgentRunner
-        AgentRunner runner = new AgentRunner(llmClient, granularCache);
+        AgentRunner runner = new AgentRunner(llmClient, granularCache, noValidate);
         List<ExecutionTrace> traces = new ArrayList<>();
 
         // 4. STEP 1: SUMMARY
@@ -1082,10 +1084,10 @@ public class CodeLensCli {
         System.out.println("基准: " + baseCommit + " → HEAD");
         System.out.println("最大跳数: " + maxHops);
 
-        // 3. 解析 diff
+        // 3. 解析 diff（JGit 优先，失败时降级到 DiffParser）
         List<ChangedFile> changes;
         try {
-            changes = DiffParser.parseDiffFromGit(repoPath, baseCommit);
+            changes = JGitDiffAdapter.parseDiff(repoPath, baseCommit);
         } catch (IllegalArgumentException e) {
             System.out.println("[!] 无效的基准 commit: " + baseCommit);
             return;
@@ -1093,8 +1095,19 @@ public class CodeLensCli {
             System.out.println("[!] " + e.getMessage());
             return;
         } catch (Exception e) {
-            System.out.println("[!] diff 解析失败: " + e.getMessage());
-            return;
+            System.out.println(ColorUtil.warning("⚠ JGit 解析失败，降级到 DiffParser: " + e.getMessage()));
+            try {
+                changes = DiffParser.parseDiffFromGit(repoPath, baseCommit);
+            } catch (IllegalArgumentException e2) {
+                System.out.println("[!] 无效的基准 commit: " + baseCommit);
+                return;
+            } catch (IllegalStateException e2) {
+                System.out.println("[!] " + e2.getMessage());
+                return;
+            } catch (Exception e2) {
+                System.out.println("[!] diff 解析失败: " + e2.getMessage());
+                return;
+            }
         }
 
         if (changes.isEmpty()) {
