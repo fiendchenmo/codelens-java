@@ -5,6 +5,7 @@ import com.codelens.common.utils.MethodFilter;
 import com.github.javaparser.StaticJavaParser;
 import com.github.javaparser.ast.CompilationUnit;
 import com.github.javaparser.ast.body.ClassOrInterfaceDeclaration;
+import com.github.javaparser.ast.body.EnumDeclaration;
 import com.github.javaparser.ast.body.MethodDeclaration;
 import com.github.javaparser.ast.body.FieldDeclaration;
 import com.github.javaparser.ast.expr.MethodCallExpr;
@@ -45,6 +46,8 @@ public class JavaParserService {
     public static class ClassInfo {
         public String name;
         public boolean isInterface;
+        public boolean isEnum;
+        public boolean hasDefaultMethod;
         public List<FieldInfo> fields = new ArrayList<>();
         public List<MethodInfo> methods = new ArrayList<>();
         public List<CallInfo> calls = new ArrayList<>();
@@ -128,6 +131,11 @@ public class JavaParserService {
                     mi.line = method.getBegin().map(p -> p.line).orElse(0);
                     mi.endLine = method.getRange().map(r -> r.end.line).orElse(mi.line);
                     ci.methods.add(mi);
+
+                    // 检测接口中的 default/static 方法（有方法体的接口方法）
+                    if (ci.isInterface && method.getBody().isPresent()) {
+                        ci.hasDefaultMethod = true;
+                    }
                 }
 
                 // 提取方法调用
@@ -144,6 +152,58 @@ public class JavaParserService {
                     }
                     
                     // 过滤掉简单调用
+                    if (!MethodFilter.isTrivialCall(c.methodName)) {
+                        ci.calls.add(c);
+                    }
+                }
+
+                classInfos.add(ci);
+            }
+
+            // 处理枚举（EnumDeclaration 不是 ClassOrInterfaceDeclaration 的子类）
+            for (EnumDeclaration enumDecl : cu.findAll(EnumDeclaration.class)) {
+                ClassInfo ci = new ClassInfo();
+                ci.name = packageName.isEmpty() ? enumDecl.getNameAsString() : packageName + "." + enumDecl.getNameAsString();
+                ci.isEnum = true;
+
+                // 枚举字段（枚举常量 + 普通字段）
+                for (FieldDeclaration field : enumDecl.getFields()) {
+                    FieldInfo fi = new FieldInfo();
+                    fi.name = field.getVariable(0).getNameAsString();
+                    fi.type = field.getVariable(0).getTypeAsString();
+                    fi.line = field.getBegin().map(p -> p.line).orElse(0);
+                    ci.fields.add(fi);
+                }
+
+                // 枚举方法
+                for (MethodDeclaration method : enumDecl.getMethods()) {
+                    MethodInfo mi = new MethodInfo();
+                    mi.name = method.getNameAsString();
+                    mi.returnType = method.getTypeAsString();
+                    mi.params = method.getParameters().stream()
+                            .map(p -> p.getTypeAsString() + " " + p.getNameAsString())
+                            .reduce((a, b) -> a + ", " + b)
+                            .orElse("");
+                    mi.annotations = method.getAnnotations().stream()
+                            .map(a -> a.getNameAsString())
+                            .reduce((a, b) -> a + ", " + b)
+                            .orElse("");
+                    mi.visibility = method.getAccessSpecifier().asString();
+                    mi.line = method.getBegin().map(p -> p.line).orElse(0);
+                    mi.endLine = method.getRange().map(r -> r.end.line).orElse(mi.line);
+                    ci.methods.add(mi);
+                }
+
+                // 枚举中的方法调用
+                for (MethodCallExpr call : enumDecl.findAll(MethodCallExpr.class)) {
+                    CallInfo c = new CallInfo();
+                    c.methodName = call.getNameAsString();
+                    c.line = call.getBegin().map(p -> p.line).orElse(0);
+                    if (call.getScope().isPresent()) {
+                        if (call.getScope().get() instanceof NameExpr) {
+                            c.caller = ((NameExpr) call.getScope().get()).getNameAsString();
+                        }
+                    }
                     if (!MethodFilter.isTrivialCall(c.methodName)) {
                         ci.calls.add(c);
                     }

@@ -119,14 +119,25 @@ public class AnalysisService {
             // 取第一个类作为主类
             JavaParserService.ClassInfo mainClass = classInfos.get(0);
 
-            // 路由决策：根据文件大小和方法数选择分析模式
+            // 路由决策：根据文件大小、方法数和类类型选择分析模式
             int loc = sourceCode.split("\n").length;
             int methodCount = 0;
             for (JavaParserService.ClassInfo ci : classInfos) {
                 methodCount += ci.methods.size();
             }
-            AnalysisRouter.Mode mode = AnalysisRouter.decide(loc, methodCount);
-            LOGGER.info(AnalysisRouter.describe(loc, methodCount, mode));
+            AnalysisRouter.Mode mode = AnalysisRouter.decide(loc, methodCount,
+                    mainClass.name, mainClass.isEnum, mainClass.isInterface, mainClass.hasDefaultMethod);
+            String routeReason;
+            if (AnalysisRouter.isDtoLikeName(mainClass.name)) {
+                routeReason = "简单结构降级";
+            } else if (mainClass.isEnum) {
+                routeReason = "枚举类";
+            } else if (mainClass.isInterface && !mainClass.hasDefaultMethod) {
+                routeReason = "纯接口";
+            } else {
+                routeReason = null; // 由 describe() 自动推断
+            }
+            LOGGER.info(AnalysisRouter.describe(loc, methodCount, mode, routeReason));
 
             // 构建结构化上下文
             String structContext = JavaParserService.buildStructContext(packageName, classInfos);
