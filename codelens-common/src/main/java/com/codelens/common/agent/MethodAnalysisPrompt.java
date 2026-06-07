@@ -32,7 +32,9 @@ public class MethodAnalysisPrompt {
             "9. visibility: 可见性 (String)，如 public / private / protected / default\n" +
             "10. annotations: 注解列表 (Array of String)，如 [\"@Override\", \"@Transactional\"]\n" +
             "11. l1Evidence: 一级证据 (Object)，包含：\n" +
-            "   - calls: 方法内调用的其他方法列表 (Array of String)\n" +
+            "   - calls: 方法内调用的其他方法列表 (Array of Object)，每个对象包含：\n" +
+            "     - target: 调用目标 (String)，格式为 \"对象名.方法名\"（如 \"map.containsKey\"），同对象调用用 \"this.方法名\"\n" +
+            "     - line: 调用行号 (Number)\n" +
             "   - calledBy: 可能调用此方法的方法列表 (Array of String)\n" +
             "   - fieldsUsed: 方法内使用的字段列表 (Array of String)\n" +
             "12. l2Confidence: 二级置信度 (Object)，包含：\n" +
@@ -75,7 +77,7 @@ public class MethodAnalysisPrompt {
             "输出示例（仅作参考，请根据实际代码分析）：\n" +
             "{\n" +
             "  \"method\": \"processOrder\",\n" +
-            "  \"l1Evidence\": { \"calls\": [\"validateOrder\"], \"calledBy\": [], \"fieldsUsed\": [] },\n" +
+            "  \"l1Evidence\": { \"calls\": [{\"target\": \"orderService.validate\", \"line\": 42}], \"calledBy\": [], \"fieldsUsed\": [] },\n" +
             "  \"l2Confidence\": { \"overallScore\": 0.8, \"reasoningBasis\": \"SOLID_ANALYSIS\", \"riskIndicators\": [\"缺少参数校验\"] },\n" +
             "  \"risks\": [\n" +
             "    { \"type\": \"SECURITY\", \"description\": \"缺少参数校验\", \"line\": 28, \"severity\": \"HIGH\", \"suggestion\": \"添加参数非空校验\" }\n" +
