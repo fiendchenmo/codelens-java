@@ -41,7 +41,7 @@ class AggregateSummaryPromptTest {
         assertTrue(systemPrompt.contains("responsibilities"));
         assertTrue(systemPrompt.contains("classEntries"));
         assertTrue(systemPrompt.contains("200 字"));
-        assertTrue(systemPrompt.contains("1500"));
+        assertTrue(systemPrompt.contains("2000"));
     }
 
     @Test
@@ -74,7 +74,7 @@ class AggregateSummaryPromptTest {
         AggregateSummaryInput input = createSampleInput();
         String full = prompt.buildPackagePrompt(input);
         assertNotNull(full);
-        assertTrue(full.contains("你是一位 Java 代码架构分析专家"));
+        assertTrue(full.contains("你是一位 Java 架构分析专家"));
         assertTrue(full.contains("com.example.service"));
         // System 和 User 之间应该有换行分隔
         assertTrue(full.contains("\n\n"));

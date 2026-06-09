@@ -21,36 +21,38 @@ public class AggregateSummaryPrompt {
     // ========================================================================
 
     private static final String PACKAGE_SYSTEM_PROMPT =
-            "你是一位 Java 代码架构分析专家。请根据输入的包级分析数据，生成该包的结构化聚合摘要。\n" +
+            "你是一位 Java 架构分析专家。根据输入的包级数据，生成包的聚合摘要。\n" +
             "\n" +
-            "输出格式必须为 JSON，包含以下字段：\n" +
-            "1. packageName: 包名 (String)\n" +
-            "2. summary: 包的整体职责摘要 (String, ≤200 字)\n" +
-            "3. coreResponsibilities: 核心职责列表 (Array of String, ≤5 项)\n" +
-            "4. crossPackageDeps: 跨包依赖列表 (Array of Object)，每项包含 targetPackage(String)、viaMethods(Array of String)、direction(String)\n" +
-            "5. riskOverview: 风险概述 (String)，无风险时可为空字符串\n" +
-            "6. riskCategories: 风险分类列表 (Array of Object)，归纳包内共性风险，每项包含：\n" +
-            "    - category: 类别名 (String)，如\"资源未关闭\"、\"异常吞没\"、\"硬编码配置\"\n" +
-            "    - severity: 严重程度 (String)，可选值: HIGH / MEDIUM / LOW\n" +
-            "    - description: 该类风险的共性描述 (String, ≤100字)\n" +
-            "    - affectedFiles: 受影响文件列表 (Array of String)\n" +
-            "    无风险时输出空数组 []\n" +
-            "7. fileLayers: 各文件架构层列表 (Array of Object)，每项包含 fileName(String) 和 layer(String，可选值: CONTROLLER/SERVICE/REPOSITORY/HANDLER/CONFIG/CLIENT/MODEL/UTIL/UNKNOWN)。基于你的语义分析判断，可以修正输入中的建议值。\n" +
-            "8. refactorOverview: 一段自然语言（2-4句话），基于 riskCategories 和 fileLayers 总结这个包的主要重构建议和风险提示。格式要求：先说最严重的风险是什么，再说建议怎么改，最后说不改会怎样。\n" +
-            "9. responsibilities: 包的核心职责列表 (Array of String, 3-5条自然语言描述)\n" +
-            "10. classEntries: 类卡片列表 (Array of Object)，每项包含：\n" +
-            "    - className: 类名 (String)\n" +
-            "    - summary: 类摘要 (String, ≤50字)\n" +
-            "    - role: 角色描述 (String)\n" +
-            "    - keyMethods: 核心方法名列表 (Array of String)\n" +
+            "输出必须为 JSON，包含以下字段：\n" +
+            "packageName: 包名 (String)\n" +
+            "classEntries: 类卡片列表 (Array of Object)，每项包含：\n" +
+            "    className: 类名 (String)\n" +
+            "    summary: 类摘要 (String, ≤50字)\n" +
+            "    role: 角色描述 (String)\n" +
+            "    keyMethods: 核心方法名列表 (Array of String)\n" +
+            "summary: 整体职责摘要 (String, ≤200 字)\n" +
+            "coreResponsibilities: 核心职责 (Array of String, ≤5 项)\n" +
+            "crossPackageDeps: 跨包依赖 (Array of Object)，每项：targetPackage(String)、viaMethods(Array of String)、direction(String)\n" +
+            "riskOverview: 风险概述 (String)，无风险时可为空\n" +
+            "riskCategories: 风险分类 (Array of Object)，每项包含：\n" +
+            "    category: 类别名 (String)，如\"资源未关闭\"、\"异常吞没\"\n" +
+            "    severity: 严重程度 (String)，可选值: HIGH/MEDIUM/LOW\n" +
+            "    description: 共性描述 (String, ≤100字)\n" +
+            "    affectedFiles: 受影响文件列表 (Array of String)\n" +
+            "    无风险时输出 []\n" +
+            "fileLayers: 各文件架构层 (Array of Object)，每项：fileName(String)、layer(String，可选值: CONTROLLER/SERVICE/REPOSITORY/HANDLER/CONFIG/CLIENT/MODEL/UTIL/UNKNOWN)。可修正输入建议值。\n" +
+            "refactorOverview: 重构建议（2-4句），先说最严重风险→建议改法→不改的后果。\n" +
+            "responsibilities: 核心职责自然语言描述 (Array of String, 3-5条)\n" +
             "\n" +
             "约束：\n" +
-            "- 仅输出 JSON，不要包含 ```json 标记\n" +
-            "- summary 不超过 200 字\n" +
-            "- coreResponsibilities 不超过 5 项\n" +
-            "- responsibilities 每条不超过 30 字\n" +
-            "- classEntries 不超过 10 项，优先列核心类\n" +
-            "- 总输出 Token 不超过 1500";
+            "- 仅输出 JSON，不要 ```json 标记\n" +
+            "- summary ≤200 字\n" +
+            "- coreResponsibilities ≤5 项\n" +
+            "- responsibilities 每条 ≤30 字\n" +
+            "- classEntries ≤10 项，优先列核心类\n" +
+            "- 总输出 Token 不超过 2000\n" +
+            "\n" +
+            "IMPORTANT: You must output ALL fields in the JSON format above. Do not skip or omit any field, including classEntries.";
 
     private static final String PACKAGE_USER_TEMPLATE =
             "请根据以下输入数据，生成包级别的聚合摘要。\n" +
