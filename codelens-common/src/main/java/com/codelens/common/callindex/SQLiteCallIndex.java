@@ -44,6 +44,18 @@ public class SQLiteCallIndex implements CallIndex {
         // 自动提交模式下运行，每条 DDL 自动提交
         try (Statement stmt = conn.createStatement()) {
             stmt.execute("PRAGMA journal_mode=WAL");
+
+            // 检查 call_records 是否已存在（TABLE 或 VIEW）
+            // 合并后 graph.db 中 call_records 已是 VIEW，跳过建表和建索引
+            try (ResultSet rs = stmt.executeQuery(
+                    "SELECT type FROM sqlite_master WHERE name='call_records'")) {
+                if (rs.next()) {
+                    // call_records 已存在（旧 callindex.db 的 TABLE 或 graph.db 的 VIEW）
+                    return;
+                }
+            }
+
+            // 以下为原始逻辑，仅在独立 callindex.db 场景下执行
             stmt.execute("CREATE TABLE IF NOT EXISTS call_records (" +
                 "id INTEGER PRIMARY KEY AUTOINCREMENT, " +
                 "caller_class TEXT NOT NULL, " +
