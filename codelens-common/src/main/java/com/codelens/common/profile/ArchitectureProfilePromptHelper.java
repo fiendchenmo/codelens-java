@@ -93,11 +93,29 @@ public class ArchitectureProfilePromptHelper {
             sb.append("\n");
         }
 
-        // 6. 关键推理规则（给 LLM 的额外指导）
-        sb.append("\n基于以上架构上下文，分析时请注意：\n");
-        sb.append("- 如果项目有全局异常处理（EXCEPTION_HANDLING 跨切关注点），不要因为方法内缺少 try-catch 而报告\"异常处理缺失\"\n");
-        sb.append("- 如果项目有安全框架（SECURITY 跨切关注点），不要因为方法缺少权限检查而报告\"权限控制缺失\"\n");
-        sb.append("- 跨层调用如果违反分层规则，应标注为架构违规风险\n");
+        // 6. 关键推理规则（给 LLM 的额外指导，仅当画像中有对应内容时输出）
+        boolean hasExceptionHandling = false;
+        boolean hasSecurity = false;
+        if (concerns != null) {
+            for (CrossCuttingConcern c : concerns) {
+                if ("EXCEPTION_HANDLING".equals(c.getCategory())) hasExceptionHandling = true;
+                if ("SECURITY".equals(c.getCategory())) hasSecurity = true;
+            }
+        }
+        boolean hasLayerRules = layerRules != null && !layerRules.isEmpty();
+
+        if (hasExceptionHandling || hasSecurity || hasLayerRules) {
+            sb.append("\n基于以上架构上下文，分析时请注意：\n");
+            if (hasExceptionHandling) {
+                sb.append("- 项目有全局异常处理机制，不要因为方法内缺少 try-catch 而报告\"异常处理缺失\"\n");
+            }
+            if (hasSecurity) {
+                sb.append("- 项目有安全框架（如 Spring Security），不要因为方法缺少权限检查而报告\"权限控制缺失\"\n");
+            }
+            if (hasLayerRules) {
+                sb.append("- 跨层调用如果违反上述分层约定，应标注为架构违规风险\n");
+            }
+        }
 
         return sb.toString();
     }
