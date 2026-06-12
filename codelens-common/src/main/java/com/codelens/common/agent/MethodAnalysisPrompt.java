@@ -85,10 +85,23 @@ public class MethodAnalysisPrompt {
             "}";
 
     /**
-     * 生成 system prompt。
+     * 生成 system prompt（无架构上下文）。
      */
     public String generateSystemPrompt() {
-        return SYSTEM_PROMPT;
+        return generateSystemPrompt(null);
+    }
+
+    /**
+     * 生成 system prompt，可注入项目架构上下文。
+     *
+     * @param architectureContext 架构上下文段（由 ArchitectureProfile 生成），可为 null
+     */
+    public String generateSystemPrompt(String architectureContext) {
+        String prompt = SYSTEM_PROMPT;
+        if (architectureContext != null && !architectureContext.isEmpty()) {
+            prompt += "\n\n=== 项目架构上下文 ===\n" + architectureContext;
+        }
+        return prompt;
     }
 
     /**
