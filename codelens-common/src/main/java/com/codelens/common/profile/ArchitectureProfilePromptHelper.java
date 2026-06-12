@@ -1,7 +1,9 @@
 package com.codelens.common.profile;
 
+import java.util.Comparator;
 import java.util.List;
 import java.util.Map;
+import java.util.stream.Collectors;
 
 /**
  * ArchitectureProfile → Prompt 上下文段转换工具。
@@ -38,16 +40,14 @@ public class ArchitectureProfilePromptHelper {
             sb.append("\n");
         }
 
-        // 2. 层分布（显示前 5 层）
+        // 2. 层分布（按类数降序取 top 5）
         Map<String, Integer> distribution = profile.getLayerDistribution();
         if (distribution != null && !distribution.isEmpty()) {
             sb.append("架构层分布:\n");
-            int count = 0;
-            for (Map.Entry<String, Integer> entry : distribution.entrySet()) {
-                if (count >= 5) break;
-                sb.append("  - ").append(entry.getKey()).append(": ").append(entry.getValue()).append(" classes\n");
-                count++;
-            }
+            distribution.entrySet().stream()
+                    .sorted(Map.Entry.<String, Integer>comparingByValue().reversed())
+                    .limit(5)
+                    .forEach(e -> sb.append("  - ").append(e.getKey()).append(": ").append(e.getValue()).append(" classes\n"));
         }
 
         // 3. 分层规则
