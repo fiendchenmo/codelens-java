@@ -19,7 +19,7 @@ public interface FileAccessAdapter {
     /**
      * 扫描项目中的 Java 文件
      *
-     * @param pattern 文件匹配模式，如 "**/*.java"
+     * @param pattern 文件匹配模式（如 {@code **&#47;*.java}）
      * @return 匹配的文件路径列表
      */
     List<Path> findFiles(String pattern);
