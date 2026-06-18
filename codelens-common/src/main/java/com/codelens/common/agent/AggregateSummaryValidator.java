@@ -112,7 +112,7 @@ public class AggregateSummaryValidator {
         // V10: refactorOverview 非空（有风险时）+ 长度限制
         validateRefactorOverview(output);
 
-        return ValidationResult.ok();
+        return ValidationResult.okWithCorrection(GSON.toJson(output));
     }
 
     // ========================================================================
