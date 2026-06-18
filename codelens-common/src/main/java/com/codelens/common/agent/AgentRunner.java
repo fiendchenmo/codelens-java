@@ -307,8 +307,9 @@ public class AgentRunner {
         long latencyMs = System.currentTimeMillis() - start;
 
         if (success) {
+            // 优先使用 validator 修正后的输出（如自动填充缺失字段、覆盖统计数据等）
+            String finalOutput = vr.getCorrectedOutput() != null ? vr.getCorrectedOutput() : llmOutput;
             // Post-validation for METHOD_ANALYSIS: validate claims against source code
-            String finalOutput = llmOutput;
             if (!noValidate && task.getTaskType() == TaskType.METHOD_ANALYSIS && cacheInput != null) {
                 try {
                     finalOutput = ValidationPostProcessor.process(llmOutput, cacheInput);
