@@ -1,4 +1,4 @@
-// SYNC_VERSION: 2026-06-17-v1
+// SYNC_VERSION: 2026-06-18-v1
 // IMPACT: LOGIC_CHANGE
 package com.codelens.platform;
 
@@ -11,10 +11,9 @@ public interface ProgressReporter {
     /**
      * 开始一个任务
      *
-     * @param taskName  任务名称
-     * @param totalWork 总工作量（用于计算百分比）
+     * @param taskName 任务名称
      */
-    void start(String taskName, int totalWork);
+    void start(String taskName);
 
     /**
      * 更新进度
