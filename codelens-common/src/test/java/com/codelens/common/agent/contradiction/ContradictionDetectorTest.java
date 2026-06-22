@@ -116,6 +116,83 @@ public class ContradictionDetectorTest {
         assertEquals(0.0, result.getContradictionScore(), 0.001);
     }
 
+    // ─── Case 3b: C1 跨对象调用过滤 — mapper-like call should be skipped ─
+
+    @Test
+    void testC1_CrossObjectCallFiltered() {
+        // deptMapper.selectDeptById → should be recognized as cross-object call, skipped
+        L1Call mapperCall = new L1Call("deptMapper.selectDeptById", 214, 0, 1);
+
+        MethodReport insertDept = buildMethod("insertDept", "LOW", 2,
+                Arrays.asList(mapperCall),
+                Arrays.asList("com.example.Other.process"),
+                new ArrayList<RiskItem>());
+
+        // There IS a same-name method selectDeptById in the file
+        MethodReport selectDeptById = buildMethod("selectDeptById", "LOW", 1,
+                new ArrayList<L1Call>(),
+                Arrays.asList("com.example.Controller.getInfo"), // doesn't include insertDept
+                new ArrayList<RiskItem>());
+
+        AnalysisReport report = buildReport("MEDIUM", Arrays.asList(insertDept, selectDeptById));
+        ContradictionReport result = detector.detect(report, null);
+
+        // No C1 findings — mapper-like call is filtered out
+        List<ContradictionFinding> contradicted = filterContradictory(result.getFindings());
+        assertEquals(0, contradicted.size());
+    }
+
+    // ─── Case 3c: C1 同对象 this 调用 — should still detect ─
+
+    @Test
+    void testC1_ThisCallStillDetected() {
+        // this.validate → should NOT be filtered (same object)
+        L1Call thisCall = new L1Call("this.validate", 10, 0, 1);
+
+        MethodReport process = buildMethod("process", "LOW", 2,
+                Arrays.asList(thisCall),
+                Arrays.asList("com.example.Main.run"),
+                new ArrayList<RiskItem>());
+
+        MethodReport validate = buildMethod("validate", "LOW", 1,
+                new ArrayList<L1Call>(),
+                Arrays.asList("com.example.Other.method"), // NOT include process
+                new ArrayList<RiskItem>());
+
+        AnalysisReport report = buildReport("MEDIUM", Arrays.asList(process, validate));
+        ContradictionReport result = detector.detect(report, null);
+
+        List<ContradictionFinding> contradicted = filterContradictory(result.getFindings());
+        assertEquals(1, contradicted.size());
+        ContradictionFinding f = contradicted.get(0);
+        assertEquals(ContradictionFinding.ContradictionType.CALL_GRAPH_MISMATCH, f.getType());
+        assertEquals(ContradictionFinding.Status.CONTRADICTORY, f.getStatus());
+    }
+
+    // ─── Case 3d: C1 无前缀直接调用 — should still detect ─
+
+    @Test
+    void testC1_DirectCallStillDetected() {
+        // selectDeptById (no prefix) → should NOT be filtered
+        L1Call directCall = new L1Call("selectDeptById", 10, 0, 1);
+
+        MethodReport caller = buildMethod("checkData", "LOW", 2,
+                Arrays.asList(directCall),
+                Arrays.asList("com.example.Main.run"),
+                new ArrayList<RiskItem>());
+
+        MethodReport target = buildMethod("selectDeptById", "LOW", 1,
+                new ArrayList<L1Call>(),
+                Arrays.asList("com.example.Other.method"),
+                new ArrayList<RiskItem>());
+
+        AnalysisReport report = buildReport("MEDIUM", Arrays.asList(caller, target));
+        ContradictionReport result = detector.detect(report, null);
+
+        List<ContradictionFinding> contradicted = filterContradictory(result.getFindings());
+        assertEquals(1, contradicted.size());
+    }
+
     // ─── Case 4: C4 字段自相矛盾 ─────────────────────
 
     @Test
@@ -255,6 +332,26 @@ public class ContradictionDetectorTest {
         assertEquals(ContradictionFinding.Severity.HIGH, f.getSeverity());
         assertEquals(-0.5, f.getConfidencePenalty(), 0.001);
         assertEquals("queryData", f.getSourceMethod());
+    }
+
+    // ─── isCrossObjectCall ───────────────────────────
+
+    @Test
+    void testIsCrossObjectCall() {
+        assertTrue("deptMapper.selectDeptById should be cross-object",
+                ContradictionDetector.isCrossObjectCall("deptMapper.selectDeptById"));
+        assertTrue("SysDeptMapper.selectDeptList should be cross-object",
+                ContradictionDetector.isCrossObjectCall("SysDeptMapper.selectDeptList"));
+        assertFalse("this.validate should NOT be cross-object",
+                ContradictionDetector.isCrossObjectCall("this.validate"));
+        assertFalse("validate should NOT be cross-object",
+                ContradictionDetector.isCrossObjectCall("validate"));
+        assertFalse("selectDeptById should NOT be cross-object",
+                ContradictionDetector.isCrossObjectCall("selectDeptById"));
+        assertFalse("null should NOT be cross-object",
+                ContradictionDetector.isCrossObjectCall(null));
+        assertFalse("empty should NOT be cross-object",
+                ContradictionDetector.isCrossObjectCall(""));
     }
 
     // ─── 工具方法 ───────────────────────────────────
