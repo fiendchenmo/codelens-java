@@ -338,20 +338,20 @@ public class ContradictionDetectorTest {
 
     @Test
     void testIsCrossObjectCall() {
-        assertTrue("deptMapper.selectDeptById should be cross-object",
-                ContradictionDetector.isCrossObjectCall("deptMapper.selectDeptById"));
-        assertTrue("SysDeptMapper.selectDeptList should be cross-object",
-                ContradictionDetector.isCrossObjectCall("SysDeptMapper.selectDeptList"));
-        assertFalse("this.validate should NOT be cross-object",
-                ContradictionDetector.isCrossObjectCall("this.validate"));
-        assertFalse("validate should NOT be cross-object",
-                ContradictionDetector.isCrossObjectCall("validate"));
-        assertFalse("selectDeptById should NOT be cross-object",
-                ContradictionDetector.isCrossObjectCall("selectDeptById"));
-        assertFalse("null should NOT be cross-object",
-                ContradictionDetector.isCrossObjectCall(null));
-        assertFalse("empty should NOT be cross-object",
-                ContradictionDetector.isCrossObjectCall(""));
+        assertTrue(ContradictionDetector.isCrossObjectCall("deptMapper.selectDeptById"),
+                "deptMapper.selectDeptById should be cross-object");
+        assertTrue(ContradictionDetector.isCrossObjectCall("SysDeptMapper.selectDeptList"),
+                "SysDeptMapper.selectDeptList should be cross-object");
+        assertFalse(ContradictionDetector.isCrossObjectCall("this.validate"),
+                "this.validate should NOT be cross-object");
+        assertFalse(ContradictionDetector.isCrossObjectCall("validate"),
+                "validate should NOT be cross-object");
+        assertFalse(ContradictionDetector.isCrossObjectCall("selectDeptById"),
+                "selectDeptById should NOT be cross-object");
+        assertFalse(ContradictionDetector.isCrossObjectCall(null),
+                "null should NOT be cross-object");
+        assertFalse(ContradictionDetector.isCrossObjectCall(""),
+                "empty should NOT be cross-object");
     }
 
     // ─── 工具方法 ───────────────────────────────────
