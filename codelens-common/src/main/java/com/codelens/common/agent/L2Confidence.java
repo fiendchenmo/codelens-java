@@ -10,6 +10,8 @@ public class L2Confidence {
     private double overallScore;
     private String reasoningBasis;
     private List<String> riskIndicators;
+    /** 矛盾检测导致的额外置信度惩罚（负数，如 -0.2，P1 白盒矛盾检测） */
+    private double contradictionPenalty;
 
     public L2Confidence() {}
 
@@ -25,4 +27,6 @@ public class L2Confidence {
     public void setReasoningBasis(String reasoningBasis) { this.reasoningBasis = reasoningBasis; }
     public List<String> getRiskIndicators() { return riskIndicators; }
     public void setRiskIndicators(List<String> riskIndicators) { this.riskIndicators = riskIndicators; }
+    public double getContradictionPenalty() { return contradictionPenalty; }
+    public void setContradictionPenalty(double contradictionPenalty) { this.contradictionPenalty = contradictionPenalty; }
 }

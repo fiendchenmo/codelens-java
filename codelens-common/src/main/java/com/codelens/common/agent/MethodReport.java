@@ -1,5 +1,7 @@
 package com.codelens.common.agent;
 
+import com.codelens.common.agent.contradiction.ContradictionFinding;
+
 import java.util.List;
 
 /**
@@ -22,6 +24,8 @@ public class MethodReport {
     private L1Evidence l1Evidence;
     private L2Confidence l2Confidence;
     private List<RiskItem> risks;
+    /** 该方法相关的矛盾发现列表（P1 白盒矛盾检测） */
+    private List<ContradictionFinding> contradictionFindings;
 
     public MethodReport() {}
 
@@ -64,4 +68,6 @@ public class MethodReport {
     public void setL2Confidence(L2Confidence l2Confidence) { this.l2Confidence = l2Confidence; }
     public List<RiskItem> getRisks() { return risks; }
     public void setRisks(List<RiskItem> risks) { this.risks = risks; }
+    public List<ContradictionFinding> getContradictionFindings() { return contradictionFindings; }
+    public void setContradictionFindings(List<ContradictionFinding> contradictionFindings) { this.contradictionFindings = contradictionFindings; }
 }
