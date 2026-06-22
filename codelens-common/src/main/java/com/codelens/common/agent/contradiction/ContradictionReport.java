@@ -51,11 +51,11 @@ public class ContradictionReport {
     /**
      * 计算整体矛盾评分。
      * <p>
-     * 只计算 status=CONTRADICTORY 的 findings。
-     * 同时填充 affectedMethods。
+     * 只计算 status=CONTRADICTORY 的 findings，同时填充 affectedMethods。
+     * 幂等：重复调用产生相同结果。
      * </p>
      */
-    public void computeScore() {
+    void computeScore() {
         if (findings == null || findings.isEmpty()) {
             contradictionScore = 0.0;
             affectedMethods = Collections.emptySet();
