@@ -191,7 +191,13 @@ public class ContradictionDetector {
                 continue;
             }
             for (L1Call call : l1A.getCalls()) {
-                String targetSimpleName = normalizeMethodName(call.getTarget());
+                String rawTarget = call.getTarget();
+                // 跳过跨对象调用（如 deptMapper.selectDeptById）—— 调用前缀非 this
+                // 说明 LLM 已知它是跨对象调用，不应与同名同文件方法匹配
+                if (isCrossObjectCall(rawTarget)) {
+                    continue;
+                }
+                String targetSimpleName = normalizeMethodName(rawTarget);
                 if (targetSimpleName == null || targetSimpleName.isEmpty()) {
                     continue;
                 }
@@ -328,6 +334,22 @@ public class ContradictionDetector {
      */
     private MethodReport findMethodBySimpleName(Map<String, MethodReport> index, String simpleName) {
         return index.get(simpleName);
+    }
+
+    /**
+     * 判断调用目标是否为跨对象调用（非 this 前缀）。
+     * <p>
+     * C1 仅检测同文件同对象内的方法互引。LLM 输出 {@code deptMapper.selectDeptById}
+     * 表明它已识别为跨对象调用（如 Mapper），归一化后可能与同名 service 方法误匹配。
+     * 此类调用应跳过。
+     * </p>
+     */
+    static boolean isCrossObjectCall(String target) {
+        if (target == null) return false;
+        int dot = target.lastIndexOf('.');
+        if (dot < 0) return false; // 无前缀，如 "methodName"
+        String prefix = target.substring(0, dot);
+        return !"this".equals(prefix);
     }
 
     /**
