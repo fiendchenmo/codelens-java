@@ -1,5 +1,6 @@
 package com.codelens.common.agent;
 
+import com.codelens.common.agent.contradiction.ContradictionReport;
 import com.google.gson.GsonBuilder;
 import com.google.gson.annotations.SerializedName;
 
@@ -27,6 +28,9 @@ public class AnalysisReport {
     private Map<String, Object> metadata;
     private List<AggregateSummaryOutput> packageSummaries;
     private AggregateSummaryOutput moduleSummary;
+
+    /** 文件级矛盾检测报告（P1 白盒矛盾检测） */
+    private ContradictionReport contradictionReport;
 
     public AnalysisReport() {}
 
@@ -64,6 +68,9 @@ public class AnalysisReport {
 
     public AggregateSummaryOutput getModuleSummary() { return moduleSummary; }
     public void setModuleSummary(AggregateSummaryOutput moduleSummary) { this.moduleSummary = moduleSummary; }
+
+    public ContradictionReport getContradictionReport() { return contradictionReport; }
+    public void setContradictionReport(ContradictionReport contradictionReport) { this.contradictionReport = contradictionReport; }
 
     /**
      * 序列化为 JSON。
