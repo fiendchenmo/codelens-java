@@ -18,13 +18,15 @@ import java.util.List;
 /**
  * 矛盾检测引擎单元测试。
  * <p>
- * 覆盖 5 个 case：
+ * 覆盖 7 个 case（Phase 1 MVP + Phase 2/3 规则）：
  * <ol>
  *   <li>无矛盾 — 正常数据，应返回空 findings</li>
  *   <li>C1 矛盾 — A→B 但 B.calledBy 不含 A</li>
- *   <li>C1 INCOMPLETE — A→B 但 B.calledBy 为空</li>
+ *   <li>C1 INCOMPLETE — A→B 但 B.calledBy 为空，不降置信度</li>
  *   <li>C4 矛盾 — complexity=HIGH 但 complexityValue=2</li>
  *   <li>混合矛盾 — C1 + C4 同时存在</li>
+ *   <li>C2 矛盾 — SUMMARY.complexity=LOW 但 ≥50% 方法 HIGH</li>
+ *   <li>C3 矛盾 — risk 行号指向注释行</li>
  * </ol>
  * </p>
  */
