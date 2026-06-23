@@ -71,7 +71,7 @@ public class TableSharingRecord {
      * @param levels 级数
      * @return 前 N 级包名（如 com.ruoyi），不足则返回原值
      */
-    static String extractTopLevelPackage(String pkg, int levels) {
+    public static String extractTopLevelPackage(String pkg, int levels) {
         if (pkg == null) return null;
         String[] parts = pkg.split("\\.");
         if (parts.length <= levels) return pkg;
