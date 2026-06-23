@@ -13,6 +13,7 @@ package com.codelens.common.agent.contradiction;
  *   <li>{@link ContradictionType#SUMMARY_DETAIL_CONFLICT C2} — 摘要-细节冲突</li>
  *   <li>{@link ContradictionType#RISK_EVIDENCE_CONTRADICTION C3} — 风险-证据矛盾</li>
  *   <li>{@link ContradictionType#FIELD_SELF_CONTRADICTION C4} — 字段自相矛盾</li>
+ *   <li>{@link ContradictionType#DB_COUPLING C5} — 数据层跨模块耦合</li>
  * </ul>
  */
 public class ContradictionFinding {
@@ -67,7 +68,9 @@ public class ContradictionFinding {
         /** C3: risk 行号指向注释/空行，或 L1 校验 FAILED */
         RISK_EVIDENCE_CONTRADICTION,
         /** C4: complexity 与 complexityValue 不一致 */
-        FIELD_SELF_CONTRADICTION
+        FIELD_SELF_CONTRADICTION,
+        /** C5: 同一张表被 ≥3 个不同包的 Mapper 操作，存在隐式耦合风险 */
+        DB_COUPLING
     }
 
     public enum Severity { HIGH, MEDIUM, LOW }

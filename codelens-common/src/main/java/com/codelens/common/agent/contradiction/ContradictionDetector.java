@@ -7,6 +7,8 @@ import com.codelens.common.agent.L2Confidence;
 import com.codelens.common.agent.MethodReport;
 import com.codelens.common.agent.RiskItem;
 
+import com.codelens.common.db.model.TableSharingRecord;
+
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
@@ -26,6 +28,7 @@ import java.util.Map;
  *   <li><b>C2 摘要-细节冲突</b> — SUMMARY.complexity 与多数方法 complexity 矛盾</li>
  *   <li><b>C1 调用图互斥</b> — A 声称调用了 B，但 B 未确认被 A 调用</li>
  *   <li><b>C3 风险-证据矛盾</b> — risk 行号指向注释/空行</li>
+ *   <li><b>C5 数据层跨模块耦合</b> — 同一张表被 ≥3 个不同包的 Mapper 操作</li>
  * </ol>
  *
  * <p>核心原则：</p>
@@ -39,15 +42,31 @@ import java.util.Map;
 public class ContradictionDetector {
 
     /**
-     * 从合并后的 AnalysisReport 检测矛盾。
+     * 从合并后的 AnalysisReport 检测矛盾（不含 C5 数据层耦合检测）。
      *
      * @param report      合并后的分析报告
      * @param sourceLines 源文件各行内容（用于 C3 注释行检测），可为 null
      * @return 矛盾检测报告
      */
     public ContradictionReport detect(AnalysisReport report, String[] sourceLines) {
+        return detect(report, sourceLines, null);
+    }
+
+    /**
+     * 从合并后的 AnalysisReport 检测矛盾（含 C5 数据层耦合检测）。
+     *
+     * @param report       合并后的分析报告
+     * @param sourceLines  源文件各行内容（用于 C3 注释行检测），可为 null
+     * @param tableSharing 表共享记录列表（用于 C5 跨模块耦合检测），可为 null
+     * @return 矛盾检测报告
+     */
+    public ContradictionReport detect(AnalysisReport report, String[] sourceLines,
+                                       List<TableSharingRecord> tableSharing) {
         ContradictionReport result = new ContradictionReport();
         List<ContradictionFinding> findings = new ArrayList<ContradictionFinding>();
+
+        // C5 不依赖 methods，始终运行
+        findings.addAll(detectDbCoupling(tableSharing));
 
         if (report == null || report.getMethods() == null || report.getMethods().isEmpty()) {
             result.setFindings(findings);
@@ -306,6 +325,48 @@ public class ContradictionDetector {
                             ContradictionFinding.Status.CONTRADICTORY
                     ));
                 }
+            }
+        }
+        return findings;
+    }
+
+    // ─── C5: 数据层跨模块耦合 ────────────────────────
+
+    /**
+     * 检测同一张表被多个不同包的 Mapper 操作（隐式耦合）。
+     *
+     * <p>触发条件：同一张表被 ≥3 个不同包的 Mapper 操作（跨模块共享数据依赖）。
+     * 同包内的多个 Mapper 操作同一表不算跨模块。</p>
+     *
+     * <p>严重度：MINOR（LOW），penalty=-0.1。
+     * 这不是代码错误，而是架构层面的隐式耦合风险提示。</p>
+     *
+     * @param tableSharing 表共享记录列表（来自 DbAnalysisRepository.findTableSharing()）
+     * @return C5 矛盾发现列表
+     */
+    List<ContradictionFinding> detectDbCoupling(List<TableSharingRecord> tableSharing) {
+        List<ContradictionFinding> findings = new ArrayList<ContradictionFinding>();
+        if (tableSharing == null || tableSharing.isEmpty()) {
+            return findings;
+        }
+
+        for (TableSharingRecord record : tableSharing) {
+            int distinctModules = record.getDistinctModuleCount();
+            if (distinctModules >= 3) {
+                String desc = "table " + record.getTableName()
+                        + " is operated by " + record.getMapperCount()
+                        + " mappers across " + distinctModules
+                        + " modules: " + record.getMapperInterfaces();
+                findings.add(new ContradictionFinding(
+                        ContradictionFinding.ContradictionType.DB_COUPLING,
+                        ContradictionFinding.Severity.LOW,
+                        record.getTableName(), null,
+                        -0.1,
+                        desc,
+                        "shared table: " + record.getTableName()
+                                + " → " + distinctModules + " modules",
+                        ContradictionFinding.Status.CONTRADICTORY
+                ));
             }
         }
         return findings;
