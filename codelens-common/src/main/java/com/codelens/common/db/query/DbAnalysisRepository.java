@@ -38,6 +38,11 @@ public class DbAnalysisRepository {
 
     /**
      * 🔍 字段影响分析：哪些方法操作了指定表的指定字段？
+     * <p>
+     * 先用 LIKE 粗筛（SQL 侧），再在 Java 侧做精确匹配
+     * （逗号分隔的字段列表中精确匹配字段名），
+     * 避免子串误匹配（如查 "id" 误匹配 "user_id"）。
+     * </p>
      *
      * @param conn      graph.db 连接
      * @param tableName 数据库表名
@@ -51,6 +56,7 @@ public class DbAnalysisRepository {
         List<DbOperationRecord> results = new ArrayList<DbOperationRecord>();
         if (tableName == null || fieldName == null) return results;
 
+        // LIKE 粗筛，Java 侧精确匹配避免子串误报
         String sql = "SELECT mapper_interface, method_name, sql_type, table_name," +
                 " fields, xml_line, sql_text, source_type, source_file" +
                 " FROM db_operations" +
@@ -62,11 +68,38 @@ public class DbAnalysisRepository {
             ps.setString(2, "%" + fieldName + "%");
             try (ResultSet rs = ps.executeQuery()) {
                 while (rs.next()) {
-                    results.add(mapOperationRecord(rs));
+                    DbOperationRecord record = mapOperationRecord(rs);
+                    // 精确匹配：字段名必须在逗号分隔列表中（或等于 WILDCARD）
+                    if (containsFieldExactly(record.getFields(), fieldName)) {
+                        results.add(record);
+                    }
                 }
             }
         }
         return results;
+    }
+
+    /**
+     * 在逗号分隔的字段列表中精确匹配字段名。
+     * <p>
+     * 匹配规则：
+     * <ul>
+     *   <li>null / 空 → true（粗筛放行，不因缺失字段而丢弃结果）</li>
+     *   <li>含 WILDCARD → true（SELECT * 视为匹配所有字段）</li>
+     *   <li>逗号分隔后 trim 精确 equals → true</li>
+     * </ul>
+     * </p>
+     */
+    static boolean containsFieldExactly(String fieldsList, String fieldName) {
+        if (fieldsList == null || fieldsList.isEmpty()) return true;
+        if (fieldName == null) return true;
+        for (String f : fieldsList.split(",")) {
+            String trimmed = f.trim();
+            if (fieldName.equals(trimmed) || "WILDCARD".equals(trimmed)) {
+                return true;
+            }
+        }
+        return false;
     }
 
     // ─── 表级影响分析 ─────────────────────────────────
@@ -410,17 +443,9 @@ public class DbAnalysisRepository {
     }
 
     /**
-     * 提取前 N 级包名。
+     * 提取前 N 级包名。委托给 {@link TableSharingRecord#extractTopLevelPackage}。
      */
     static String extractTopLevelPackage(String pkg, int levels) {
-        if (pkg == null) return "";
-        String[] parts = pkg.split("\\.");
-        if (parts.length <= levels) return pkg;
-        StringBuilder sb = new StringBuilder();
-        for (int i = 0; i < levels; i++) {
-            if (i > 0) sb.append('.');
-            sb.append(parts[i]);
-        }
-        return sb.toString();
+        return TableSharingRecord.extractTopLevelPackage(pkg, levels);
     }
 }

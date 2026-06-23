@@ -410,7 +410,12 @@ public class MyBatisXmlParser {
                     sb.append(child.getTextContent());
                     break;
                 case Node.ELEMENT_NODE:
-                    // 递归处理子元素（跳过 MyBatis 动态标签和 include）
+                    // 跳过 MyBatis 动态标签（<if>/<where>/<foreach> 等），
+                    // 它们不是 SQL 语法，只包裹 SQL 片段。
+                    // 注意：<include> 有意不跳过 —— 虽然它也不是 SQL，
+                    // 但 getTextContent 的输出会交给 expandIncludes() 处理，
+                    // 后者需要看到 <include refid="..."/> 标记才能展开。
+                    // <include> 通常是自闭合标签，无文本子节点，不会引入多余内容。
                     String tag = ((Element) child).getTagName();
                     if (!isMyBatisDynamicTag(tag)) {
                         collectTextContent(child, sb);
