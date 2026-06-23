@@ -288,6 +288,38 @@ public class DbAnalysisRepository {
         return results;
     }
 
+    /**
+     * 🗺️ 按表名查找字段映射：通过 db_operations 关联，
+     * 查出操作该表的所有 Mapper 的 Java 属性 ↔ 数据库列映射。
+     *
+     * @param conn      graph.db 连接
+     * @param tableName 数据库表名
+     * @return 操作该表的所有 Mapper 的字段映射记录
+     */
+    public List<FieldMappingRecord> findFieldMappingByTable(Connection conn,
+                                                             String tableName)
+            throws SQLException {
+        List<FieldMappingRecord> results = new ArrayList<FieldMappingRecord>();
+        if (tableName == null) return results;
+
+        String sql = "SELECT fm.mapper_interface, fm.java_type, fm.property_name," +
+                " fm.column_name, fm.is_id, fm.source_type, fm.source_file" +
+                " FROM db_field_mappings fm" +
+                " JOIN (SELECT DISTINCT mapper_interface FROM db_operations WHERE table_name = ?) ops" +
+                " ON fm.mapper_interface = ops.mapper_interface" +
+                " ORDER BY fm.java_type, fm.property_name";
+
+        try (PreparedStatement ps = conn.prepareStatement(sql)) {
+            ps.setString(1, tableName);
+            try (ResultSet rs = ps.executeQuery()) {
+                while (rs.next()) {
+                    results.add(mapFieldMappingRecord(rs));
+                }
+            }
+        }
+        return results;
+    }
+
     // ─── 表级统计 ─────────────────────────────────────
 
     /**
@@ -309,15 +341,21 @@ public class DbAnalysisRepository {
     }
 
     /**
-     * 获取每个表的操作统计。
+     * 获取每个表的操作统计（含 Mapper 数量）。
+     * <p>
+     * 内层 Map 的 key 为 sql_type（SELECT/INSERT/UPDATE/DELETE），
+     * value 为操作计数。额外包含 {@code __mappers__} key，
+     * value 为操作该表的不同 Mapper 数量。
+     * </p>
      *
      * @param conn graph.db 连接
-     * @return Map<表名, Map<操作类型, 计数>>
+     * @return Map<表名, Map<操作类型或__mappers__, 计数>>
      */
     public Map<String, Map<String, Integer>> getTableStats(Connection conn)
             throws SQLException {
         Map<String, Map<String, Integer>> stats = new LinkedHashMap<String, Map<String, Integer>>();
-        String sql = "SELECT table_name, sql_type, COUNT(*) as cnt" +
+        String sql = "SELECT table_name, sql_type, COUNT(*) as cnt," +
+                " COUNT(DISTINCT mapper_interface) as mapper_cnt" +
                 " FROM db_operations GROUP BY table_name, sql_type" +
                 " ORDER BY table_name, sql_type";
         try (PreparedStatement ps = conn.prepareStatement(sql);
@@ -326,12 +364,18 @@ public class DbAnalysisRepository {
                 String tableName = rs.getString("table_name");
                 String sqlType = rs.getString("sql_type");
                 int count = rs.getInt("cnt");
+                int mapperCount = rs.getInt("mapper_cnt");
                 Map<String, Integer> typeStats = stats.get(tableName);
                 if (typeStats == null) {
                     typeStats = new LinkedHashMap<String, Integer>();
                     stats.put(tableName, typeStats);
                 }
                 typeStats.put(sqlType, count);
+                // __mappers__: 该表的总 Mapper 数（取各 sql_type 的最大值）
+                Integer existing = typeStats.get("__mappers__");
+                if (existing == null || mapperCount > existing) {
+                    typeStats.put("__mappers__", mapperCount);
+                }
             }
         }
         return stats;

@@ -532,6 +532,10 @@ public class DbLayerTest {
         Map<String, Integer> userStats = stats.get("sys_user");
         assertTrue(userStats.containsKey("SELECT"));
         assertTrue(userStats.containsKey("INSERT"));
+        // sys_user 被 SysUserMapper + OrderMapper 两个不同 Mapper 操作
+        assertNotNull(userStats.get("__mappers__"));
+        assertTrue(userStats.get("__mappers__") >= 2,
+                "sys_user should have at least 2 distinct mappers");
     }
 
     // TC-DB-18e: findDbOperationsForCalls
@@ -559,6 +563,30 @@ public class DbLayerTest {
                 "com.ruoyi.system.mapper.SysUserMapper.selectUserById"));
         assertTrue(sourceMethods.contains(
                 "com.ruoyi.system.mapper.SysDeptMapper.selectDeptById"));
+    }
+
+    // TC-DB-18f: findFieldMappingByTable
+    @Test
+    void testFindFieldMappingByTable() throws Exception {
+        List<SqlOperation> ops = createSampleOperations();
+        DbIndexBuilder.build(conn, ops, "test-hash-010");
+
+        DbAnalysisRepository repo = new DbAnalysisRepository();
+        // sys_user 表被 SysUserMapper 和 OrderMapper 操作
+        // SysUserMapper 有 3 条字段映射（userId/userName/status）
+        List<FieldMappingRecord> results = repo.findFieldMappingByTable(conn, "sys_user");
+
+        // OrderMapper 没有字段映射，SysUserMapper 有 3 条
+        assertEquals(3, results.size(),
+                "should find 3 field mappings for sys_user table");
+        // 验证映射内容
+        Set<String> columns = new LinkedHashSet<String>();
+        for (FieldMappingRecord r : results) {
+            columns.add(r.getColumnName());
+        }
+        assertTrue(columns.contains("user_id"));
+        assertTrue(columns.contains("user_name"));
+        assertTrue(columns.contains("status"));
     }
 
     // ════════════════════════════════════════════════════════════════
