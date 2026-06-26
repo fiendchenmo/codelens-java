@@ -40,6 +40,7 @@ import java.util.List;
  *   <tr><td>methods[].calls[]</td><td>methods[].l1Evidence.calls (List&lt;L1Call&gt;)</td></tr>
  *   <tr><td>methods[].called_by[]</td><td>methods[].l1Evidence.calledBy (List&lt;String&gt;)</td></tr>
  *   <tr><td>methods[].risks[]</td><td>methods[].risks (List&lt;RiskItem&gt;)</td></tr>
+ *   <tr><td>risks[]</td><td>risks (顶层跨方法风险，List&lt;RiskItem&gt;)</td></tr>
  *   <tr><td>（外部传入）</td><td>className</td></tr>
  * </table>
  *
@@ -50,7 +51,6 @@ import java.util.List;
  *   <li>called_by 在 V3 中为对象数组 {@code [{"caller": "...", "line": N}]}，
  *       提取 caller 字符串存入 calledBy</li>
  *   <li>calls 中 type 字段（same_file/cross_file/static）不映射到 L1Call（L1Call 无此字段）</li>
- *   <li>top-level risks（跨方法风险）不映射（AnalysisReport 无顶层 risks 字段）</li>
  * </ul>
  */
 public class V3ToReportConverter {
@@ -81,6 +81,9 @@ public class V3ToReportConverter {
             report.setSummary(getStringSafe(root, "summary"));
             report.setFrameworkDesc(getStringSafe(root, "framework"));
             report.setFields(extractFields(root));
+
+            // ── 顶层 risks（跨方法/跨字段风险） ──
+            report.setRisks(extractTopLevelRisks(root));
 
             // ── 方法级字段 ──
             report.setMethods(extractMethods(root));
@@ -241,6 +244,16 @@ public class V3ToReportConverter {
     }
 
     // ─── 风险项 ────────────────────────────────────────
+
+    /**
+     * 解析顶层 risks[] 为 List&lt;RiskItem&gt;。
+     * V3 格式与 methods[].risks[] 完全相同：
+     * {@code [{type, description, line, severity, impact, suggestion, confidence}]}
+     * 直接复用 extractRisks() 解析逻辑。
+     */
+    private static List<RiskItem> extractTopLevelRisks(JsonObject root) {
+        return extractRisks(root);
+    }
 
     private static List<RiskItem> extractRisks(JsonObject json) {
         List<RiskItem> result = new ArrayList<>();

@@ -32,6 +32,9 @@ public class AnalysisReport {
     /** 文件级矛盾检测报告（P1 白盒矛盾检测） */
     private ContradictionReport contradictionReport;
 
+    /** 文件级跨方法风险项（V3 顶层 risks，经 OutputNormalizer 归一化后的数据） */
+    private List<RiskItem> risks;
+
     public AnalysisReport() {}
 
     public AnalysisReport(String className, String stereotype, List<MethodReport> methods,
@@ -71,6 +74,9 @@ public class AnalysisReport {
 
     public ContradictionReport getContradictionReport() { return contradictionReport; }
     public void setContradictionReport(ContradictionReport contradictionReport) { this.contradictionReport = contradictionReport; }
+
+    public List<RiskItem> getRisks() { return risks; }
+    public void setRisks(List<RiskItem> risks) { this.risks = risks; }
 
     /**
      * 序列化为 JSON。
