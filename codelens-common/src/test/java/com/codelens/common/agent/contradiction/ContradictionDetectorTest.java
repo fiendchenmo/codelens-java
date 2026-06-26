@@ -27,6 +27,8 @@ import java.util.List;
  *   <li>混合矛盾 — C1 + C4 同时存在</li>
  *   <li>C2 矛盾 — SUMMARY.complexity=LOW 但 ≥50% 方法 HIGH</li>
  *   <li>C3 矛盾 — risk 行号指向注释行</li>
+ *   <li>C3 顶层 risks 矛盾 — 文件级 risk 行号指向注释行，sourceMethod=null</li>
+ *   <li>C3 顶层 risks 无矛盾 — 文件级 risk 行号指向代码行，无 finding</li>
  * </ol>
  * </p>
  */
@@ -332,6 +334,65 @@ public class ContradictionDetectorTest {
         assertEquals(ContradictionFinding.Severity.HIGH, f.getSeverity());
         assertEquals(-0.5, f.getConfidencePenalty(), 0.001);
         assertEquals("queryData", f.getSourceMethod());
+    }
+
+    // ─── C3 顶层: 顶层 risks 风险-证据矛盾 ──────────────
+
+    @Test
+    void testC3_TopLevelRiskPointsToComment() {
+        // 顶层 risk @ line 2 → 注释行 → 检出 C3 finding，sourceMethod=null
+        RiskItem topRisk = new RiskItem();
+        topRisk.setType("SECURITY");
+        topRisk.setDescription("Hardcoded credential in config");
+        topRisk.setLine(2);  // line 2 is a comment
+        topRisk.setSeverity("HIGH");
+
+        AnalysisReport report = buildReport("MEDIUM", new ArrayList<MethodReport>());
+        report.setRisks(Arrays.asList(topRisk));
+
+        // 只有顶层 risk，没有方法级 risk
+        String[] sourceLines = {
+                "public class Config {",      // line 1
+                "    // TODO: move to env",   // line 2 (comment!)
+                "    private String key;",    // line 3
+                "}"                           // line 4
+        };
+
+        ContradictionReport result = detector.detect(report, sourceLines);
+        List<ContradictionFinding> contradicted = filterContradictory(result.getFindings());
+        assertEquals(1, contradicted.size());
+        ContradictionFinding f = contradicted.get(0);
+        assertEquals(ContradictionFinding.ContradictionType.RISK_EVIDENCE_CONTRADICTION, f.getType());
+        assertEquals(ContradictionFinding.Severity.HIGH, f.getSeverity());
+        assertEquals(-0.5, f.getConfidencePenalty(), 0.001);
+        assertNull(f.getSourceMethod(), "file-level finding should have null sourceMethod");
+        assertTrue(f.getDescription().contains("file-level risk"));
+        assertTrue(f.getDescription().contains("Hardcoded credential"));
+    }
+
+    @Test
+    void testC3_TopLevelRiskPointsToCode() {
+        // 顶层 risk @ line 3 → 代码行 → 无 finding
+        RiskItem topRisk = new RiskItem();
+        topRisk.setType("MAINTAINABILITY");
+        topRisk.setDescription("God class detected");
+        topRisk.setLine(3);  // line 3 is real code
+        topRisk.setSeverity("LOW");
+
+        AnalysisReport report = buildReport("MEDIUM", new ArrayList<MethodReport>());
+        report.setRisks(Arrays.asList(topRisk));
+
+        String[] sourceLines = {
+                "public class LargeClass {",  // line 1
+                "    // some comment",        // line 2 (comment)
+                "    private int count;",      // line 3 (code, not comment)
+                "}"                           // line 4
+        };
+
+        ContradictionReport result = detector.detect(report, sourceLines);
+        List<ContradictionFinding> contradicted = filterContradictory(result.getFindings());
+        assertEquals(0, contradicted.size(),
+                "top-level risk pointing to code line should produce no C3 finding");
     }
 
     // ─── isCrossObjectCall ───────────────────────────

@@ -68,6 +68,10 @@ public class ContradictionDetector {
         // C5 不依赖 methods，始终运行
         findings.addAll(detectDbCoupling(tableSharing));
 
+        // C3 顶层 risks 也不依赖 methods（文件级风险）
+        findings.addAll(detectTopLevelRiskEvidenceContradiction(
+                report != null ? report.getRisks() : null, sourceLines));
+
         if (report == null || report.getMethods() == null || report.getMethods().isEmpty()) {
             result.setFindings(findings);
             result.computeScore();
@@ -325,6 +329,56 @@ public class ContradictionDetector {
                             ContradictionFinding.Status.CONTRADICTORY
                     ));
                 }
+            }
+        }
+        return findings;
+    }
+
+    // ─── C3-顶层: 顶层 risks 风险-证据矛盾 ─────────────
+
+    /**
+     * 检测顶层 risks（跨方法风险）行号是否指向注释或空行。
+     * 与方法级 C3 逻辑完全一致，但 sourceMethod=null（文件级 finding）。
+     *
+     * @param risks       顶层风险项列表（来自 AnalysisReport.getRisks()）
+     * @param sourceLines 源文件各行内容（1-indexed），可为 null
+     * @return C3 文件级矛盾发现列表
+     */
+    List<ContradictionFinding> detectTopLevelRiskEvidenceContradiction(
+            List<RiskItem> risks, String[] sourceLines) {
+        List<ContradictionFinding> findings = new ArrayList<ContradictionFinding>();
+        if (risks == null || sourceLines == null || sourceLines.length == 0) {
+            return findings;
+        }
+        for (RiskItem risk : risks) {
+            int line = risk.getLine();
+            if (line <= 0) {
+                continue;
+            }
+            if (line > sourceLines.length) {
+                continue;
+            }
+            String sourceLine = sourceLines[line - 1];
+            if (sourceLine == null) {
+                continue;
+            }
+            String trimmed = sourceLine.trim();
+            if (isCommentOrBlank(trimmed)) {
+                String desc = "file-level risk \""
+                        + truncate(risk.getDescription(), 60)
+                        + "\" @ line " + line
+                        + " points to comment/blank: \""
+                        + truncate(trimmed, 40) + "\"";
+                findings.add(new ContradictionFinding(
+                        ContradictionFinding.ContradictionType.RISK_EVIDENCE_CONTRADICTION,
+                        ContradictionFinding.Severity.HIGH,
+                        null, null,   // sourceMethod=null → 文件级
+                        -0.5,
+                        desc,
+                        "sourceLine[" + (line - 1) + "] = \""
+                                + truncate(trimmed, 80) + "\"",
+                        ContradictionFinding.Status.CONTRADICTORY
+                ));
             }
         }
         return findings;
