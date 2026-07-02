@@ -150,24 +150,4 @@ public class QueryClassAnalysisTool extends CodeLensTool {
             }
         }
     }
-
-    private static String getStringSafe(JsonObject obj, String field) {
-        com.google.gson.JsonElement el = obj.get(field);
-        if (el != null && el.isJsonPrimitive()) {
-            return el.getAsString();
-        }
-        return null;
-    }
-
-    private static int getIntSafe(JsonObject obj, String field) {
-        com.google.gson.JsonElement el = obj.get(field);
-        if (el != null && el.isJsonPrimitive()) {
-            try {
-                return el.getAsInt();
-            } catch (NumberFormatException e) {
-                return 0;
-            }
-        }
-        return 0;
-    }
 }
