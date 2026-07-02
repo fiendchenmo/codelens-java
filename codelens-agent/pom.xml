@@ -12,6 +12,7 @@
     </parent>
 
     <artifactId>codelens-agent</artifactId>
+    <version>0.1.0</version>
     <packaging>jar</packaging>
     <name>CodeLens Agent</name>
     <description>Self-built Agent framework for CodeQA — zero external dependencies beyond codelens-common, JDK 1.8 compatible</description>
