@@ -69,10 +69,16 @@ public class CodeQAAgent {
         // 1. L0 项目级上下文拼入 System Prompt
         String systemPrompt = CodeQAPrompt.buildSystemPrompt(contextProvider.getProjectSummary());
 
-        // 2. 注册 Tool（Stage 1: 2 个；Stage 2 扩展到 8 个）
+        // 2. 注册全部 8 个 Tool（按 #1-#8 顺序）
         ToolRegistry registry = new ToolRegistry();
         registry.register(new QueryClassAnalysisTool(dataProvider));
+        registry.register(new QueryCallersTool(dataProvider));
+        registry.register(new QueryCalleesTool(dataProvider));
+        registry.register(new QueryDbDependenciesTool(dataProvider));
+        registry.register(new QueryTableSharingTool(dataProvider));
+        registry.register(new QueryContradictionsTool(dataProvider));
         registry.register(new QueryRiskOverviewTool(dataProvider));
+        registry.register(new SearchMethodsTool(dataProvider));
 
         // 3. 创建 Agent
         Agent agent = new Agent(client, registry, systemPrompt, config.getMaxToolRounds());
