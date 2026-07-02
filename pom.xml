@@ -12,6 +12,7 @@
     <modules>
         <module>codelens-common</module>
         <module>codelens-cli</module>
+        <module>codelens-agent</module>
     </modules>
 
     <properties>
